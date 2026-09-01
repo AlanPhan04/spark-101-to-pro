@@ -1,44 +1,44 @@
 <mxfile host="app.diagrams.net" agent="claude">
   <diagram name="executor-memory-model" id="execmem">
-    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="720" pageHeight="470" math="0" shadow="0">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="740" pageHeight="470" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <mxCell id="heap" value="&lt;b&gt;JVM heap&lt;/b&gt;&lt;br&gt;spark.executor.memory = 8 GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;strokeWidth=2;verticalAlign=top;fontSize=12;align=center;spacingTop=6;" vertex="1" parent="1">
-          <mxGeometry x="20" y="20" width="380" height="390" as="geometry" />
+        <mxCell id="heap" value="&lt;b&gt;JVM heap&lt;/b&gt;&lt;br&gt;spark.executor.memory = 8 GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2f3b52;strokeWidth=2;verticalAlign=top;fontSize=13;spacingTop=6;fontColor=#2f3b52;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="390" height="390" as="geometry" />
         </mxCell>
 
-        <mxCell id="reserved" value="&lt;b&gt;Reserved&lt;/b&gt;  300 MB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;fixed &amp;#8226; never usable by a query&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#000000;fontSize=11;align=center;" vertex="1" parent="1">
-          <mxGeometry x="36" y="58" width="348" height="46" as="geometry" />
+        <mxCell id="reserved" value="&lt;b&gt;Reserved&lt;/b&gt;  300 MB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;fixed &amp;#8226; never usable by a query&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="36" y="58" width="358" height="46" as="geometry" />
         </mxCell>
 
-        <mxCell id="unified" value="&lt;b&gt;Unified memory&lt;/b&gt;  ~4.62 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;0.6 &amp;#215; (heap &amp;#8722; 300 MB) &amp;#8226; spills to disk&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontSize=11;align=center;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
-          <mxGeometry x="36" y="114" width="348" height="150" as="geometry" />
+        <mxCell id="unified" value="&lt;b&gt;Unified memory&lt;/b&gt;  ~4.62 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;0.6 &amp;#215; (heap &amp;#8722; 300 MB) &amp;#8226; spills to disk&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontSize=11;verticalAlign=top;spacingTop=4;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="36" y="114" width="358" height="150" as="geometry" />
         </mxCell>
 
-        <mxCell id="execution" value="&lt;b&gt;Execution&lt;/b&gt;&lt;br&gt;~2.31 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;join &amp;#8226; sort &amp;#8226; agg &amp;#8226; shuffle&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#000000;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="48" y="162" width="162" height="92" as="geometry" />
+        <mxCell id="execution" value="&lt;b&gt;Execution&lt;/b&gt;&lt;br&gt;~2.31 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;join &amp;#8226; sort &amp;#8226; agg &amp;#8226; shuffle&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="50" y="162" width="164" height="92" as="geometry" />
         </mxCell>
 
-        <mxCell id="storage" value="&lt;b&gt;Storage&lt;/b&gt;&lt;br&gt;~2.31 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;cache &amp;#8226; broadcast&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e0e0;strokeColor=#000000;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="220" y="162" width="152" height="92" as="geometry" />
+        <mxCell id="storage" value="&lt;b&gt;Storage&lt;/b&gt;&lt;br&gt;~2.31 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;cache &amp;#8226; broadcast&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=10;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="224" y="162" width="156" height="92" as="geometry" />
         </mxCell>
 
-        <mxCell id="user" value="&lt;b&gt;User memory&lt;/b&gt;  ~3.08 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;0.4 &amp;#215; (heap &amp;#8722; 300 MB) &amp;#8226; UDF / RDD objects&lt;br&gt;not tracked &amp;#8226; OutOfMemoryError, no spill&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eeeeee;strokeColor=#000000;fontSize=11;align=center;" vertex="1" parent="1">
-          <mxGeometry x="36" y="274" width="348" height="124" as="geometry" />
+        <mxCell id="user" value="&lt;b&gt;User memory&lt;/b&gt;  ~3.08 GB&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;0.4 &amp;#215; (heap &amp;#8722; 300 MB) &amp;#8226; UDF / RDD objects&lt;br&gt;not tracked &amp;#8226; OutOfMemoryError, no spill&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=11;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="36" y="274" width="358" height="124" as="geometry" />
         </mxCell>
 
-        <mxCell id="offheap" value="&lt;b&gt;Off-heap pool&lt;/b&gt;&lt;br&gt;spark.memory&lt;br&gt;.offHeap.size&lt;br&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;second unified pool,&lt;br&gt;outside the heap,&lt;br&gt;invisible to GC&lt;br&gt;&lt;br&gt;0 unless enabled&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;dashed=1;fontSize=11;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="420" y="20" width="130" height="390" as="geometry" />
+        <mxCell id="offheap" value="&lt;b&gt;Off-heap pool&lt;/b&gt;&lt;br&gt;spark.memory&lt;br&gt;.offHeap.size&lt;br&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;second unified pool,&lt;br&gt;outside the heap,&lt;br&gt;invisible to GC&lt;br&gt;&lt;br&gt;0 unless enabled&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;dashed=1;fontSize=11;verticalAlign=top;spacingTop=8;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="430" y="20" width="140" height="390" as="geometry" />
         </mxCell>
 
-        <mxCell id="overhead" value="&lt;b&gt;Overhead&lt;/b&gt;&lt;br&gt;spark.executor&lt;br&gt;.memoryOverhead&lt;br&gt;= 2 GB&lt;br&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;thread stacks&lt;br&gt;Metaspace&lt;br&gt;netty &amp;amp; codec buffers&lt;br&gt;PySpark workers&lt;br&gt;&lt;br&gt;actually consumed,&lt;br&gt;not a safety margin&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#000000;fontSize=11;align=center;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
-          <mxGeometry x="568" y="20" width="132" height="390" as="geometry" />
+        <mxCell id="overhead" value="&lt;b&gt;Overhead&lt;/b&gt;&lt;br&gt;spark.executor&lt;br&gt;.memoryOverhead&lt;br&gt;= 2 GB&lt;br&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;thread stacks&lt;br&gt;Metaspace&lt;br&gt;netty &amp;amp; codec buffers&lt;br&gt;PySpark workers&lt;br&gt;&lt;br&gt;actually consumed,&lt;br&gt;not a safety margin&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1eee7;strokeColor=#8a7f6a;fontSize=11;verticalAlign=top;spacingTop=8;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="588" y="20" width="132" height="390" as="geometry" />
         </mxCell>
 
-        <mxCell id="container" value="container limit  =  heap  +  off-heap pool  +  overhead   =   10 GB     &lt;span style=&quot;font-size:9px&quot;&gt;(enforced by the cluster manager; exceed it and the kernel kills the pod)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dddddd;strokeColor=#000000;fontSize=10;align=center;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="20" y="424" width="680" height="30" as="geometry" />
+        <mxCell id="container" value="container limit  =  heap  +  off-heap pool  +  overhead   =   10 GB     &lt;span style=&quot;font-size:9px&quot;&gt;(enforced by the cluster manager; exceed it and the kernel kills the pod)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=10;fontStyle=1;fontColor=#3f335c;" vertex="1" parent="1">
+          <mxGeometry x="20" y="424" width="700" height="30" as="geometry" />
         </mxCell>
 
       </root>

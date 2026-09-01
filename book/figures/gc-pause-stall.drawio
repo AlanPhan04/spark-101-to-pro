@@ -1,0 +1,42 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="gc-pause-stall" id="gcpause">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="760" pageHeight="330" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="one executor, 4 task slots &amp;#8212; time &amp;#8594;" style="text;html=1;align=left;fontSize=10;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="30" y="14" width="360" height="16" as="geometry" /></mxCell>
+
+        <mxCell id="l0" value="slot 0" style="text;html=1;align=right;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="10" y="52" width="44" height="16" as="geometry" /></mxCell>
+        <mxCell id="l1" value="slot 1" style="text;html=1;align=right;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="10" y="92" width="44" height="16" as="geometry" /></mxCell>
+        <mxCell id="l2" value="slot 2" style="text;html=1;align=right;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="10" y="132" width="44" height="16" as="geometry" /></mxCell>
+        <mxCell id="l3" value="slot 3" style="text;html=1;align=right;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="10" y="172" width="44" height="16" as="geometry" /></mxCell>
+
+        <mxCell id="r0a" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="60" y="48" width="180" height="24" as="geometry" /></mxCell>
+        <mxCell id="r1a" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="60" y="88" width="150" height="24" as="geometry" /></mxCell>
+        <mxCell id="r2a" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="60" y="128" width="200" height="24" as="geometry" /></mxCell>
+        <mxCell id="r3a" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="60" y="168" width="170" height="24" as="geometry" /></mxCell>
+
+        <mxCell id="gc" value="&lt;b&gt;stop-the-world GC pause&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;every slot frozen&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;strokeWidth=1.6;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="300" y="44" width="150" height="152" as="geometry" />
+        </mxCell>
+
+        <mxCell id="r0b" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="460" y="48" width="120" height="24" as="geometry" /></mxCell>
+        <mxCell id="r1b" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="460" y="88" width="120" height="24" as="geometry" /></mxCell>
+        <mxCell id="r2b" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="460" y="128" width="120" height="24" as="geometry" /></mxCell>
+
+        <mxCell id="dead" value="&lt;b&gt;heartbeat timeout&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;driver marks the executor lost;&lt;br&gt;its work re-runs elsewhere&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fbeecf;strokeColor=#c9a227;fontSize=10;fontColor=#7a5c0a;" vertex="1" parent="1">
+          <mxGeometry x="470" y="150" width="270" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="axis" value="" style="endArrow=block;html=1;strokeColor=#999999;strokeWidth=1.2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="210" as="sourcePoint" />
+            <mxPoint x="600" y="210" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,32 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="catalyst-pipeline" id="catalyst">
+    <mxGraphModel dx="1100" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="b0" value="&lt;b&gt;SQL /&lt;br&gt;DataFrame&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=12;fontColor=#374151;" vertex="1" parent="1"><mxGeometry x="20" y="90" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="b1" value="&lt;b&gt;Unresolved&lt;br&gt;logical plan&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e7eef7;strokeColor=#3b6ea5;fontSize=12;fontColor=#1f3d5c;" vertex="1" parent="1"><mxGeometry x="210" y="90" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="b2" value="&lt;b&gt;Resolved&lt;br&gt;logical plan&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=12;fontColor=#1f3d5c;" vertex="1" parent="1"><mxGeometry x="400" y="90" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="b3" value="&lt;b&gt;Optimized&lt;br&gt;logical plan&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=12;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="590" y="90" width="120" height="60" as="geometry" /></mxCell>
+        <mxCell id="b4" value="&lt;b&gt;Physical&lt;br&gt;plan&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=12;fontColor=#7a4a17;" vertex="1" parent="1"><mxGeometry x="770" y="90" width="110" height="60" as="geometry" /></mxCell>
+        <mxCell id="b5" value="&lt;b&gt;Java&lt;br&gt;bytecode&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=12;fontColor=#3f335c;" vertex="1" parent="1"><mxGeometry x="900" y="90" width="90" height="60" as="geometry" /></mxCell>
+
+        <mxCell id="a0" value="parse" style="endArrow=block;html=1;strokeColor=#6b7280;strokeWidth=1.8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b0" target="b1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a1" value="analyze" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=1.8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b1" target="b2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a2" value="optimize" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=1.8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b2" target="b3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a3" value="plan" style="endArrow=block;html=1;strokeColor=#c77f3b;strokeWidth=1.8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b3" target="b4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="a4" value="codegen" style="endArrow=block;html=1;strokeColor=#6a5a8a;strokeWidth=1.8;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="b4" target="b5"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="n0" value="grammar only;&lt;br&gt;no tables checked" style="text;html=1;align=center;fontSize=10;fontColor=#6b7280;" vertex="1" parent="1"><mxGeometry x="10" y="165" width="140" height="34" as="geometry" /></mxCell>
+        <mxCell id="n1" value="names &amp;#8594; columns / types;&lt;br&gt;catalog stats enter here" style="text;html=1;align=center;fontSize=10;fontColor=#3b6ea5;" vertex="1" parent="1"><mxGeometry x="195" y="165" width="150" height="34" as="geometry" /></mxCell>
+        <mxCell id="n2" value="pushdown, column pruning,&lt;br&gt;folding, join reorder" style="text;html=1;align=center;fontSize=10;fontColor=#4f8a3d;" vertex="1" parent="1"><mxGeometry x="380" y="165" width="160" height="34" as="geometry" /></mxCell>
+        <mxCell id="n3" value="join strategy + Exchange&lt;br&gt;placement; AQE revisits (Ch. 6)" style="text;html=1;align=center;fontSize=10;fontColor=#c77f3b;" vertex="1" parent="1"><mxGeometry x="590" y="165" width="200" height="34" as="geometry" /></mxCell>
+        <mxCell id="n4" value="one flat method&lt;br&gt;per stage; then the JIT" style="text;html=1;align=center;fontSize=10;fontColor=#6a5a8a;" vertex="1" parent="1"><mxGeometry x="850" y="165" width="150" height="34" as="geometry" /></mxCell>
+
+        <mxCell id="cap" value="&lt;b&gt;EXPLAIN FORMATTED&lt;/b&gt; prints the four plan forms; the SQL tab shows the physical plan after it runs." style="text;html=1;align=center;fontSize=10;fontColor=#555555;fontStyle=2;" vertex="1" parent="1"><mxGeometry x="120" y="220" width="760" height="20" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
