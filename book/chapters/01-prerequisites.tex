@@ -22,17 +22,134 @@
 \section{The JVM Execution Environment}
 \label{sec:prereq-jvm}
 
+Spark runs on the Java Virtual Machine: the driver and every executor is a JVM
+process, and the engine's memory behaviour, its failure modes, and much of its
+internal design follow directly from how the JVM manages memory and runs code.
+This section covers the parts of that environment a reader needs before the
+later chapters. The Spark-specific memory model built on top of it is
+\Cref{sec:fund-memory}; the tuning knobs are \Cref{ch:tuning}.
+
 \subsection{Bytecode and just-in-time compilation}
 \tbd
 
+% No source material yet in spark_memory_tuning.md; to be written alongside
+% whole-stage code generation (Sec 3.2.5 / Sec 9.2).
+
 \subsection{Heap layout and object representation}
-\tbd
+\label{sec:prereq-heap}
+
+The JVM manages a single contiguous region of memory, the \emph{heap}, from which
+every object a program allocates is drawn. A Spark executor is one JVM process,
+and the value of \texttt{spark.executor.memory} is precisely the maximum size of
+that heap. Everything a task does --- decoding a Parquet page into rows, building
+a hash table for a join, accumulating a group-by result --- competes for space in
+it, and when it fills, the task must either spill to disk or fail.
+
+Two properties of the heap drive most of Spark's decisions about memory. The
+first is \emph{per-object overhead}. Every object carries a header --- a mark word
+and a pointer to its class --- before any field is stored, and the allocator pads
+every object to an eight-byte boundary.
+
+\begin{lstlisting}[numbers=none,caption={Cost of a boxed integer on a 64-bit JVM},captionpos=b]
+java.lang.Integer
+  object header   12 bytes   (mark word + class pointer)
+  int value        4 bytes
+  ----------------------
+  total           16 bytes   to carry 4 bytes of data
+\end{lstlisting}
+
+\noindent A row represented as an array of boxed Java objects (an
+\texttt{Integer}, a \texttt{Double}, a \texttt{String} with its own header and
+backing character array) can be several times larger in the heap than the same
+row encoded as raw bytes. This is the amplification a reader sees when a
+compressed Parquet file expands to many times its on-disk size once decoded into
+Java objects, and it is why Spark's execution engine stores rows off the object
+heap in a packed binary format rather than as JVM objects
+(\Cref{sec:int-tungsten}).
+
+The second property is that the heap is \emph{managed}: the program never frees
+memory explicitly, and reclamation is the job of the garbage collector
+(\Cref{sec:prereq-gc}). Spark subdivides the heap it is given into a small
+reserved region, a fraction for the objects user code creates, and a fraction it
+manages explicitly for execution and caching --- the unified memory model of
+\Cref{sec:fund-memory}. That boundary is a Spark convention layered on one flat
+JVM heap, not a JVM feature.
 
 \subsection{Garbage collection models: Parallel, G1, ZGC}
-\tbd
+\label{sec:prereq-gc}
+
+Because the heap is managed, the JVM must periodically find objects that are no
+longer reachable and reclaim their space. This work is the \emph{garbage
+collector} (GC), and for a data-processing workload it is never free: the
+collector competes with the application for CPU, and some of its phases are
+\emph{stop-the-world}, meaning every application thread in the JVM is frozen until
+the phase completes. On an executor a long stop-the-world pause stalls every
+running task at once, and if it exceeds the heartbeat timeout the driver declares
+the executor lost and re-runs its work elsewhere (\Cref{sec:dbg-failures}).
+
+Collectors differ mainly in how they trade pause length against throughput and
+CPU cost.
+
+\begin{itemize}
+  \item \textbf{Parallel GC} uses multiple threads but collects the whole heap in
+        one stop-the-world pause. It gives the highest raw throughput when pauses
+        do not matter, but pause time grows with heap size, so a large executor
+        can freeze for seconds at a time.
+  \item \textbf{G1} (Garbage-First) divides the heap into equal-sized regions and
+        collects a subset of them per cycle, doing most of its marking
+        concurrently with the application. Pause times are shorter and roughly
+        bounded regardless of heap size, at the cost of more bookkeeping and CPU.
+        It is the default at the heap sizes a Spark executor typically runs and
+        the collector most Spark tuning assumes.
+  \item \textbf{ZGC} does essentially all of its work concurrently and keeps
+        pauses under a millisecond even on very large heaps, at a higher constant
+        CPU and memory overhead. It is worth choosing only for executors with
+        tens of gigabytes of heap where G1 pauses are still a problem.
+\end{itemize}
+
+The generational hypothesis --- that most objects die young --- underlies all
+three: they collect a small ``young'' area cheaply and often, and the full-heap
+collection rarely. A workload that holds a large amount of long-lived data in
+cache violates that assumption and pushes the collector toward the expensive
+path, which is one more reason to cache deliberately (\Cref{sec:qo-caching}).
+Monitoring GC time is covered in \Cref{sec:dbg-metrics}; the executor JVM options
+that select and tune a collector are in \Cref{ch:tuning}.
 
 \subsection{Off-heap memory and the cost of serialization}
-\tbd
+\label{sec:prereq-serialization}
+
+Not all of a JVM process's memory is on the heap. The class metadata the JVM
+loads, each thread's call stack, buffers for network and file I/O, memory
+allocated by native libraries such as compression codecs, and any region the
+application explicitly requests \emph{off-heap} all live outside the heap and
+outside the garbage collector's control. On Kubernetes this is why an executor
+pod is sized as \texttt{spark.executor.memory} plus an overhead: the heap is only
+part of what the process touches, and if the total exceeds the pod's limit the
+kernel kills it with no Java-level error (\Cref{sec:dbg-failures}).
+
+Off-heap memory matters to Spark for a second reason: it is where the execution
+engine puts data it wants to keep away from the garbage collector. A hash table
+for a join, or a block of cached rows, held as one large off-heap byte buffer
+instead of millions of small Java objects, is invisible to GC and costs nothing
+to collect (\Cref{sec:int-tungsten}).
+
+\emph{Serialization} is the conversion of an in-memory object graph into a flat
+sequence of bytes, and \emph{deserialization} is its inverse. Spark serializes
+whenever data leaves a JVM: across the network during a shuffle, to disk when a
+partition spills or is cached in serialized form, and when a broadcast variable
+is shipped to executors. The cost is both CPU and size, and the two Java options
+differ sharply. The built-in Java serializer writes the full class name and every
+field name and type alongside the values, repeated for every object, so most of
+the output is self-description rather than data. \emph{Kryo} writes a compact
+encoding --- a short numeric class identifier and the field values --- and
+produces output several times smaller, which directly reduces shuffle volume,
+spill size, and broadcast footprint (\Cref{sec:tune-serialization}).
+
+DataFrame and SQL workloads sidestep both serializers for most operations: rows
+already live in the engine's binary format (\Cref{sec:int-tungsten}), so
+shuffling them is a memory copy with no object graph to walk. The Java-versus-Kryo
+choice still governs RDD code, user-defined functions, and anything that puts
+arbitrary Java objects into a shuffle or a broadcast.
 
 \section{Distributed Systems Concepts}
 \label{sec:prereq-distsys}
