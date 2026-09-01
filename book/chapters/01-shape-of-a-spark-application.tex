@@ -97,6 +97,69 @@ memory --- usually from pulling too much data back --- kills the whole
 application at once, with no retry.
 \end{note}
 
+\subsection*{Following the specimen from submission to result}
+\label{sec:shape-flow}
+
+Putting the three roles together, here is what happens end to end when you run
+the query from \Cref{lst:shape-query}, step by step
+(\Cref{fig:query-submission-flow}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.78\linewidth]{query-submission-flow.pdf}
+  \caption{The specimen query from submission to result. The driver compiles and
+  schedules but never touches the data; executors do all the reading, shuffling,
+  and computing; the cluster manager only supplies the pods.}
+  \label{fig:query-submission-flow}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Submit.} Your SQL client --- here a connection to the Kyuubi
+        gateway --- sends the query \emph{text} to the driver. Nothing is parsed
+        on your side.
+  \item \textbf{Compile (driver).} The driver parses the text, resolves
+        \texttt{trips} and \texttt{dim\_route} against the catalog, runs the
+        optimizer, and produces a physical plan (\Cref{ch:catalyst}). Its DAG
+        scheduler then cuts that plan into three stages at the shuffle and builds
+        a set of tasks for each --- one task per input partition.
+  \item \textbf{Acquire executors (cluster manager).} If the driver does not
+        already have enough executors, it asks Kubernetes for more pods. Under
+        Kyuubi the pool is usually already warm, so this step does nothing and
+        the query starts at once.
+  \item \textbf{Run the map stages (executors).} The driver sends stage~0 and
+        stage~1 tasks to free task slots, each task carrying its plan fragment
+        and the id of the one partition it must process. Stage~0's roughly 180
+        tasks each read one file split of the March \texttt{trips} partitions
+        from GCS, apply the \texttt{event\_ts} filter, and write small files to
+        the executor's \emph{local} disk, bucketed by \texttt{route\_id}.
+        Stage~1 does the same for \texttt{dim\_route}. The two stages run
+        concurrently, and every task reports its metrics to the driver as it
+        finishes.
+  \item \textbf{Shuffle.} Once both map stages are done the driver launches
+        stage~2 --- 200 tasks, one per value of
+        \conf{spark.sql.shuffle.partitions}. Each stage-2 task connects to
+        \emph{every} executor that ran a map task and fetches the shuffle files
+        for its slice of \texttt{route\_id}. This all-to-all transfer over the
+        network is the shuffle, and it is why the map side (stages~0--1) and the
+        reduce side (stage~2) are separate stages.
+  \item \textbf{Run the reduce stage (executors).} Each stage-2 task now holds
+        every row for its routes, from both tables. It sorts and merges them,
+        performs the join, and aggregates the on-time rate per route.
+  \item \textbf{Collect (driver).} The result is one row per route --- a few
+        thousand rows --- so the driver gathers them from the stage-2 tasks. A
+        query returning millions of rows would overwhelm the driver at exactly
+        this step (\Cref{ch:execmem}).
+  \item \textbf{Return.} The driver sends the result set to the client and marks
+        the job complete. The Spark UI now shows the finished job, its three
+        stages, and every task's metrics --- the view you learn to read in
+        \Cref{sec:shape-ui}.
+\end{enumerate}
+
+Throughout, the driver is also doing bookkeeping the diagram leaves out:
+tracking which tasks have finished, re-sending any that failed to a different
+executor, and updating the UI. It never reads or writes the data itself --- only
+the plan, the schedule, and the final small result.
+
 \section{Deploy modes and Spark on Kubernetes}
 \label{sec:shape-deploy}
 

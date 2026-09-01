@@ -1,5 +1,8 @@
-# main.pdf is tracked (like the thesis template) so it is visible on GitHub
-# and the book can be read without a LaTeX toolchain. Regenerate: ./build.ps1
+# The built book and the generated figure PDFs are tracked (like the thesis
+# template) so the book is readable on GitHub and builds without Python.
+# Re-include them past the repo-root "*.pdf" rule:
+!main.pdf
+!images/*.pdf
 
 # LaTeX build artifacts
 *.aux

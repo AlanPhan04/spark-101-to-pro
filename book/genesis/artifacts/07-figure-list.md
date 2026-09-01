@@ -8,6 +8,7 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 | Slug | Ch | Type | Purpose (what prose can't do) | Pass | Status |
 |---|---|---|---|---|---|
 | `application-topology` | 1 | structure | driver / executors / cluster manager on K8s; where each piece lives | 1 | **done** |
+| `query-submission-flow` | 1 | flow | the specimen from submit → compile → acquire → map → shuffle → reduce → collect → return | 1 | **done** |
 | `job-stage-task` | 1 | structure | one query → 1 job → N stages (split at shuffles) → M tasks/stage; one red skewed task | 1 | **done** |
 | `narrow-vs-wide` | 1 | structure | narrow = 1:1 partition dep, no move; wide = all-to-all, the shuffle | 1 | **done** |
 | `catalyst-pipeline` | 2 | flow | SQL → unresolved → analyzed → optimized → physical → codegen; what each stage changes | 1 | **done** |
