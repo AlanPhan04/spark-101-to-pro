@@ -15,10 +15,33 @@ from each other while a job runs is picked up alongside caching in
 \end{chapterintro}
 
 \section{The JVM in one page: bytecode and just-in-time compilation}
-\tbd
+\label{sec:mem-jvm}
 
-% To be written alongside whole-stage code generation (\Cref{sec:wholestage-codegen},
-% \Cref{ch:tungsten}).
+Spark is written in Scala and runs on the Java Virtual Machine, and two features
+of that platform shape how it performs.
+
+The first is \emph{just-in-time compilation}. Scala compiles to JVM
+\emph{bytecode}, a portable instruction set the JVM does not run directly.
+Instead it interprets bytecode at first and watches which methods run often; a
+\emph{hot} method is then compiled to native machine code by the JIT, with
+optimizations --- inlining, loop unrolling, dead-code elimination, escape
+analysis --- that depend on what the method actually did the first few thousand
+times it ran. Two consequences follow. A Spark process is slowest in its first
+seconds, before the JIT has warmed up, which is one reason Kyuubi keeps a driver
+alive rather than starting one per query (\Cref{sec:shape-deploy}) and why a
+micro-benchmark that runs a snippet once tells you almost nothing. And the JIT
+compiles \emph{tight, predictable} code far better than code full of virtual
+calls and branches --- which is exactly why Spark's execution engine generates a
+single flat Java method for a chain of operators (\Cref{sec:wholestage-codegen},
+\Cref{ch:tungsten}) instead of walking an operator tree.
+
+The second is \emph{automatic memory management}: the program allocates objects
+and never frees them, and a \emph{garbage collector} reclaims what is no longer
+reachable. This is a convenience with a running cost, and for a data engine
+moving billions of rows the cost is large enough that Spark works hard to keep
+most of its data \emph{out} of the managed heap entirely. The rest of this
+chapter is about where an executor's memory goes, and \Cref{sec:mem-gc} about
+what the garbage collector does to it.
 
 \section{Heap layout and object representation}
 \label{sec:mem-heap}
@@ -165,6 +188,17 @@ CPU cost.
         tens of gigabytes of heap where G1 pauses are still a problem.
 \end{itemize}
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{gc-pause-stall.pdf}
+  \caption{A stop-the-world pause freezes every task slot on the executor at
+  once, not one at a time. If the pause outlasts the heartbeat interval, the
+  driver concludes the executor is gone and re-runs its work elsewhere --- so a
+  GC problem shows up as lost executors and repeated stages, not just as slow
+  ones.}
+  \label{fig:gc-pause-stall}
+\end{figure}
+
 The generational hypothesis --- that most objects die young --- underlies all
 three: they collect a small ``young'' area cheaply and often, and the full-heap
 collection rarely. A workload that holds a large amount of long-lived data in
@@ -204,7 +238,22 @@ objects into a shuffle or a broadcast --- the same user-memory objects that
 \Cref{sec:mem-model} noted Spark does not manage.
 
 \section{Summary}
-\tbd
+\label{sec:mem-summary}
+
+An executor is one JVM process, and its memory is three separately configured
+pools: the heap (\conf{spark.executor.memory}), an optional off-heap pool, and
+overhead. The heap is carved into a fixed 300~MB reserve, \emph{unified memory}
+(the only pool Spark accounts for and the only one that spills), and \emph{user
+memory} (untracked, un-spillable, throws on overflow). The container limit the
+cluster manager enforces is the sum of all three; cross it and the process is
+killed with no Java error, whereas merely filling the heap makes unified memory
+spill. Execution memory is shared across an executor's cores, so cores-per-executor
+is a memory decision. On top of the map sit two costs: garbage collection, whose
+stop-the-world pauses freeze every task at once and can cost you an executor; and
+serialization, which Kryo makes several times cheaper than the Java default for
+RDD and UDF code, though DataFrame rows bypass it entirely. You can now size an
+executor from its workload and explain the two kinds of memory failure by which
+pool overflowed.
 
 \exercisehead
 \begin{exercises}
@@ -212,4 +261,11 @@ objects into a shuffle or a broadcast --- the same user-memory objects that
       \conf{spark.executor.memory}, \conf{spark.executor.cores}, and
       \conf{spark.executor.memoryOverhead}, and justify each number from the
       memory map in \Cref{fig:executor-memory-model}.
+\item An executor is killed by Kubernetes with \texttt{OOMKilled} and no Spark
+      exception in the log. A second run fails with a Java
+      \texttt{OutOfMemoryError} in a task. Which pool overflowed in each case,
+      and which knob addresses each?
+\item In the Executors tab, one executor shows 40\% of task time in GC while the
+      others show 5\%. What is the most likely cause, and which chapter covers
+      the fix?
 \end{exercises}

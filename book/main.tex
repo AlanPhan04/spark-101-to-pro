@@ -25,6 +25,7 @@
 \usepackage{enumitem}
 \linespread{1.5}
 \usepackage{hyperref}
+\usepackage{xurl}
 \usepackage{longtable}
 \usepackage{booktabs}
 \hypersetup{
@@ -36,6 +37,8 @@
 }
 \usepackage{subcaption}
 \usepackage[nameinlink]{cleveref}
+\crefname{appendix}{Appendix}{Appendices}
+\Crefname{appendix}{Appendix}{Appendices}
 \usepackage[most]{tcolorbox}
 
 % --- code listings --------------------------------------------------------
@@ -55,6 +58,8 @@
     showstringspaces=false,
     tabsize=2,
 }
+
+\lstdefinelanguage{text}{}
 
 \lstdefinelanguage{scala}{
     morekeywords={abstract,case,catch,class,def,do,else,extends,false,final,
@@ -167,15 +172,15 @@
 \input{chapters/18-shuffle-framework-and-scheduler}
 \input{chapters/19-datasource-v2-and-extensions}
 
-\backmatter
-
 \appendix
+\crefalias{chapter}{appendix}
 \input{appendices/a-reference-environment}
 \input{appendices/b-configuration-reference}
 \input{appendices/c-reading-query-plans}
 \input{appendices/d-glossary}
 \input{appendices/e-further-reading}
 
+\backmatter
 \input{sections/references}
 
 \end{document}

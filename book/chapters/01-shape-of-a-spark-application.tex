@@ -11,28 +11,276 @@ By the end you can read a running job instead of watching a progress bar.
 \end{chapterintro}
 
 \section{A query, end to end}
-\tbd
+\label{sec:shape-query}
+
+Here is the specimen. It asks, for each bus route, what fraction of trips in the
+first week of March arrived on time. It runs against the \texttt{trips} table and
+the \texttt{dim\_route} dimension introduced in \Cref{app:refenv}; \texttt{trips}
+is an Iceberg table partitioned by \texttt{day(event\_ts)}, holding a few hundred
+million rows for the month.
+
+\begin{lstlisting}[language=SQL,caption={The specimen query},captionpos=b,label=lst:shape-query]
+SELECT r.route_name,
+       AVG(CASE WHEN t.arrival_delay_s <= 120 THEN 1.0 ELSE 0.0 END) AS on_time_rate
+FROM trips t
+JOIN dim_route r ON t.route_id = r.route_id
+WHERE t.event_ts >= TIMESTAMP '2026-03-01 00:00:00'
+  AND t.event_ts <  TIMESTAMP '2026-03-08 00:00:00'
+GROUP BY r.route_name
+ORDER BY on_time_rate;
+\end{lstlisting}
+
+Submit it and Spark does not simply ``run the SQL.'' The text is parsed into a
+tree, resolved against the catalog, rewritten by the optimizer, turned into a
+plan of physical operators, and compiled to Java bytecode. That whole compilation
+is \Cref{ch:catalyst}'s subject; for now, take it as given that by the time
+anything executes, Spark holds a \emph{physical plan}: a tree of operators such
+as \emph{scan}, \emph{filter}, \emph{exchange} (a shuffle), \emph{sort-merge
+join}, and \emph{hash aggregate}.
+
+Executing that plan is a distributed affair. The plan is split into a \emph{job},
+the job into \emph{stages}, and each stage into \emph{tasks} that run in parallel
+on \emph{executors}. The result flows back to the process that submitted the
+query, the \emph{driver}. On the reference cluster this specimen produces one
+job, three stages, and a few hundred tasks, and it takes about four minutes.
+
+Why four minutes and not one, or forty? That question is what the rest of the
+book answers. This chapter's job is narrower: to give you the vocabulary and the
+tools to \emph{see} the structure of the run, so that later chapters have
+something concrete to change. Everything that follows --- joins, the shuffle,
+adaptive execution, the Iceberg metadata layer --- is a way of moving less data,
+moving it less often, or moving it more evenly. You cannot decide to move data
+differently until you can see where it moves now.
 
 \section{Driver, executors, and the cluster manager}
-\tbd
+\label{sec:shape-driver}
+
+A Spark \emph{application} is one driver plus a set of executors, all working on
+your queries until the application exits (\Cref{fig:application-topology}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{application-topology.pdf}
+  \caption{One application: a single driver process that plans and coordinates,
+  and a set of executor processes that run tasks and cache data. The cluster
+  manager --- here the Kubernetes API --- hands out the containers the processes
+  run in.}
+  \label{fig:application-topology}
+\end{figure}
+
+The \textbf{driver} is the process that runs your program. It holds the
+\texttt{SparkSession}, compiles each query into a plan, breaks the plan into
+stages and tasks, hands tasks to executors, tracks their progress, and gathers
+results. It is a single process and a single point of failure: if the driver
+dies, the application dies. It is also where a \texttt{collect()} or a
+\texttt{toPandas()} lands every row it pulls back, which is the most common way to
+run the driver out of memory (\Cref{ch:execmem}, \Cref{sec:reading-metrics}).
+
+An \textbf{executor} is a JVM process that does the actual work. Each executor
+has a fixed number of \emph{task slots} --- one per core, set by
+\conf{spark.executor.cores} --- and runs one task per slot at a time. Executors
+also hold cached blocks and the map-side output of shuffles, and they send
+regular heartbeats to the driver so it knows they are alive. An application
+typically has many executors and exactly one driver.
+
+The \textbf{cluster manager} owns the machines and hands out the containers that
+the driver and executors run in. Spark supports several: its own standalone
+manager, Hadoop YARN, and Kubernetes (Apache Mesos support was removed in Spark
+3.2). The reference stack uses Kubernetes, so ``container'' means ``pod'' and the
+cluster manager is the Kubernetes API server.
+
+\begin{note}
+The driver--executor split is why two very different failures look different.
+An executor lost to an out-of-memory kill takes its tasks down, and Spark simply
+re-runs them elsewhere; the job slows but survives. The driver running out of
+memory --- usually from pulling too much data back --- kills the whole
+application at once, with no retry.
+\end{note}
 
 \section{Deploy modes and Spark on Kubernetes}
-\tbd
+\label{sec:shape-deploy}
+
+Where the \emph{driver} runs is the \emph{deploy mode}. In \textbf{client mode}
+the driver runs in whatever process launched the application --- your shell, a
+notebook kernel, or a long-lived gateway. In \textbf{cluster mode} the launcher
+asks the cluster manager to start the driver as just another container, then
+disconnects. Client mode is convenient for interactive work because the driver is
+local to you; cluster mode is standard for scheduled jobs because nothing on your
+side has to stay running.
+
+On Kubernetes the sequence for a cluster-mode job is: \texttt{spark-submit} calls
+the Kubernetes API to create a \emph{driver pod}; the driver pod starts, and its
+Spark code calls the same API to create \emph{executor pods}; each executor pod
+starts, connects back to the driver, and registers its task slots. From then on
+the driver schedules tasks onto executors directly, and the Kubernetes API is
+only involved again when pods are added or removed --- for example under dynamic
+allocation (\Cref{sec:executor-sizing}).
+
+The reference stack does not usually run \texttt{spark-submit} per query.
+\textbf{Kyuubi} runs a long-lived driver (a persistent \texttt{SparkSession},
+one per user or group) and you send SQL to it over a connection, the way you
+would to any database. The engine, stages, and tasks are all still there; Kyuubi
+just keeps the driver warm so you are not paying startup cost on every query and
+so many users can share a pool of executors.
 
 \section{Jobs, stages, and tasks}
-\tbd
+\label{sec:shape-jobs}
+
+Spark transformations are \emph{lazy}: \texttt{filter}, \texttt{join},
+\texttt{groupBy}, and the rest build up a plan but run nothing. Work starts only
+when an \emph{action} asks for a result --- a write, a \texttt{count}, a
+\texttt{collect}, or the implicit collect that returns rows to a SQL client. Each
+action triggers one \textbf{job}.
+
+Within a job, the driver's \emph{DAG scheduler} cuts the plan into
+\textbf{stages}. The cut always falls at a shuffle: a stage is the longest run of
+work that can be pipelined without moving data between executors. Everything up to
+a shuffle goes in one stage; the shuffle ends it; what comes after starts a new
+one. A stage that reads a shuffle cannot begin until the stage that writes it has
+finished, which is why stage boundaries are also the points where a job can
+stall.
+
+A stage is executed as a set of \textbf{tasks} --- one per partition of the
+stage's input, each doing identical work on its own slice of the data. A task is
+the unit Spark schedules onto an executor's task slot; one task occupies one core
+for its duration. The number of tasks in a stage is therefore the number of
+partitions, and it sets how much parallelism the stage can use: 8 tasks on a
+cluster with 200 free slots leaves 192 idle.
+
+\Cref{fig:job-stage-task} shows the specimen's shape. Because \texttt{dim\_route}
+has no statistics that would let the planner broadcast it (an Iceberg table
+usually does not, until you \texttt{ANALYZE} it --- \Cref{ch:joins}), the planner
+chooses a sort-merge join: both inputs are shuffled so that rows with the same
+\texttt{route\_id} land on the same executor. That gives:
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{job-stage-task.pdf}
+  \caption{The specimen as one job of three stages. Stage 0 scans and filters
+  \texttt{trips}; stage 1 scans \texttt{dim\_route}; both write shuffle files
+  partitioned by \texttt{route\_id}. Stage 2 reads from both, joins, and
+  aggregates. Each stage runs one task per input partition. One task in stage 2
+  runs far longer than its peers --- the first sighting of skew.}
+  \label{fig:job-stage-task}
+\end{figure}
+
+\begin{itemize}
+  \item \textbf{Stage 0} --- scan the March partitions of \texttt{trips}, apply
+        the timestamp filter, and write shuffle files keyed by \texttt{route\_id}.
+        Roughly 180 tasks, one per input file split.
+  \item \textbf{Stage 1} --- scan \texttt{dim\_route} and write shuffle files
+        keyed by \texttt{route\_id}. A handful of tasks; the table is tiny.
+  \item \textbf{Stage 2} --- fetch both sides' shuffle files, merge them on
+        \texttt{route\_id}, join, and aggregate per route. 200 tasks, because
+        \conf{spark.sql.shuffle.partitions} defaults to 200
+        (\Cref{ch:shuffle}). The final \texttt{ORDER BY} is small enough to
+        finish inside this stage.
+\end{itemize}
+
+The \texttt{ORDER BY} on the aggregated result is cheap --- a few thousand rows
+--- so it does not add a stage here. On a larger result it would.
 
 \section{Narrow versus wide dependencies}
-\tbd
+\label{sec:shape-deps}
+
+The reason a shuffle ends a stage is the kind of dependency it creates between
+partitions (\Cref{fig:narrow-vs-wide}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{narrow-vs-wide.pdf}
+  \caption{A narrow dependency: each output partition is built from one input
+  partition, so the work pipelines in place. A wide dependency: each output
+  partition draws from every input partition, so the data must be redistributed
+  --- a shuffle --- and the stage ends.}
+  \label{fig:narrow-vs-wide}
+\end{figure}
+
+A \textbf{narrow} dependency is one where each output partition depends on a
+bounded, known set of input partitions --- usually exactly one. \texttt{filter},
+\texttt{select}, and \texttt{map} are narrow: partition 3 of the output is
+partition 3 of the input with a function applied. Narrow operations chain
+together with no data movement, which is why an entire run of them collapses into
+a single stage and executes as one pipelined pass per partition.
+
+A \textbf{wide} dependency is one where an output partition can depend on
+\emph{every} input partition. \texttt{groupBy}, \texttt{join} (unless one side is
+broadcast), \texttt{distinct}, \texttt{repartition}, and window functions are
+wide: to put all rows for \texttt{route\_id = 47} in one place, Spark must look at
+every input partition, because any of them might hold such a row. That
+redistribution is the shuffle, and it is the wall between stages.
+
+This is the single most useful idea in the book: \textbf{cost lives at stage
+boundaries}. Narrow work is cheap and scales cleanly. Wide work writes data to
+disk, moves it over the network, and re-reads it, and it forces the whole cluster
+to wait at a barrier. Almost every technique in \Cref{ch:shuffle} through
+\Cref{ch:caching} is about having fewer wide dependencies, making the ones you
+keep move less data, or making them move it more evenly.
 
 \section{Reading the UI for the first time}
-\tbd
+\label{sec:shape-ui}
+
+The Spark UI --- served by the driver, on port 4040 by default, and preserved
+after the fact by the history server (\Cref{sec:reading-metrics}) --- has a tab
+for each level of the model.
+
+\begin{description}
+  \item[SQL / DataFrame] The query as a plan tree, annotated with the number of
+        rows and the time spent at each operator after execution. This is where
+        you confirm which join strategy ran and count the \emph{Exchange} nodes;
+        each Exchange is one shuffle.
+  \item[Jobs] One row per action. The specimen shows a single job.
+  \item[Stages] The stages of each job, with a timeline and, for every stage, a
+        \emph{Summary Metrics} table: the minimum, 25th percentile, median, 75th
+        percentile, and maximum across the stage's tasks for duration, shuffle
+        read size, records, spill, and GC time.
+  \item[Executors] One row per executor: task slots, memory used, disk spilled,
+        and total GC time. A cluster where one executor shows far more GC than
+        the others is usually holding skewed data.
+  \item[Storage] Cached datasets and how much of each is actually resident.
+\end{description}
+
+For the specimen, open the Stages tab and look at stage 2's Summary Metrics. The
+median task duration is a few seconds; the maximum is close to a minute. One task
+is doing a large multiple of the work of the typical task. That is \emph{data
+skew}: one \texttt{route\_id} --- a busy trunk route --- holds far more trips than
+the others, so the task that got that route's partition runs alone while the
+rest of the stage has finished. You cannot fix it yet. \Cref{ch:aqe} and
+\Cref{ch:joins} will. But you can now \emph{see} it, and seeing it is the
+prerequisite for everything else.
+
+\begin{tip}
+Four numbers tell you most of what is wrong with a slow stage: max versus median
+\emph{task duration} (skew), \emph{shuffle read/write} size (how much data the
+wall is moving), \emph{spill} (not enough execution memory, \Cref{ch:execmem}),
+and \emph{GC time} (too much, \Cref{sec:mem-gc}). Check them in that order.
+\end{tip}
 
 \section{Summary}
-\tbd
+\label{sec:shape-summary}
+
+You can now describe what happens when a query runs. The \emph{driver} plans it
+and coordinates; \emph{executors} run \emph{tasks}, one per core, on partitions of
+the data; the \emph{cluster manager} (Kubernetes here) provides the containers.
+An action triggers a \emph{job}; the job is cut into \emph{stages} at every
+shuffle; a stage runs one task per partition. A \emph{narrow} dependency keeps
+work in place; a \emph{wide} dependency forces a shuffle and ends the stage, and
+that is where a query spends most of its time. In the Spark UI you can find the
+job, its stages, and their tasks, identify a stage boundary as a shuffle from the
+Exchange nodes in the SQL tab, and spot an uneven stage from the gap between its
+maximum and median task time.
+
+The specimen still takes four minutes. \Cref{ch:catalyst} opens up how Spark
+decided on this plan; \Cref{ch:shuffle} onward is how you change it.
 
 \exercisehead
 \begin{exercises}
-\item Run two queries against \texttt{trips}, one with a \texttt{GROUP BY} and one
-      without. Identify which produced a second stage, and explain why.
+\item Run two queries against \texttt{trips}: \texttt{SELECT count(*) FROM trips}
+      and \texttt{SELECT route\_id, count(*) FROM trips GROUP BY route\_id}.
+      Open the Stages tab for each. Which produced a second stage, and why?
+\item In the SQL tab for the specimen query, count the \emph{Exchange} nodes.
+      Match each one to a stage boundary in \Cref{fig:job-stage-task}.
+\item In stage 2's Summary Metrics, record the median and maximum task duration
+      and the maximum shuffle-read size. Which of the four numbers from the tip
+      is the outlier?
 \end{exercises}

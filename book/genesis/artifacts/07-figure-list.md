@@ -7,12 +7,13 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 
 | Slug | Ch | Type | Purpose (what prose can't do) | Pass | Status |
 |---|---|---|---|---|---|
-| `application-topology` | 1 | structure | driver / executors / cluster manager on K8s; where each piece lives | 1 | spec |
-| `job-stage-task` | 1 | structure | one query → 1 job → N stages (split at shuffles) → M tasks/stage | 1 | spec |
-| `catalyst-pipeline` | 2 | flow | SQL string → unresolved → analyzed → optimized → physical → codegen; what each stage may change | 1 | spec |
-| `explain-anatomy` | 2 | annotated | a real `EXPLAIN FORMATTED` with call-outs on PartitionFilters / PushedFilters / Exchange / `*(n)` codegen markers | 1 | spec |
-| `executor-memory-model` | 3 | structure | heap (reserved / unified[exec\|storage] / user) + off-heap + overhead; container limit brace; 8 GB/2 GB worked numbers; spill vs OOM annotations | **now** | render |
-| `gc-pause-stall` | 3 | sequence | a stop-the-world pause freezing all tasks on an executor at once; heartbeat timeout | 2 | spec |
+| `application-topology` | 1 | structure | driver / executors / cluster manager on K8s; where each piece lives | 1 | **done** |
+| `job-stage-task` | 1 | structure | one query → 1 job → N stages (split at shuffles) → M tasks/stage; one red skewed task | 1 | **done** |
+| `narrow-vs-wide` | 1 | structure | narrow = 1:1 partition dep, no move; wide = all-to-all, the shuffle | 1 | **done** |
+| `catalyst-pipeline` | 2 | flow | SQL → unresolved → analyzed → optimized → physical → codegen; what each stage changes | 1 | **done** |
+| `explain-anatomy` | 2 | listing | kept as an `lstlisting` in the chapter with prose call-outs, not a rendered figure | 1 | n/a |
+| `executor-memory-model` | 3 | structure | heap (reserved / unified[exec\|storage] / user) + off-heap + overhead; container limit; 8 GB/2 GB numbers | 1 | **done** |
+| `gc-pause-stall` | 3 | sequence | a stop-the-world pause freezing all 4 task slots at once; heartbeat timeout → executor lost | 1 | **done** |
 | `shuffle-write-read-path` | 4 | flow | map task: serialize → sort → spill → map-side file; reduce task: fetch → merge; the disk+network hop | 1 | spec |
 | `partition-sizing` | 4 | plot | shuffle-read size vs partition count vs per-task size; the spill zone and the tiny-task zone | 2 | spec |
 | `join-strategies` | 5 | structure | the four strategies side by side: what shuffles, what broadcasts, what sorts | 1 | spec |

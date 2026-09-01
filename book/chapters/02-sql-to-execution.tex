@@ -5,36 +5,254 @@
 A SQL string does not run. It is parsed into a tree, resolved against the
 catalog, rewritten by rules, turned into a physical plan by choosing strategies,
 and compiled to JVM bytecode. Every change you can make to a query's performance
-is a change to one of those stages. This chapter traces one join-and-filter query
-through all of them and teaches you to read \texttt{EXPLAIN FORMATTED} well
-enough to predict the physical plan before you run it.
+is a change to one of those stages. This chapter traces the specimen query from
+\Cref{ch:shape} through all of them and teaches you to read \texttt{EXPLAIN
+FORMATTED} well enough to predict the physical plan before you run it.
 \end{chapterintro}
 
 \section{The pipeline, overview}
-\tbd
+\label{sec:catalyst-overview}
+
+Catalyst is the optimizer inside Spark SQL. It is a library for building and
+rewriting trees, plus a fixed sequence of passes that turn a query into an
+executable plan (\Cref{fig:catalyst-pipeline}). Every DataFrame operation and
+every SQL statement goes through the same pipeline; the DataFrame API is just a
+second front end that builds the same tree the SQL parser does.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{catalyst-pipeline.pdf}
+  \caption{The compilation pipeline. Parsing produces a tree that is pure syntax.
+  Analysis resolves names against the catalog. Logical optimization rewrites the
+  tree with rules. Physical planning picks concrete operators and shuffle
+  points. Code generation emits Java that the JIT compiles. The side notes name
+  what each stage decides.}
+  \label{fig:catalyst-pipeline}
+\end{figure}
+
+Four representations matter, and you can print all of them (\Cref{sec:catalyst-explain}):
+
+\begin{enumerate}
+  \item the \textbf{unresolved logical plan} --- the parse tree; relations and
+        columns are just names.
+  \item the \textbf{resolved (analyzed) logical plan} --- names bound to real
+        tables and typed columns.
+  \item the \textbf{optimized logical plan} --- the same query, rewritten to do
+        less work.
+  \item the \textbf{physical plan} --- a tree of executable operators, with the
+        shuffles made explicit as \emph{Exchange} nodes.
+\end{enumerate}
+
+The physical plan is what \Cref{ch:shape} called ``the plan.'' Reading it, and
+knowing which pass produced each part of it, is what lets you look at a query and
+say in advance how many stages it will have and where they will stall.
 
 \section{Unresolved to resolved: the catalog}
-\tbd
+\label{sec:catalyst-analysis}
+
+The parser only checks grammar. \texttt{SELECT r.route\_name FROM trips t JOIN
+dim\_route r \dots} parses whether or not those tables exist; the result is a
+tree whose relation and attribute nodes are still marked \emph{unresolved} ---
+\texttt{trips} and \texttt{r.route\_name} are held as names, not yet bound to
+anything.
+
+The \emph{analyzer} resolves them. It asks the \textbf{catalog} what
+\texttt{trips} and \texttt{dim\_route} are, gets back their schemas, and replaces
+each unresolved node with a concrete one: \texttt{route\_name} becomes a
+\texttt{string} column belonging to \texttt{dim\_route}, \texttt{arrival\_delay\_s}
+becomes an \texttt{int} on \texttt{trips}, the \texttt{JOIN} condition is
+type-checked, and \texttt{AVG(\dots)} is bound to the aggregate function. If a
+name does not resolve, this is where the query fails --- before any work is
+scheduled.
+
+In the reference stack the catalog is a Spark \emph{catalog plugin} pointed at an
+Iceberg REST endpoint (backed by the Hive Metastore); \Cref{ch:catalogs} covers
+what it stores and how commits move through it. What matters here is that the
+catalog is also where \emph{table statistics} come from --- row counts, column
+value ranges, distinct counts. Spark's cost-based optimizer uses them to order
+joins and to decide what is small enough to broadcast (\Cref{ch:joins}). An
+Iceberg table exposes a total file size and row count from its metadata, but not
+per-column statistics unless you have run \texttt{ANALYZE TABLE \dots COMPUTE
+STATISTICS}. This is why so many lakehouse joins pick the wrong strategy at
+planning time and have to be rescued by a hint or by AQE.
 
 \section{Logical optimization: the rules that matter}
 \label{sec:catalyst-rules}
-\tbd
+
+The optimizer applies \emph{rules} --- functions from a logical plan to a better
+logical plan --- grouped into \emph{batches} that run repeatedly until the plan
+stops changing. Spark ships around a hundred rules. A handful account for most of
+the speed-up, and all of them do the same thing: move work earlier, or delete it.
+
+\paragraph{Predicate pushdown.} A filter is pushed as close to the scan as the
+semantics allow, so fewer rows enter the rest of the plan. In the specimen the
+\texttt{event\_ts} range moves into the \texttt{trips} scan, where it becomes a
+\emph{partition filter} (Iceberg skips whole days) and a \emph{pushed filter}
+(Parquet skips row groups). \Cref{ch:pruning} is about keeping this rule
+working; a function or a \texttt{CAST} on the filtered column defeats it.
+
+\paragraph{Column pruning.} The scan reads only the columns the query
+references. The specimen touches \texttt{route\_id}, \texttt{arrival\_delay\_s},
+and \texttt{event\_ts} from \texttt{trips} and \texttt{route\_id},
+\texttt{route\_name} from \texttt{dim\_route} --- so a fifty-column
+\texttt{trips} table is read five columns wide. A \texttt{SELECT *} anywhere in a
+subquery turns this off.
+
+\paragraph{Constant folding and simplification.} Expressions with no runtime
+input are evaluated once at planning time; the \texttt{TIMESTAMP '2026-03-01
+\dots'} literals are computed here, not per row. Boolean and null simplifications
+(\texttt{x AND true}, \texttt{x = x}, \texttt{IS NOT NULL} on a non-nullable
+column) are folded away.
+
+\paragraph{Join reordering.} With reliable statistics and cost-based
+optimization enabled (\conf{spark.sql.cbo.enabled} and
+\conf{spark.sql.cbo.joinReorder.enabled}), a multi-way join is reordered to keep
+intermediate results small --- join the pair that produces the fewest rows
+first. Without statistics Spark keeps the written order, which is one more reason
+Iceberg tables benefit from \texttt{ANALYZE}.
+
+\begin{note}
+Most optimizer rules are \emph{heuristic}: they rewrite the plan into a form
+that is almost always better, using no cost model. Only join selection and join
+reordering are cost-based, and only when statistics exist. When people say
+``the optimizer is smart,'' they usually mean the heuristic rules, which are
+reliable; the cost-based part is only as good as the catalog's numbers.
+\end{note}
 
 \section{Physical planning and strategies}
-\tbd
+\label{sec:catalyst-physical}
+
+The optimized \emph{logical} plan still says only \emph{what} to compute. The
+planner turns each logical operator into one or more \emph{physical} operators by
+applying \emph{strategies}:
+
+\begin{itemize}
+  \item a logical \texttt{Join} becomes \texttt{BroadcastHashJoin},
+        \texttt{ShuffledHashJoin}, or \texttt{SortMergeJoin}, chosen from the
+        estimated sizes of its inputs and \conf{spark.sql.autoBroadcastJoinThreshold}
+        (\Cref{ch:joins}).
+  \item a logical \texttt{Aggregate} becomes a partial \texttt{HashAggregate} on
+        each partition, an \texttt{Exchange} to bring equal keys together, and a
+        final \texttt{HashAggregate}.
+  \item a logical \texttt{Sort} that needs a global order becomes a
+        range-partitioning \texttt{Exchange} followed by a local \texttt{Sort}.
+\end{itemize}
+
+The planner also inserts \texttt{Exchange} (shuffle) and \texttt{Sort} nodes
+wherever an operator's required input distribution is not already satisfied ---
+and, crucially, \emph{removes} them where it is. If two joins share a key and the
+data is already partitioned by it, the second join reuses the first's exchange.
+This is why the \emph{number of Exchange nodes in the physical plan} is the
+single best predictor of a query's cost, and why \Cref{ch:shape} told you to
+count them in the UI.
+
+For the specimen, with no broadcastable statistics on \texttt{dim\_route}, the
+planner produces: two scans, each followed by an \texttt{Exchange hashpartitioning(route\_id, 200)},
+a \texttt{SortMergeJoin}, a partial and final \texttt{HashAggregate} (which need
+no new exchange, because the join already partitioned by \texttt{route\_id}), and
+a final small sort. Three stages, exactly as \Cref{fig:job-stage-task} showed.
 
 \section{Whole-stage code generation}
 \label{sec:wholestage-codegen}
-\tbd
+
+A physical plan could be executed by walking the operator tree and calling
+\texttt{next()} on each node per row --- the ``Volcano'' model. Spark does not.
+For a chain of operators within a stage it \emph{generates Java source} for the
+whole chain, one method that scans, filters, projects, and feeds the aggregate
+without a function call or an intermediate row object per step. That method is
+compiled to bytecode and then by the JVM's JIT to native code
+(\Cref{ch:tungsten}).
+
+In a printed plan you see this as a numbered marker: operators fused into one
+generated function are wrapped in \texttt{*(2) HashAggregate}, \texttt{*(2)
+Project}, \texttt{*(2) Filter}, and so on --- the \texttt{*(n)} means ``part of
+generated stage \texttt{n}.'' An operator without a star (a plain
+\texttt{Exchange}, or a source that does not support codegen) is a boundary
+where Spark falls back to row-at-a-time. A plan that is missing stars where you
+expect them --- often because a UDF or an unusual expression broke the chain ---
+is a plan leaving performance on the table.
 
 \section{Reading \texttt{EXPLAIN}}
-\tbd
+\label{sec:catalyst-explain}
+
+\texttt{EXPLAIN} prints the plans without running the query. The default form is
+terse; \texttt{EXPLAIN FORMATTED} is the one to learn.
+
+\begin{lstlisting}[language=SQL,caption={Printing the plans},captionpos=b]
+EXPLAIN FORMATTED
+SELECT r.route_name, AVG(...) FROM trips t JOIN dim_route r ON ... WHERE ... GROUP BY ...;
+\end{lstlisting}
+
+The output has two parts: a compact tree, then a numbered list where each node's
+details are spelled out. Read the tree bottom-up --- leaves are scans, the root
+is the final operator --- and check five things.
+
+\begin{lstlisting}[language=text,caption={The parts of \texttt{EXPLAIN FORMATTED} that matter (trimmed)},captionpos=b,label=lst:explain-anatomy]
+== Physical Plan ==
+* Sort (13)
++- * HashAggregate (12)                       <- final aggregate, in generated stage
+   +- * HashAggregate (10)                    <- partial aggregate, same stage
+      +- * SortMergeJoin Inner (9)            <- NOT a broadcast: both sides shuffled
+         :- * Sort (5)
+         :  +- Exchange hashpartitioning(route_id, 200) (4)   <- shuffle #1
+         :     +- * Filter (3)
+         :        +- * ColumnarToRow (2)
+         :           +- BatchScan trips (1)
+         +- * Sort (8)
+            +- Exchange hashpartitioning(route_id, 200) (7)   <- shuffle #2
+               +- BatchScan dim_route (6)
+
+(1) BatchScan trips
+    PartitionFilters: [event_ts >= 2026-03-01, event_ts < 2026-03-08]   <- days pruned
+    PushedFilters:    [IsNotNull(route_id)]                              <- row groups skipped
+    ReadSchema:       struct<route_id,arrival_delay_s,event_ts>          <- only 3 columns
+\end{lstlisting}
+
+\begin{enumerate}
+  \item \textbf{Join operator.} \texttt{SortMergeJoin} means both sides were
+        shuffled; \texttt{BroadcastHashJoin} means one side was small enough to
+        ship whole. If you see the former on an obviously small dimension, the
+        planner lacked statistics --- \Cref{ch:joins}.
+  \item \textbf{Exchange nodes.} Count them. Each is a stage boundary and a
+        shuffle. Two here.
+  \item \textbf{\texttt{PartitionFilters}.} Non-empty means Iceberg will skip
+        whole partitions. Empty on a partitioned table means the filter did not
+        match the partition transform --- \Cref{ch:pruning}.
+  \item \textbf{\texttt{PushedFilters}.} Non-empty means Parquet row groups will
+        be skipped inside the files that are read.
+  \item \textbf{\texttt{ReadSchema}.} Should list only the columns the query
+        needs. A wide schema here means a \texttt{SELECT *} leaked in.
+\end{enumerate}
+
+\texttt{EXPLAIN COST} additionally prints the row-count and size estimates the
+planner used --- useful for seeing \emph{why} it did not broadcast. After the
+query runs, the SQL tab shows the same tree with actual row counts and, if AQE
+was active, the final adapted plan marked \texttt{AdaptiveSparkPlan
+isFinalPlan=true} (\Cref{ch:aqe}).
 
 \section{Summary}
-\tbd
+\label{sec:catalyst-summary}
+
+A query becomes an execution in fixed stages: parse to a syntax tree, resolve
+names and types against the catalog, rewrite the logical plan with mostly
+heuristic rules (pushdown, column pruning, folding; join reordering only with
+statistics), choose physical operators and shuffle points with strategies, and
+generate Java for each pipelined chain. The physical plan --- readable with
+\texttt{EXPLAIN FORMATTED} --- tells you the join strategy, the number of
+shuffles, and whether pruning and column selection are working, which together
+determine how many stages the query has and where it will spend its time. The
+recurring lakehouse failure is missing catalog statistics, which makes the
+cost-based decisions (join strategy and order) unreliable until you
+\texttt{ANALYZE} or override.
 
 \exercisehead
 \begin{exercises}
-\item Given three query rewrites that are logically identical, predict which
-      produce the same optimized plan, then confirm with \texttt{EXPLAIN}.
+\item Run \texttt{EXPLAIN FORMATTED} on the specimen query. Confirm the two
+      Exchange nodes, the \texttt{SortMergeJoin}, and a non-empty
+      \texttt{PartitionFilters} on the \texttt{trips} scan.
+\item Write the same result three ways: with an explicit subquery, with a CTE,
+      and as one flat statement. Compare the \emph{optimized} logical plans.
+      Which differ, and which are identical?
+\item Add \texttt{WHERE CAST(t.route\_id AS STRING) = '47'} to the query and
+      re-run \texttt{EXPLAIN FORMATTED}. What happened to \texttt{PushedFilters}?
 \end{exercises}

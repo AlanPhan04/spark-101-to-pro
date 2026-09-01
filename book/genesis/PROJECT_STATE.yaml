@@ -38,10 +38,15 @@ phases_done:
 # Chapter list is authoritative in artifacts/06-outline.md; per-chapter drafting
 # status tracked here as chapters are written.
 chapters:
-  - {n: 3, slug: executor-memory-and-cpu, status: partial}   # memory model / GC / serialization drafted; 3.1 + 3.6 tbd
-  # all others: outlined
+  - {n: 1, slug: shape-of-a-spark-application, status: drafted}   # full draft, 3 figures
+  - {n: 2, slug: sql-to-execution,             status: drafted}   # full draft, 1 figure + explain listing
+  - {n: 3, slug: executor-memory-and-cpu,      status: drafted}   # full draft, 2 figures
+  # 4-19: outlined
 
-figures:
-  - slug: executor-memory-model
-    chapter: 3
-    status: rendered               # to-spec / to-render / rendered
+figures:                            # shared renderer: figures/_drawio.py
+  - {slug: application-topology,   chapter: 1, status: rendered}
+  - {slug: job-stage-task,         chapter: 1, status: rendered}
+  - {slug: narrow-vs-wide,         chapter: 1, status: rendered}
+  - {slug: catalyst-pipeline,      chapter: 2, status: rendered}
+  - {slug: executor-memory-model,  chapter: 3, status: rendered}
+  - {slug: gc-pause-stall,         chapter: 3, status: rendered}
