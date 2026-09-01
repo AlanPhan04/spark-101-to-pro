@@ -86,6 +86,10 @@
 % --- placeholder marker for the yet-to-be-written sections --------------
 \newcommand{\tbd}{\bigskip\noindent\textit{[Section to be written.]}\bigskip}
 
+% Monospace config keys (spark.sql.adaptive.enabled) that may break at dots
+% mid-line, so long dotted names never overflow the text block.
+\newcommand{\conf}[1]{\nolinkurl{#1}}
+
 \begin{document}
 
 \input{sections/cover-page}
