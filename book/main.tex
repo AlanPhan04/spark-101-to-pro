@@ -1,4 +1,4 @@
-\documentclass[12pt]{report}
+\documentclass[12pt,oneside]{book}
 \usepackage[fontsize=13pt]{scrextend}
 \usepackage[a4paper,top=2cm,bottom=2cm,left=3cm,right=2cm]{geometry}
 \usepackage{tgtermes}
@@ -17,9 +17,12 @@
 \usetikzlibrary{positioning}
 \usepackage{anyfontsize}
 \usepackage{float}
+\usepackage{graphicx}
+\graphicspath{{images/}}
 \usepackage{titlesec}
 \usepackage{listings}
 \usepackage{lscape}
+\usepackage{enumitem}
 \linespread{1.5}
 \usepackage{hyperref}
 \usepackage{longtable}
@@ -33,6 +36,7 @@
 }
 \usepackage{subcaption}
 \usepackage[nameinlink]{cleveref}
+\usepackage[most]{tcolorbox}
 
 % --- code listings --------------------------------------------------------
 \definecolor{lstkeyword}{RGB}{0,0,180}
@@ -69,13 +73,14 @@
 \newtheorem{definition}{Definition}[chapter]
 
 % --- structure depth ---------------------------------------------------
-\setcounter{secnumdepth}{3}
-\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{2}
+\setcounter{tocdepth}{2}
 
-% --- chapter heading style (from the reference template) ----------------
+% --- chapter heading style --------------------------------------------
 \titleformat{\chapter}[display]{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
 
 % --- running headers ---------------------------------------------------
+\setlength{\headheight}{16pt}
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0.4pt}
@@ -86,46 +91,91 @@
 % --- placeholder marker for the yet-to-be-written sections --------------
 \newcommand{\tbd}{\bigskip\noindent\textit{[Section to be written.]}\bigskip}
 
-% Monospace config keys (spark.sql.adaptive.enabled) that may break at dots
-% mid-line, so long dotted names never overflow the text block.
+% Monospace config keys (spark.sql.adaptive.enabled) that may break at dots.
 \newcommand{\conf}[1]{\nolinkurl{#1}}
+
+% --- chapter opener + exercises + callouts -----------------------------
+\newenvironment{chapterintro}
+  {\normalfont\itshape\ignorespaces}
+  {\par\medskip\noindent\rule{\linewidth}{0.4pt}\par\medskip}
+
+\newlist{exercises}{enumerate}{1}
+\setlist[exercises]{label=\arabic*., leftmargin=*, itemsep=5pt, topsep=4pt}
+\newcommand{\exercisehead}{\bigskip\noindent{\large\bfseries Exercises}\par\nopagebreak\medskip}
+
+\newtcolorbox{note}{
+  breakable, enhanced, colback=black!3, colframe=black!45, boxrule=0.4pt,
+  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
+  before skip=10pt, after skip=10pt,
+  fonttitle=\bfseries\small, coltitle=black, title=Note}
+\newtcolorbox{warning}{
+  breakable, enhanced, colback=black!3, colframe=black!75, boxrule=0.9pt,
+  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
+  before skip=10pt, after skip=10pt,
+  fonttitle=\bfseries\small, coltitle=black, title=Warning}
+\newtcolorbox{tip}{
+  breakable, enhanced, colback=black!3, colframe=black!45, boxrule=0.4pt,
+  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
+  before skip=10pt, after skip=10pt,
+  fonttitle=\bfseries\small, coltitle=black, title=Tip}
 
 \begin{document}
 
+\frontmatter
 \input{sections/cover-page}
 \setmainfont{Times New Roman}
 
-\clearpage
-\pagenumbering{roman}
-
 \input{sections/preface}
-\input{sections/glossary}
-\input{sections/contents}
+\input{sections/who-this-book-is-for}
+\input{sections/how-to-use-this-book}
+\input{sections/conventions}
 
+\input{sections/contents}
 \listoftables
 \newpage
-
 \listoffigures
 \newpage
 
-\pagenumbering{arabic}
+\mainmatter
 
-\input{chapters/01-prerequisites}
-\input{chapters/02-fundamentals}
-\input{chapters/03-sparksql-catalyst}
-\input{chapters/04-query-optimization}
-\input{chapters/05-lakehouse-iceberg}
-\input{chapters/06-runtime-tuning}
-\input{chapters/07-debugging-profiling}
-\input{chapters/08-structured-streaming}
-\input{chapters/09-advanced-internals}
+\part{How Spark Executes a Query}
+\input{chapters/01-shape-of-a-spark-application}
+\input{chapters/02-sql-to-execution}
+\input{chapters/03-executor-memory-and-cpu}
 
-\input{sections/references}
+\part{Making Queries Fast}
+\input{chapters/04-the-shuffle}
+\input{chapters/05-joins}
+\input{chapters/06-adaptive-query-execution}
+\input{chapters/07-partitioning-bucketing-pruning}
+\input{chapters/08-caching-and-reuse}
+
+\part{The Iceberg Lakehouse}
+\input{chapters/09-table-formats-and-the-iceberg-spec}
+\input{chapters/10-catalogs-and-commits}
+\input{chapters/11-iceberg-partitioning-and-layout}
+\input{chapters/12-reading-iceberg-efficiently}
+\input{chapters/13-writing-and-maintaining-iceberg}
+
+\part{Operating Spark}
+\input{chapters/14-tuning-resources-and-configuration}
+\input{chapters/15-debugging-and-profiling}
+\input{chapters/16-streaming-into-the-lakehouse}
+
+\part{Internals}
+\input{chapters/17-tungsten-and-code-generation}
+\input{chapters/18-shuffle-framework-and-scheduler}
+\input{chapters/19-datasource-v2-and-extensions}
+
+\backmatter
 
 \appendix
-\input{appendices/a-cluster-reference}
-\input{appendices/b-config-cheatsheet}
-\input{appendices/c-internal-classes}
-\input{appendices/d-further-reading}
+\input{appendices/a-reference-environment}
+\input{appendices/b-configuration-reference}
+\input{appendices/c-reading-query-plans}
+\input{appendices/d-glossary}
+\input{appendices/e-further-reading}
+
+\input{sections/references}
 
 \end{document}

@@ -1,0 +1,35 @@
+\chapter{DataSource V2 and Extensions}
+\label{ch:dsv2}
+
+\begin{chapterintro}
+Iceberg is not built into Spark. It plugs in through the DataSource V2 API, and
+the planner negotiates with it: which filters can you apply, which columns do you
+need, can you do this aggregate yourself? Understanding that negotiation explains
+why some predicates prune and others do not. This chapter covers the DSv2
+read and write API, the pushdown negotiation, how Iceberg reports splits and
+statistics, and how to add your own Catalyst rules and SQL extensions.
+\end{chapterintro}
+
+\section{The DataSource V2 read and write API}
+\tbd
+
+\section{Pushdown negotiation}
+\tbd
+
+\section{How Iceberg reports splits and statistics}
+\tbd
+
+\section{Custom Catalyst rules and SQL extensions}
+\tbd
+
+\section{Plugins}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Write a query whose filter is pushed into Iceberg and one whose filter is
+      not. Explain the difference from the DSv2 pushdown rules.
+\end{exercises}

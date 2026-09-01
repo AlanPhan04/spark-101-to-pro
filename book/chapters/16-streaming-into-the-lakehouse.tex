@@ -1,0 +1,42 @@
+\chapter{Streaming into the Lakehouse}
+\label{ch:streaming}
+
+\begin{chapterintro}
+Structured Streaming is the same query engine over an unbounded table, processing
+one micro-batch at a time and ending each batch with a single Iceberg commit. The
+whole model from the earlier parts still applies --- the shuffle, the executor
+budget, the commit --- but with two new pressures: state that must be kept
+between batches, and a commit cadence that produces small files faster than a
+batch job. This chapter covers the streaming model and what it does to an Iceberg
+table.
+\end{chapterintro}
+
+\section{The micro-batch model and the unbounded table}
+\tbd
+
+\section{Sources and sinks}
+\tbd
+
+\section{Event time and watermarking}
+\tbd
+
+\section{Stateful operations and the state store}
+\tbd
+
+\section{Output modes and triggers}
+\tbd
+
+\section{Exactly-once and the commit}
+\tbd
+
+\section{Writing to Iceberg: cadence, small files, maintenance}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Given a trigger interval and an input rate, estimate files committed per
+      hour and the compaction cadence needed to keep the table healthy.
+\end{exercises}

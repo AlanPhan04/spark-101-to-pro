@@ -1,0 +1,35 @@
+\chapter{The Shuffle Framework and the Scheduler}
+\label{ch:scheduler}
+
+\begin{chapterintro}
+\Cref{ch:shuffle} treated the shuffle as a wall. This chapter builds the wall:
+the shuffle manager and its writers, the map output tracker that tells reduce
+tasks where to fetch from, the DAG scheduler that cuts a plan into stages, the
+task scheduler that places tasks on executors, and the block transfer service
+that moves the bytes. It is the machinery behind every stage boundary and every
+straggler.
+\end{chapterintro}
+
+\section{The shuffle manager and shuffle writers}
+\tbd
+
+\section{The map output tracker}
+\tbd
+
+\section{The DAG scheduler and the task scheduler}
+\tbd
+
+\section{RPC and block transfer}
+\tbd
+
+\section{Locality and speculation}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Trace one wide query from \texttt{collect()} to task completion, naming
+      each scheduler component it passes through.
+\end{exercises}

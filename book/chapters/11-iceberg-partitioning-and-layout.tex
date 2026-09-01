@@ -1,0 +1,36 @@
+\chapter{Iceberg Partitioning and Layout}
+\label{ch:iceberg-layout}
+
+\begin{chapterintro}
+Iceberg partitioning is hidden: you filter on \texttt{event\_ts} and Iceberg
+derives the predicate on \texttt{day(event\_ts)} for you, so a query never
+references a partition column directly and pruning does not break when the
+scheme changes. This chapter covers the partition transforms, evolving a spec
+without rewriting history, sort orders and Z-ordering, target file size, and the
+write-distribution mode --- the choices that decide how much a reader and a
+writer have to move.
+\end{chapterintro}
+
+\section{Hidden partitioning and partition transforms}
+\tbd
+
+\section{Partition evolution}
+\tbd
+
+\section{Sort orders and Z-ordering}
+\tbd
+
+\section{Target file size and the small-files problem}
+\tbd
+
+\section{Write distribution modes}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Given a daily data volume and a query pattern, choose a partition spec.
+      Justify it against the target of 128~MB--1~GB per partition per write.
+\end{exercises}

@@ -1,0 +1,38 @@
+\chapter{Catalogs and Commits}
+\label{ch:catalogs}
+
+\begin{chapterintro}
+The catalog is the one component that turns a table name into the location of its
+current metadata --- and the point at which a commit becomes atomic. Writing new
+metadata is not a commit until the catalog's pointer is swapped to it. When two
+writers race, one wins the swap and the other retries. This chapter covers what
+the Hive Metastore and REST catalogs do, how the atomic swap works, and how to
+tune retries so a busy table does not fail commits under contention.
+\end{chapterintro}
+
+\section{What a catalog does}
+\tbd
+
+\section{The Hive Metastore catalog}
+\tbd
+
+\section{The REST catalog}
+\tbd
+
+\section{The atomic pointer swap}
+\tbd
+
+\section{Optimistic concurrency and retries}
+\tbd
+
+\section{Catalog configuration in Spark}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Run two writers into the same table. Observe the retry, then find the
+      winning and losing commit attempts in the snapshot log.
+\end{exercises}

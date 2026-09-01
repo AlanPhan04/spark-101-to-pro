@@ -1,0 +1,38 @@
+\chapter{Tungsten and Code Generation}
+\label{ch:tungsten}
+
+\begin{chapterintro}
+Below the plan, a stage does not interpret operators row by row. Tungsten stores
+rows as packed off-heap bytes, and whole-stage code generation collapses an
+operator subtree into a single generated Java method that the JIT compiles to
+tight machine code. This chapter opens that layer: the binary row format,
+off-heap memory management, cache-aware computation, and the generated code you
+can actually read with \texttt{EXPLAIN CODEGEN}.
+\end{chapterintro}
+
+\section{The Tungsten binary row format}
+\tbd
+
+\section{Off-heap memory management}
+\tbd
+
+\section{Cache-aware computation}
+\tbd
+
+\section{Whole-stage code generation internals}
+\tbd
+
+\section{Expression code generation}
+\tbd
+
+\section{Columnar processing and vectorization}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Run \texttt{EXPLAIN CODEGEN} on a filter-and-project query. Identify which
+      operators were fused into one generated method and which were not.
+\end{exercises}

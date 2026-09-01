@@ -1,0 +1,40 @@
+\chapter{Debugging and Profiling}
+\label{ch:debugging}
+
+\begin{chapterintro}
+A slow job leaves evidence: in the SQL tab, the stages tab, the executor
+metrics, the event log, and --- when you need it --- a flame graph. This chapter
+teaches you to read that evidence in order, so that "the job is slow" becomes
+"stage 4 is skewed" or "the executors are GC-bound" in a few minutes. It also
+catalogs the failure signatures --- OOM and container kills, fetch failures,
+stragglers --- and what each looks like before you reach for a fix.
+\end{chapterintro}
+
+\section{The Spark UI as a diagnostic}
+\tbd
+
+\section{Event logs and the history server}
+\tbd
+
+\section{Reading task, shuffle, spill, and GC metrics}
+\label{sec:reading-metrics}
+\tbd
+
+\section{Common failure signatures}
+\label{sec:failure-signatures}
+\tbd
+
+\section{async-profiler and flame graphs}
+\tbd
+
+\section{Debugging query plans}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Given three anonymized stage summaries, diagnose each as skew,
+      under-partitioned, or GC-bound, and name the evidence.
+\end{exercises}

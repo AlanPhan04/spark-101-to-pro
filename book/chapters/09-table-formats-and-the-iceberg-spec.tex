@@ -1,0 +1,36 @@
+\chapter{Table Formats and the Iceberg Spec}
+\label{ch:iceberg-spec}
+
+\begin{chapterintro}
+An Iceberg table is not a directory of Parquet files with a manifest bolted on.
+It is a tree: a catalog pointer to a metadata file, to a manifest list, to
+manifests, to data and delete files --- every level immutable, every commit a
+single atomic pointer swap. Reads consult this tree before touching any data.
+This chapter walks the spec (format version 2) against a real table's metadata
+tables so you can draw the tree from memory.
+\end{chapterintro}
+
+\section{From Hive tables to table formats}
+\tbd
+
+\section{The Iceberg spec, format version 2}
+\tbd
+
+\section{Snapshots and the metadata tree}
+\tbd
+
+\section{Position deletes versus equality deletes}
+\tbd
+
+\section{Iceberg, Delta Lake, and Hudi}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Commit three appends to a table, then inspect \texttt{metadata\_log\_entries},
+      \texttt{snapshots}, and \texttt{manifests}. Explain how many metadata files
+      and manifests exist and why.
+\end{exercises}

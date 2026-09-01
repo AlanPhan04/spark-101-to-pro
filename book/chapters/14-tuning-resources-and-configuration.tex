@@ -1,0 +1,40 @@
+\chapter{Tuning Resources and Configuration}
+\label{ch:tuning}
+
+\begin{chapterintro}
+This chapter does not hand you a table of recommended settings. It derives an
+executor shape from the memory map in \Cref{ch:execmem} and the shuffle in
+\Cref{ch:shuffle}, so that every number --- cores, heap, overhead, partition
+count --- has a reason you can defend. It then covers dynamic allocation, the
+external shuffle service on Kubernetes, configuration precedence, and running
+Spark behind Kyuubi for many users. For the standalone list of tuning knobs with
+values, see \texttt{spark\_memory\_tuning.md} in the repository root.
+\end{chapterintro}
+
+\section{Executor sizing from the mechanism}
+\label{sec:executor-sizing}
+\tbd
+
+\section{Dynamic allocation}
+\tbd
+
+\section{Parallelism defaults}
+\tbd
+
+\section{The external and push-based shuffle service}
+\tbd
+
+\section{Configuration precedence and profiles}
+\tbd
+
+\section{Kyuubi and multi-tenancy}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Take a job that spills. Propose two different fixes --- more memory versus
+      fewer cores --- and predict which the mechanism favours, and why.
+\end{exercises}

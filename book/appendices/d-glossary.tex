@@ -1,0 +1,65 @@
+\chapter{Glossary}
+\label{app:glossary}
+
+\tbd
+
+% Term -> definition -> first-use chapter, kept in sync with 05-conventions.md
+% as chapters are drafted. The abbreviations and technologies tables below are
+% the seed; expand into full glossary entries during drafting.
+
+\section*{Abbreviations}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.9}
+\begin{tabular}{@{}p{3.2cm}p{10.7cm}@{}}
+\toprule
+\textbf{Abbreviation} & \textbf{Full form} \\
+\midrule
+AQE & Adaptive Query Execution \\
+CBO & Cost-Based Optimization \\
+CoW / MoR & Copy-on-Write / Merge-on-Read \\
+DAG & Directed Acyclic Graph \\
+DPP & Dynamic Partition Pruning \\
+DSv2 & DataSource V2 API \\
+GC & Garbage Collection \\
+GCS & Google Cloud Storage \\
+GKE & Google Kubernetes Engine \\
+HMS & Hive Metastore \\
+JIT & Just-In-Time (compilation) \\
+JVM & Java Virtual Machine \\
+OLAP & Online Analytical Processing \\
+OLTP & Online Transaction Processing \\
+RDD & Resilient Distributed Dataset \\
+RPC & Remote Procedure Call \\
+SMJ & Sort-Merge Join \\
+SQL & Structured Query Language \\
+UDF & User-Defined Function \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section*{Technologies}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.9}
+\begin{tabular}{@{}p{3.6cm}p{10.1cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{What it is} \\
+\midrule
+Apache Spark & a distributed compute engine \\
+Catalyst & Spark SQL's extensible query optimizer \\
+Tungsten & Spark's binary in-memory execution back end \\
+Apache Iceberg & an open table format for analytic datasets on object storage \\
+Apache Parquet & a columnar file format \\
+Hive Metastore & a catalog service mapping table names to metadata \\
+Apache Kyuubi & a multi-tenant SQL gateway in front of Spark \\
+Google Cloud Storage & an S3-compatible object storage system \\
+GKE & Google's managed Kubernetes; the cluster manager here \\
+async-profiler & a low-overhead JVM sampling profiler \\
+\bottomrule
+\end{tabular}
+\end{table}

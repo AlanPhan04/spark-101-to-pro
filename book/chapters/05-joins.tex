@@ -1,0 +1,41 @@
+\chapter{Joins}
+\label{ch:joins}
+
+\begin{chapterintro}
+Spark has four ways to run a join and picks one from a size estimate. When the
+estimate is right, the choice is right. When the table has no statistics --- the
+common case for Iceberg --- the planner guesses, and a join that should have
+broadcast a 30~MB dimension instead shuffles a billion rows. This chapter covers
+the four strategies, how the planner chooses, and how to override it when you
+know better than the stats do.
+\end{chapterintro}
+
+\section{Broadcast hash join}
+\tbd
+
+\section{Shuffle hash join}
+\tbd
+
+\section{Sort-merge join}
+\tbd
+
+\section{Broadcast nested loop join}
+\tbd
+
+\section{How the planner chooses}
+\tbd
+
+\section{Forcing a strategy}
+\tbd
+
+\section{Storage-partitioned joins for bucketed Iceberg tables}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Given four table sizes and the broadcast threshold, predict each join's
+      strategy. Then change one config value and predict which join flips.
+\end{exercises}

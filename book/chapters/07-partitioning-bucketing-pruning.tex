@@ -1,0 +1,36 @@
+\chapter{Partitioning, Bucketing, and Pruning}
+\label{ch:pruning}
+
+\begin{chapterintro}
+The cheapest data to move is data you never read. Partition pruning skips whole
+directories; dynamic partition pruning does it using values discovered from the
+other side of a join; bucketing lays data out so a join needs no shuffle at all.
+Each of these is easy to defeat --- a function on the partition column, a
+\texttt{CAST}, a stray \texttt{SELECT *} --- and the plan tells you when you
+have. This chapter covers each mechanism and how to confirm it is working.
+\end{chapterintro}
+
+\section{Partition pruning and the pushdown killers}
+\tbd
+
+\section{Dynamic partition pruning}
+\tbd
+
+\section{Bucketing to avoid a shuffle}
+\tbd
+
+\section{\texttt{repartition} versus \texttt{coalesce}}
+\tbd
+
+\section{Column pruning and \texttt{ReadSchema}}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Write the same filter three ways --- a function on the partition column, a
+      \texttt{CAST}, and a plain literal --- and check which keeps
+      \texttt{PartitionFilters} populated in the scan node.
+\end{exercises}

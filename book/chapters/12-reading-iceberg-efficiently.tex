@@ -1,0 +1,41 @@
+\chapter{Reading Iceberg Efficiently}
+\label{ch:iceberg-read}
+
+\begin{chapterintro}
+Before the Iceberg reader opens a single data file, it has already skipped most
+of them --- by partition, by manifest, by column statistics, and optionally by
+bloom filter. Each layer needs the query's filter in a form it understands, and
+the scan report tells you how well each one worked. This chapter covers the
+pruning layers, the metrics modes that feed them, and how to read a scan report
+as a diagnostic.
+\end{chapterintro}
+
+\section{Manifest pruning and metadata filtering}
+\tbd
+
+\section{Column statistics and predicate pushdown into Iceberg}
+\tbd
+
+\section{Metrics modes: \texttt{full}, \texttt{truncate}, \texttt{counts}, \texttt{none}}
+\tbd
+
+\section{Bloom filters}
+\tbd
+
+\section{Vectorized reads}
+\tbd
+
+\section{Split planning}
+\tbd
+
+\section{The metadata tables as a diagnostic}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Run a selective query and, from the scan report, compute the fraction of
+      data pruned at each layer (partition, manifest, file).
+\end{exercises}

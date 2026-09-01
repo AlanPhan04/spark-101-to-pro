@@ -1,0 +1,40 @@
+\chapter{From SQL to Execution: the Catalyst Pipeline}
+\label{ch:catalyst}
+
+\begin{chapterintro}
+A SQL string does not run. It is parsed into a tree, resolved against the
+catalog, rewritten by rules, turned into a physical plan by choosing strategies,
+and compiled to JVM bytecode. Every change you can make to a query's performance
+is a change to one of those stages. This chapter traces one join-and-filter query
+through all of them and teaches you to read \texttt{EXPLAIN FORMATTED} well
+enough to predict the physical plan before you run it.
+\end{chapterintro}
+
+\section{The pipeline, overview}
+\tbd
+
+\section{Unresolved to resolved: the catalog}
+\tbd
+
+\section{Logical optimization: the rules that matter}
+\label{sec:catalyst-rules}
+\tbd
+
+\section{Physical planning and strategies}
+\tbd
+
+\section{Whole-stage code generation}
+\label{sec:wholestage-codegen}
+\tbd
+
+\section{Reading \texttt{EXPLAIN}}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Given three query rewrites that are logically identical, predict which
+      produce the same optimized plan, then confirm with \texttt{EXPLAIN}.
+\end{exercises}

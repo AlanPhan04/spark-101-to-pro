@@ -1,0 +1,13 @@
+\chapter{The Reference Environment and the Running Example}
+\label{app:refenv}
+
+\tbd
+
+% Content: the exact stack every claim is written against (Spark 3.5.2, Iceberg
+% format v2, Hive Metastore + Iceberg REST catalog, Kyuubi, GCS, GKE, JVM 17,
+% Parquet); the one cluster shape used for all worked examples (executor count,
+% cores, memory); and the running example --- the `trips` Iceberg table (vehicle
+% GPS pings, partitioned by day(event_ts)) plus the star schema (fact_trip,
+% dim_route, dim_vehicle, dim_date) built from it. Schema, row counts, size, and
+% value distributions. Also a short columnar-format primer (row vs columnar,
+% Parquet encoding / compression / footer statistics) that Part III assumes.

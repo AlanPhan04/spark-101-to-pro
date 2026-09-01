@@ -1,0 +1,38 @@
+\chapter{The Shape of a Spark Application}
+\label{ch:shape}
+
+\begin{chapterintro}
+A query you would actually write --- a week of \texttt{trips} joined to a route
+dimension, aggregated to an on-time rate --- runs in four minutes. This chapter
+does not make it faster. It uses it as a specimen: you run it, open the Spark UI,
+and learn to name every moving part --- the driver, the executors, the one job,
+its stages, the shuffle between them, and the one task doing more than the rest.
+By the end you can read a running job instead of watching a progress bar.
+\end{chapterintro}
+
+\section{A query, end to end}
+\tbd
+
+\section{Driver, executors, and the cluster manager}
+\tbd
+
+\section{Deploy modes and Spark on Kubernetes}
+\tbd
+
+\section{Jobs, stages, and tasks}
+\tbd
+
+\section{Narrow versus wide dependencies}
+\tbd
+
+\section{Reading the UI for the first time}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Run two queries against \texttt{trips}, one with a \texttt{GROUP BY} and one
+      without. Identify which produced a second stage, and explain why.
+\end{exercises}

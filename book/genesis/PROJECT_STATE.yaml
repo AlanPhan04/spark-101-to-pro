@@ -1,0 +1,41 @@
+# book-genesis — single source of truth for this project.
+project_slug: spark-query-optimization-book
+title_working: "Spark Query Optimization and the Iceberg Lakehouse"
+language: en
+
+manuscript_path: "book/"            # the LaTeX source IS the manuscript
+manuscript_format: latex            # not the skill default (manuscript/chapters/*.md)
+figures_dir: "book/figures/"
+images_dir: "book/images/"
+
+phase: "2-architecture"             # 0-intake -> 1-foundation -> 2-architecture -> 3-drafting -> ...
+gate: FLAG                          # PASS once the re-scaffold + first figure land
+
+scope_contract:
+  positioning: deep-dive            # reference / tutorial / deep-dive / handbook
+  chapter_count_planned: 19
+  parts_planned: 5
+  pages_planned: 380
+  code_density: heavy
+  reference_environment:
+    spark: "3.5.2"
+    iceberg: "v2 (format version 2)"
+    catalog: "Hive Metastore + Iceberg REST"
+    gateway: "Apache Kyuubi"
+    object_store: "Google Cloud Storage"
+    cluster_manager: "Kubernetes (GKE)"
+    jvm: "17"
+    file_format: "Apache Parquet"
+
+quality_target: 8.5                 # triggers the Phase 5 Clarity Barrier loop
+
+phases_done:
+  - "0-intake"
+  - "1-foundation"
+  - "2-architecture (outline v1)"
+
+chapters: []                        # populated during re-scaffold from artifacts/06-outline.md
+figures:
+  - slug: executor-memory-model
+    chapter: "part-i / how an executor uses memory and cpu"
+    status: to-render               # to-spec / to-render / rendered

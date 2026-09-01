@@ -1,0 +1,42 @@
+\chapter{Adaptive Query Execution}
+\label{ch:aqe}
+
+\begin{chapterintro}
+The Catalyst optimizer plans before it has seen any data. Adaptive Query
+Execution re-plans after each shuffle, when the real partition sizes are known.
+It coalesces hundreds of tiny partitions into a few good ones, promotes a
+sort-merge join to a broadcast when the shuffled side turns out small, and splits
+a skewed partition so one task stops holding up the stage. This chapter covers
+what AQE re-decides, from what evidence, and which planning-time decisions it can
+still override.
+\end{chapterintro}
+
+\section{Why runtime beats planning time}
+\tbd
+
+\section{Coalescing shuffle partitions}
+\tbd
+
+\section{Converting sort-merge to broadcast at runtime}
+\tbd
+
+\section{The two broadcast thresholds}
+\tbd
+
+\section{Skew-join handling: split and replicate}
+\tbd
+
+\section{\texttt{parallelismFirst} and partition count}
+\tbd
+
+\section{Reading an AQE plan}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Disable AQE and run a skewed join; record the straggler task. Re-enable it
+      and compare the plan and the task-time distribution.
+\end{exercises}

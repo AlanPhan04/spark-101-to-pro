@@ -1,0 +1,41 @@
+\chapter{The Shuffle}
+\label{ch:shuffle}
+
+\begin{chapterintro}
+Every \texttt{JOIN}, \texttt{GROUP BY}, \texttt{DISTINCT}, window function, and
+repartition puts a wall between two stages: the shuffle. It writes every
+partition to disk, moves it across the network, and re-reads it. It is where most
+of a query's time goes. This chapter walks the write path and the read path,
+shows how to size shuffle partitions from data volume instead of accepting the
+default 200, and how to find and remove exchanges the query does not need.
+\end{chapterintro}
+
+\section{What a partition is: input partitions versus shuffle partitions}
+\tbd
+
+\section{The shuffle write path}
+\tbd
+
+\section{The shuffle read path}
+\tbd
+
+\section{Sizing shuffle partitions}
+\tbd
+
+\section{Shuffle compression}
+\tbd
+
+\section{Push-based shuffle}
+\tbd
+
+\section{Finding and removing unnecessary exchanges}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item From a stage's shuffle-read size in the UI, compute a target partition
+      count for a 128~MB task size, then verify against the observed task sizes.
+\end{exercises}

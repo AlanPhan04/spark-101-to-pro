@@ -1,0 +1,42 @@
+\chapter{Writing and Maintaining Iceberg}
+\label{ch:iceberg-write}
+
+\begin{chapterintro}
+Copy-on-write rewrites whole files on every update: slow writes, fast reads.
+Merge-on-read writes small delete files instead: fast writes, slower reads until
+compaction catches up. The choice is a function of your update rate and your read
+latency budget, and it commits you to a maintenance schedule --- compaction,
+snapshot expiration, orphan-file cleanup --- in a specific order. This chapter
+covers the write modes, optimizing \texttt{MERGE}, and running maintenance
+without deleting data a reader still needs.
+\end{chapterintro}
+
+\section{Copy-on-write versus merge-on-read}
+\tbd
+
+\section{\texttt{MERGE}, \texttt{UPDATE}, and \texttt{DELETE}}
+\tbd
+
+\section{Write distribution and skew on write}
+\tbd
+
+\section{Compacting data files}
+\tbd
+
+\section{Rewriting manifests}
+\tbd
+
+\section{Snapshot expiration and orphan files}
+\tbd
+
+\section{Metadata management for streaming tables}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Run a \texttt{MERGE} with and without the partition column in the
+      \texttt{ON} clause. Explain the difference in files scanned from the plan.
+\end{exercises}

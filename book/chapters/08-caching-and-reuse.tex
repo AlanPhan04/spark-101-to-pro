@@ -1,0 +1,39 @@
+\chapter{Caching and Reuse}
+\label{ch:caching}
+
+\begin{chapterintro}
+Caching keeps a result Spark would otherwise recompute --- but the wrong cache
+wastes storage memory and starves execution, and a cache used once is pure
+overhead. Spark also reuses work you did not ask it to: an identical exchange or
+subquery computed once and read twice. This chapter covers when caching pays,
+which storage level to pick against the GC budget from \Cref{ch:execmem}, and how
+to see reuse in a plan. It is also where execution and storage memory finally
+meet at runtime.
+\end{chapterintro}
+
+\section{When caching pays}
+\tbd
+
+\section{Lazy \texttt{cache()} versus eager \texttt{CACHE TABLE}}
+\tbd
+
+\section{Storage levels and the GC trade-off}
+\tbd
+
+\section{How execution and storage memory borrow at runtime}
+\tbd
+
+\section{Exchange and subquery reuse}
+\tbd
+
+\section{Unpersist and cache thrashing}
+\tbd
+
+\section{Summary}
+\tbd
+
+\exercisehead
+\begin{exercises}
+\item Build a query that reads one CTE twice. Show the plan reusing the exchange,
+      then change the query so the reuse breaks and measure the difference.
+\end{exercises}
