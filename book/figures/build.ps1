@@ -13,7 +13,7 @@
 Set-Location -Path $PSScriptRoot
 
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "python not on PATH — cannot regenerate figures." -ForegroundColor Red
+    Write-Host "python not on PATH - cannot regenerate figures." -ForegroundColor Red
     exit 1
 }
 
@@ -37,4 +37,4 @@ if ($failed -gt 0) {
     Write-Host "$failed renderer(s) failed." -ForegroundColor Red
     exit 1
 }
-Write-Host "All figures regenerated -> ..\images\" -ForegroundColor Green
+Write-Host "All figures regenerated into ..\images" -ForegroundColor Green
