@@ -1,5 +1,5 @@
-# Build output (regenerate with ./build.ps1)
-main.pdf
+# main.pdf is tracked (like the thesis template) so it is visible on GitHub
+# and the book can be read without a LaTeX toolchain. Regenerate: ./build.ps1
 
 # LaTeX build artifacts
 *.aux
