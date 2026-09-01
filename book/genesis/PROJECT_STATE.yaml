@@ -8,8 +8,8 @@ manuscript_format: latex            # not the skill default (manuscript/chapters
 figures_dir: "book/figures/"
 images_dir: "book/images/"
 
-phase: "2-architecture"             # 0-intake -> 1-foundation -> 2-architecture -> 3-drafting -> ...
-gate: FLAG                          # PASS once the re-scaffold + first figure land
+phase: "3-drafting"                 # 0-intake -> 1-foundation -> 2-architecture -> 3-drafting -> ...
+gate: PASS                          # re-scaffold done, first figure rendered, book builds clean (70 pp skeleton)
 
 scope_contract:
   positioning: deep-dive            # reference / tutorial / deep-dive / handbook
@@ -33,9 +33,15 @@ phases_done:
   - "0-intake"
   - "1-foundation"
   - "2-architecture (outline v1)"
+  - "re-scaffold: 19 chapters + 5 appendices + front matter, book class, builds clean"
 
-chapters: []                        # populated during re-scaffold from artifacts/06-outline.md
+# Chapter list is authoritative in artifacts/06-outline.md; per-chapter drafting
+# status tracked here as chapters are written.
+chapters:
+  - {n: 3, slug: executor-memory-and-cpu, status: partial}   # memory model / GC / serialization drafted; 3.1 + 3.6 tbd
+  # all others: outlined
+
 figures:
   - slug: executor-memory-model
-    chapter: "part-i / how an executor uses memory and cpu"
-    status: to-render               # to-spec / to-render / rendered
+    chapter: 3
+    status: rendered               # to-spec / to-render / rendered
