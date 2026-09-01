@@ -64,6 +64,15 @@ sync as chapters are drafted.
 `\Cref{...}` for everything, with labels: `ch:<slug>`, `sec:<slug>`,
 `fig:<slug>`, `lst:<slug>`. Forward references are fine; every one must resolve.
 
+## Source material
+
+- `spark_memory_tuning.md` (repo root) — memory / shuffle / AQE / Iceberg tuning,
+  by impact level. Feeds Ch. 3, 4, 6, 13, 14.
+- `Spark Optimization Concepts.pdf` (repo root) — the owner's notes on the
+  Catalyst pipeline, the six EXPLAIN modes, and every physical-plan operator
+  (scan / exchange / sort / join / aggregate / codegen / AQE). Feeds Ch. 2 and is
+  the backbone of App. C "Reading Query Plans".
+
 ## Show vs tell
 
 Default to show: the `EXPLAIN`, the UI screenshot-as-figure or metric table, the

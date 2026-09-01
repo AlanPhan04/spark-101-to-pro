@@ -156,79 +156,139 @@ a final small sort. Three stages, exactly as \Cref{fig:job-stage-task} showed.
 \label{sec:wholestage-codegen}
 
 A physical plan could be executed by walking the operator tree and calling
-\texttt{next()} on each node per row --- the ``Volcano'' model. Spark does not.
-For a chain of operators within a stage it \emph{generates Java source} for the
-whole chain, one method that scans, filters, projects, and feeds the aggregate
-without a function call or an intermediate row object per step. That method is
-compiled to bytecode and then by the JVM's JIT to native code
-(\Cref{ch:tungsten}).
+\texttt{next()} on each node once per row --- the ``Volcano'' iterator model. For
+a chain of \texttt{Filter} $\to$ \texttt{Project} $\to$ \texttt{HashAggregate},
+every row passes through three virtual method calls, and the boxing and the
+short-lived row objects between operators usually cost more than the actual
+filtering and arithmetic.
 
-In a printed plan you see this as a numbered marker: operators fused into one
-generated function are wrapped in \texttt{*(2) HashAggregate}, \texttt{*(2)
-Project}, \texttt{*(2) Filter}, and so on --- the \texttt{*(n)} means ``part of
-generated stage \texttt{n}.'' An operator without a star (a plain
-\texttt{Exchange}, or a source that does not support codegen) is a boundary
-where Spark falls back to row-at-a-time. A plan that is missing stars where you
-expect them --- often because a UDF or an unusual expression broke the chain ---
-is a plan leaving performance on the table.
+Spark does not do this. For a chain of operators within a stage it \emph{generates
+Java source} for the whole chain --- one method that scans, filters, projects,
+and feeds the aggregate in a tight loop, with no virtual call, no intermediate
+row object, and field access straight out of the packed binary row
+(\Cref{ch:tungsten}). That method is compiled to bytecode and then by the JVM's
+JIT to native code.
+
+In a printed plan you see this as a numbered marker. Operators fused into one
+generated function are wrapped: \texttt{*(2) HashAggregate}, \texttt{*(2)
+Project}, \texttt{*(2) Filter}. The \texttt{*(n)} means ``part of generated stage
+\texttt{n}''; the number is just a sequential id, not an execution order. An
+operator \emph{without} a star is a boundary where fusion stopped and Spark falls
+back to row-at-a-time.
+
+A stage stops being generated for a handful of reasons, and a plan missing stars
+where you expect them is usually hitting one:
+
+\begin{itemize}
+  \item an \texttt{Exchange} or \texttt{BroadcastExchange} --- you cannot fuse
+        operators across a network boundary, so codegen always restarts on the
+        far side of a shuffle;
+  \item a stage whose input or output schema has more columns than
+        \conf{spark.sql.codegen.maxFields} (100 by default);
+  \item a generated method that would exceed the JVM's 64\,KB bytecode limit for
+        a single method (\conf{spark.sql.codegen.hugeMethodLimit}); Spark logs
+        \texttt{Found too long generated codes} and drops that stage to the
+        interpreter;
+  \item a compile failure in the generated Java, after which Spark silently falls
+        back (\conf{spark.sql.codegen.fallback}) --- the only trace is a
+        \texttt{WARN} in the executor log;
+  \item an imperative (non-declarative) aggregate or UDAF, which some complex
+        user-defined aggregates are.
+\end{itemize}
+
+\texttt{EXPLAIN CODEGEN} prints the generated Java for every whole-stage stage,
+which is how you confirm what actually got fused.
 
 \section{Reading \texttt{EXPLAIN}}
 \label{sec:catalyst-explain}
 
-\texttt{EXPLAIN} prints the plans without running the query. The default form is
-terse; \texttt{EXPLAIN FORMATTED} is the one to learn.
+\texttt{EXPLAIN} prints the plans without running the query. There are six forms,
+selected by a keyword in SQL or a \texttt{mode} argument to
+\texttt{df.explain(\ldots)}.
 
-\begin{lstlisting}[language=SQL,caption={Printing the plans},captionpos=b]
-EXPLAIN FORMATTED
-SELECT r.route_name, AVG(...) FROM trips t JOIN dim_route r ON ... WHERE ... GROUP BY ...;
-\end{lstlisting}
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{2.7cm}p{11.2cm}@{}}
+\toprule
+\textbf{Mode} & \textbf{Shows} \\
+\midrule
+(default) & the physical plan only --- the quick check for join strategy, shuffle count, codegen \\
+\texttt{EXTENDED} & all four plans: parsed, analyzed, optimized logical, and physical --- use to see what a rule did \\
+\texttt{FORMATTED} & the physical plan as a compact tree \emph{plus} a numbered list expanding each node's detail --- the one to learn \\
+\texttt{COST} & the optimized logical plan annotated with the planner's row-count and size \emph{estimates} --- use to see why it did not broadcast \\
+\texttt{CODEGEN} & the physical plan plus the generated Java for each whole-stage stage \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-The output has two parts: a compact tree, then a numbered list where each node's
-details are spelled out. Read the tree bottom-up --- leaves are scans, the root
-is the final operator --- and check five things.
+\texttt{EXPLAIN FORMATTED} has two parts: a compact tree, then a numbered list
+where each node's details are spelled out. Read the tree \textbf{bottom-up} ---
+the leaves are scans, the root is the final operator.
 
-\begin{lstlisting}[language=text,caption={The parts of \texttt{EXPLAIN FORMATTED} that matter (trimmed)},captionpos=b,label=lst:explain-anatomy]
+\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily,caption={\texttt{EXPLAIN FORMATTED} on the specimen (trimmed)},captionpos=b,label=lst:explain-anatomy]
 == Physical Plan ==
-* Sort (13)
-+- * HashAggregate (12)                       <- final aggregate, in generated stage
-   +- * HashAggregate (10)                    <- partial aggregate, same stage
-      +- * SortMergeJoin Inner (9)            <- NOT a broadcast: both sides shuffled
-         :- * Sort (5)
-         :  +- Exchange hashpartitioning(route_id, 200) (4)   <- shuffle #1
-         :     +- * Filter (3)
-         :        +- * ColumnarToRow (2)
-         :           +- BatchScan trips (1)
-         +- * Sort (8)
-            +- Exchange hashpartitioning(route_id, 200) (7)   <- shuffle #2
+*(3) Sort (13)
++- *(3) HashAggregate (12)            -- final aggregate
+   +- *(2) HashAggregate (10)         -- partial aggregate
+      +- *(2) SortMergeJoin Inner (9) -- both sides shuffled; not broadcast
+         :- *(1) Sort (5)             -- local sort, one per SMJ input
+         :  +- Exchange hashpartitioning(route_id, 200) (4)   -- shuffle #1
+         :     +- *(1) Filter (3)
+         :        +- *(1) ColumnarToRow (2)
+         :           +- BatchScan trips (1)   -- FileScan for a Hive table
+         +- *(1) Sort (8)
+            +- Exchange hashpartitioning(route_id, 200) (7)   -- shuffle #2
                +- BatchScan dim_route (6)
 
 (1) BatchScan trips
-    PartitionFilters: [event_ts >= 2026-03-01, event_ts < 2026-03-08]   <- days pruned
-    PushedFilters:    [IsNotNull(route_id)]                              <- row groups skipped
-    ReadSchema:       struct<route_id,arrival_delay_s,event_ts>          <- only 3 columns
+    PartitionFilters: [event_ts >= 2026-03-01, event_ts < 2026-03-08]
+    PushedFilters:    [IsNotNull(route_id)]       -- row groups skipped
+    ReadSchema:       struct<route_id,arrival_delay_s,event_ts>
 \end{lstlisting}
 
-\begin{enumerate}
-  \item \textbf{Join operator.} \texttt{SortMergeJoin} means both sides were
-        shuffled; \texttt{BroadcastHashJoin} means one side was small enough to
-        ship whole. If you see the former on an obviously small dimension, the
-        planner lacked statistics --- \Cref{ch:joins}.
-  \item \textbf{Exchange nodes.} Count them. Each is a stage boundary and a
-        shuffle. Two here.
-  \item \textbf{\texttt{PartitionFilters}.} Non-empty means Iceberg will skip
-        whole partitions. Empty on a partitioned table means the filter did not
-        match the partition transform --- \Cref{ch:pruning}.
-  \item \textbf{\texttt{PushedFilters}.} Non-empty means Parquet row groups will
-        be skipped inside the files that are read.
-  \item \textbf{\texttt{ReadSchema}.} Should list only the columns the query
-        needs. A wide schema here means a \texttt{SELECT *} leaked in.
-\end{enumerate}
+The nodes you will meet most --- a full catalogue is \Cref{app:plans}:
 
-\texttt{EXPLAIN COST} additionally prints the row-count and size estimates the
-planner used --- useful for seeing \emph{why} it did not broadcast. After the
-query runs, the SQL tab shows the same tree with actual row counts and, if AQE
-was active, the final adapted plan marked \texttt{AdaptiveSparkPlan
-isFinalPlan=true} (\Cref{ch:aqe}).
+\paragraph{Scan, at every leaf.} \texttt{BatchScan} for an Iceberg or other
+DataSource~V2 table; \texttt{FileScan parquet} for a Hive-catalogued table;
+\texttt{InMemoryTableScan} for cached data. Its fields are where pruning is
+confirmed or denied: \texttt{PartitionFilters} (whole partitions skipped ---
+directories on object storage), \texttt{PushedFilters} (row groups skipped inside
+the files that are read, using column min/max and bloom filters),
+\texttt{DataFilters} (everything, including the part evaluated row-by-row after
+reading), and \texttt{ReadSchema} (the columns actually read --- should be only
+those the query needs). \texttt{Batched: true} means vectorized columnar reads
+are on.
+
+\paragraph{Exchange, at every stage boundary.} Each \texttt{Exchange} is one
+shuffle: serialize, write to local disk, transfer, re-read. Count them --- it is
+the best single predictor of cost. \texttt{hashpartitioning(key, n)} co-locates
+equal keys (joins, \texttt{GROUP BY}); \texttt{rangepartitioning} produces
+globally ordered partitions (a global \texttt{ORDER BY}); \texttt{SinglePartition}
+funnels everything to one task (a global aggregate, \texttt{coalesce(1)}). The
+\texttt{ENSURE\_REQUIREMENTS} tag means the planner inserted this exchange because
+a downstream operator needs that distribution. \texttt{BroadcastExchange} is a
+different move: it ships one small side whole to every executor, and it appears
+only below the build side of a \texttt{BroadcastHashJoin}.
+
+\paragraph{Sort.} \texttt{Sort [key ASC NULLS FIRST], false, 0} --- the boolean
+is \texttt{true} for a global sort, \texttt{false} for a local per-partition one.
+A \texttt{SortMergeJoin} always has two local sorts, one per input, between the
+exchanges and the join.
+
+\begin{tip}
+The fast scan of any plan, in order: (1) the join operator ---
+\texttt{SortMergeJoin} on a small dimension means missing statistics
+(\Cref{ch:joins}); (2) the number of \texttt{Exchange} nodes; (3)
+\texttt{PartitionFilters} non-empty on a partitioned table (\Cref{ch:pruning});
+(4) \texttt{PushedFilters} non-empty; (5) \texttt{ReadSchema} listing only needed
+columns.
+\end{tip}
+
+After the query runs, the SQL tab shows the same tree with \emph{actual} row
+counts and, if AQE was active, the adapted plan rooted at
+\texttt{AdaptiveSparkPlan isFinalPlan=true} --- which is the plan that really ran,
+not the one \texttt{EXPLAIN} printed beforehand (\Cref{ch:aqe}).
 
 \section{Summary}
 \label{sec:catalyst-summary}

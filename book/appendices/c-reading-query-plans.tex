@@ -1,11 +1,252 @@
 \chapter{Reading Query Plans}
 \label{app:plans}
 
-\tbd
+A reference for the physical-plan operators the book refers to. \Cref{ch:catalyst}
+explains the compilation pipeline that produces these plans and how to read one
+quickly; this appendix is the catalogue you come back to. Everything here is as
+of the reference environment (\Cref{app:refenv}).
 
-% A cheat-sheet, usable standalone after first read: every physical operator the
-% book mentions (Scan, Filter, Project, Exchange, Sort, *HashAggregate,
-% BroadcastHashJoin, SortMergeJoin, ShuffledHashJoin, BroadcastExchange,
-% AQEShuffleRead, ...), what it means, what typically precedes it, and the
-% annotations to look for (PartitionFilters, PushedFilters, `*(n)` codegen
-% markers, isFinalPlan, isSkew). Cross-referenced to Chapter 2.
+\section{The six \texttt{EXPLAIN} modes}
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{3cm}p{10.8cm}@{}}
+\toprule
+\textbf{Form} & \textbf{Output} \\
+\midrule
+\texttt{EXPLAIN} & physical plan only \\
+\texttt{EXPLAIN EXTENDED} & parsed, analyzed, optimized logical, and physical plans \\
+\texttt{EXPLAIN FORMATTED} & physical plan as a tree + a numbered list expanding every node \\
+\texttt{EXPLAIN COST} & optimized logical plan with the planner's row-count / size estimates \\
+\texttt{EXPLAIN CODEGEN} & physical plan + the generated Java for each whole-stage stage \\
+\texttt{df.explain(mode=)} & same five, as \texttt{"simple"}, \texttt{"extended"}, \texttt{"formatted"}, \texttt{"cost"}, \texttt{"codegen"} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Reading a physical plan}
+
+Read \textbf{bottom-up}: the leaves are scans, the root is the last operator to
+run. The tree connectors are \texttt{+-} for the child in line and \texttt{:-}
+plus a \texttt{:} spine for the first child of a binary operator (a join). A
+\texttt{*} prefix, written \texttt{*(n)}, marks an operator fused into
+whole-stage-generated Java stage \texttt{n} (\Cref{sec:c-codegen}).
+
+\section{Scan operators}
+\label{sec:c-scan}
+
+Where data enters the plan.
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{@{}p{3.6cm}p{10.2cm}@{}}
+\toprule
+\textbf{Operator} & \textbf{Source} \\
+\midrule
+\texttt{BatchScan} & a DataSource~V2 table --- Iceberg on the reference stack \\
+\texttt{FileScan parquet} / \texttt{orc} / \texttt{csv} & a file-based table through the Hive catalog (DataSource~V1) \\
+\texttt{InMemoryTableScan} & a cached DataFrame or \texttt{CACHE TABLE} \\
+\texttt{DataSourceV2ScanRelation} & the logical-plan form of a V2 scan \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}[language=text,numbers=none,caption={A scan node's fields},captionpos=b]
+BatchScan trips
+  PartitionFilters: [event_ts >= 2026-03-01, event_ts < 2026-03-08]
+  PushedFilters:    [IsNotNull(route_id)]
+  DataFilters:      [IsNotNull(route_id)]
+  ReadSchema:       struct<route_id,arrival_delay_s,event_ts>
+  Batched:          true
+\end{lstlisting}
+
+\begin{description}
+  \item[\texttt{PartitionFilters}] filters resolved against partition values, so
+        whole partitions (directories on object storage) are skipped without
+        being opened. Empty on a partitioned table means the filter did not match
+        the partition transform (\Cref{ch:pruning}).
+  \item[\texttt{PushedFilters}] filters handed to the file reader, which skips
+        row groups using column min/max statistics in the footer and any bloom
+        filters, without decompressing them.
+  \item[\texttt{DataFilters}] every filter on the scan, including the residue
+        evaluated row-by-row after reading. \texttt{DataFilters} minus
+        \texttt{PushedFilters} is what could not be pushed.
+  \item[\texttt{ReadSchema}] the columns actually read. Wider than the query
+        needs means a \texttt{SELECT *} defeated column pruning.
+  \item[\texttt{Batched: true}] vectorized columnar reads are enabled
+        (\conf{spark.sql.parquet.enableVectorizedReader}); \texttt{false} falls
+        back to row-at-a-time decoding.
+\end{description}
+
+\section{Exchange operators}
+\label{sec:c-exchange}
+
+Every \texttt{Exchange} is a shuffle and a stage boundary: serialize, write to
+local disk, transfer over the network, re-read on the destination. Counting them
+is the fastest estimate of a query's cost.
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{3cm}p{4.4cm}p{6cm}@{}}
+\toprule
+\textbf{Partitioning} & \textbf{In the plan} & \textbf{Created by} \\
+\midrule
+Hash & \texttt{hashpartitioning(col, n)} & joins, \texttt{GROUP BY}, \texttt{repartition(n, col)} \\
+Range & \texttt{rangepartitioning(col ASC, n)} & global \texttt{ORDER BY}, \texttt{repartitionByRange} \\
+Round-robin & \texttt{roundrobinpartitioning(n)} & \texttt{repartition(n)} with no column \\
+Single & \texttt{SinglePartition} & global aggregate with no group key, \texttt{coalesce(1)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{lstlisting}[language=text,numbers=none,caption={A shuffle exchange},captionpos=b]
+Exchange hashpartitioning(route_id, 200), ENSURE_REQUIREMENTS, [plan_id=42]
+\end{lstlisting}
+
+\texttt{ENSURE\_REQUIREMENTS} means the planner's \texttt{EnsureRequirements} rule
+inserted this exchange because the operator above it needs its input distributed
+that way. \texttt{ReuseExchange} in a plan means two identical exchanges were
+deduplicated --- one shuffle feeds both consumers.
+
+\texttt{BroadcastExchange} is not a shuffle. It collects one small side to the
+driver and ships it whole to every executor; it appears only below the build side
+of a \texttt{BroadcastHashJoin} or \texttt{BroadcastNestedLoopJoin}.
+
+\section{Sort operators}
+
+\begin{lstlisting}[language=text,numbers=none]
+Sort [route_id ASC NULLS FIRST], false, 0
+\end{lstlisting}
+
+The boolean is \texttt{true} for a global sort (a single ordered output across all
+partitions, preceded by a \texttt{rangepartitioning} exchange) and \texttt{false}
+for a local per-partition sort. A \texttt{SortMergeJoin} always shows two local
+sorts, one per input, between the exchanges and the join. Sorts need a sort
+buffer in execution memory and spill when it is exhausted (\Cref{ch:execmem}).
+
+\section{Join operators}
+\label{sec:c-joins}
+
+\Cref{ch:joins} covers how the planner chooses; this is how to recognize the
+choice in a plan.
+
+\paragraph{BroadcastHashJoin.} \texttt{BroadcastHashJoin [\ldots], BuildRight}
+(or \texttt{BuildLeft}) with a \texttt{BroadcastExchange} below the build side and
+\emph{no} exchange on the probe (large) side. The cheapest join: no shuffle of
+the big table.
+
+\paragraph{SortMergeJoin.} \texttt{SortMergeJoin [\ldots], Inner} with two child
+branches, each a \texttt{Sort} over an \texttt{Exchange hashpartitioning}. The
+default for two large inputs, and the most expensive pattern --- two full
+shuffles plus two sorts.
+
+\paragraph{ShuffledHashJoin.} \texttt{ShuffledHashJoin [\ldots], BuildRight} with
+two \texttt{Exchange} nodes but \emph{no} sorts: one side is shuffled and built
+into a hash table in memory. Cheaper than sort-merge when the build side fits and
+the sort is the bottleneck; enabled by
+\conf{spark.sql.join.preferSortMergeJoin}\,=\,\texttt{false} or a
+\texttt{SHUFFLE\_HASH} hint.
+
+\paragraph{BroadcastNestedLoopJoin.} A non-equi join condition (\texttt{price >
+min\_price}). $O(N \times M)$. Fine when one side is tiny; a warning sign on two
+large tables --- usually a missing or non-equi join key.
+
+\paragraph{CartesianProduct.} Every row of one side with every row of the other.
+Unless it is a deliberate cross join, the \texttt{ON} clause is missing.
+
+\section{Aggregation operators}
+
+Aggregation is two-phase: a partial aggregate on each partition (map-side
+combine), a shuffle, then a final aggregate.
+
+\begin{lstlisting}[language=text,numbers=none,caption={Two-phase aggregation},captionpos=b]
+*(3) HashAggregate(keys=[route_id], functions=[avg(on_time)])
++- Exchange hashpartitioning(route_id, 200), ENSURE_REQUIREMENTS
+   +- *(2) HashAggregate(keys=[route_id], functions=[partial_avg(on_time)])
+      +- ...
+\end{lstlisting}
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{3.4cm}p{4.6cm}p{5.4cm}@{}}
+\toprule
+\textbf{Operator} & \textbf{Chosen when} & \textbf{Memory} \\
+\midrule
+\texttt{HashAggregate} & all aggregate buffers are fixed-width (numeric, date, timestamp) & off-heap hash map; falls back to sort-based under memory pressure \\
+\texttt{ObjectHashAggregate} & a buffer holds a variable-width or complex type (\texttt{collect\_list}, \texttt{collect\_set}, some UDAFs) & on-heap objects; falls back to sort-based past \conf{spark.sql.objectHashAggregate.sortBased.fallbackThreshold} (128) distinct keys \\
+\texttt{SortAggregate} & hash aggregation is not feasible & needs input pre-sorted by the group keys; handles any size, slower \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Filter and Project}
+
+\texttt{Filter} applies a predicate; \texttt{Project} selects columns and
+evaluates expressions. Both are usually fused into a neighbouring scan or join
+inside a \texttt{*(n)} block. A standalone \texttt{Filter} directly above a scan
+is worth a look: if its predicate is not also in the scan's
+\texttt{PushedFilters}, the pushdown failed and the predicate is being evaluated
+row-by-row after reading (\Cref{sec:c-pushdown}).
+
+\section{Whole-stage codegen markers}
+\label{sec:c-codegen}
+
+\begin{lstlisting}[language=text,numbers=none]
+*(2) HashAggregate(keys=[city], functions=[sum(revenue)])
++- Exchange hashpartitioning(city, 200)
+   +- *(1) HashAggregate(keys=[city], functions=[partial_sum(revenue)])
+      +- *(1) Filter isnotnull(city)
+         +- *(1) ColumnarToRow
+            +- BatchScan sales [city, revenue]
+\end{lstlisting}
+
+\texttt{*(1)} is one generated Java method: scan, columnar-to-row, filter, and
+partial aggregate run without leaving it. The \texttt{Exchange} breaks the chain
+--- you cannot fuse across a network boundary --- so the final aggregate is
+\texttt{*(2)}, a second generated method on the post-shuffle data. The number is
+a sequential id, not an order or a priority. Operators with no star ran through
+the interpreter; \Cref{sec:wholestage-codegen} lists why a stage loses codegen.
+
+\section{AQE nodes in a final plan}
+
+When Adaptive Query Execution is on (\Cref{ch:aqe}), the plan the SQL tab shows
+after the query finishes is rooted at \texttt{AdaptiveSparkPlan
+isFinalPlan=true}. \texttt{isFinalPlan=false} is the compile-time plan from
+\texttt{explain()} before an action --- it may change substantially at runtime.
+
+\begin{description}
+  \item[\texttt{AQEShuffleRead coalesced}] AQE merged small post-shuffle
+        partitions after seeing their real sizes.
+  \item[\texttt{AQEShuffleRead (skew=true)}] AQE split one or more oversized
+        partitions.
+  \item[\texttt{BroadcastQueryStage}] a \texttt{SortMergeJoin} was converted to a
+        broadcast at runtime because the shuffled side turned out small.
+  \item[\texttt{SortMergeJoin [\ldots], isSkew=true}] AQE detected and handled
+        skew in this join.
+\end{description}
+
+\section{Predicate-pushdown killers}
+\label{sec:c-pushdown}
+
+Predicates that cannot be pushed to Parquet, ORC, or Iceberg, so they run
+row-by-row after the read (\Cref{ch:pruning}):
+
+\begin{itemize}
+  \item a UDF: \texttt{WHERE my\_udf(col) = v}
+  \item a function or complex expression on the column: \texttt{WHERE
+        length(city) > 5}, \texttt{WHERE a + b > 100}
+  \item a \texttt{CAST} on the column side: \texttt{WHERE CAST(s AS INT) > 100}
+  \item a non-deterministic function: \texttt{WHERE rand() > 0.5}
+  \item a leading-wildcard \texttt{LIKE}: \texttt{WHERE name LIKE '\%smith'}
+        (a trailing wildcard, \texttt{'smith\%'}, does push)
+  \item an \texttt{OR} with any non-pushable branch --- the whole \texttt{OR} fails
+\end{itemize}
+
+\paragraph{Verification.} Run \texttt{EXPLAIN FORMATTED}, find the scan, and check
+that each partition-column filter is in \texttt{PartitionFilters} and each
+data-column filter is in \texttt{PushedFilters}. If one is missing, it hit a
+killer above.
