@@ -27,6 +27,33 @@ the split size Iceberg's planner reports from its manifests
 One data file is not one partition either way --- small files are combined and
 large ones split so that each input partition is close to the target size.
 
+\begin{note}
+\conf{spark.sql.files.maxPartitionBytes} and \conf{read.split.target-size} are
+both measured against the file's \emph{on-disk} length --- the compressed size
+a file listing or an Iceberg manifest already records --- never the decompressed
+size. Neither Spark nor Iceberg opens a file just to plan splits, so the
+on-disk byte count is the only number available cheaply; what the bytes decode
+to is unknown until a task actually reads them.
+
+For an uncompressed format this distinction is moot. For compressed columnar
+formats it matters a great deal: a 128~MB target on a well-compressed Parquet
+file is the same amplification from \Cref{sec:mem-heap} arriving one step
+earlier. A file compressed 4--5$\times$ turns one ``128~MB'' input partition
+into 500~MB--600~MB of decoded rows in a task's execution memory, which is a
+common, quiet cause of spill that has nothing to do with
+\Cref{sec:shuffle-sizing}'s shuffle-partition sizing at all --- the input side
+can be just as oversized as the shuffle side, for the same underlying reason.
+
+Splittability is a separate question from compression ratio. Parquet and ORC
+stay splittable at any compression codec, because Spark splits them at
+row-group (or stripe) boundaries that are independently decodable --- the
+per-column codec inside a row group is irrelevant to where the cut falls. A
+\texttt{.gz}-compressed text, CSV, or JSON file is different: gzip's byte
+stream cannot be resumed from the middle, so the whole file is exactly one
+partition regardless of \conf{spark.sql.files.maxPartitionBytes}, whether it is
+10~MB or 10~GB.
+\end{note}
+
 A \textbf{shuffle partition} is created when a wide operator redistributes data.
 Its count is set directly: by \conf{spark.sql.shuffle.partitions} (default 200)
 for a join or aggregation, or by an explicit \texttt{repartition(n)}. Spark
