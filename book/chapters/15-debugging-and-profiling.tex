@@ -13,8 +13,9 @@ stragglers --- and what each looks like before you reach for a fix.
 \section{The Spark UI as a diagnostic}
 \label{sec:debug-ui}
 
-The UI is organized as a funnel, and reading it in the wrong order is the
-most common way to waste time on a slow job. The \textbf{SQL} tab is the
+The UI is organized as a funnel (\Cref{fig:ui-diagnostic-funnel}), and
+reading it in the wrong order is the most common way to waste time on a
+slow job. The \textbf{SQL} tab is the
 right starting point for a SQL/DataFrame job: it shows the physical plan
 with live metrics on every node --- rows produced, time spent, bytes
 shuffled --- so you can see \emph{which operator} is expensive before
@@ -29,6 +30,16 @@ than across tasks within one stage) shows up. Only once the SQL tab has
 named the operator and the Stages tab has named the stage does drilling
 into individual task metrics (\Cref{sec:reading-metrics}) become the right
 next step, rather than the first one.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.8\linewidth]{ui-diagnostic-funnel.pdf}
+  \caption{The UI read top to bottom: each tab narrows the search before
+  the next one is worth opening. Starting at task metrics without first
+  naming the operator and the stage is the most common way to waste time
+  reading a plan that turns out not to be the bottleneck.}
+  \label{fig:ui-diagnostic-funnel}
+\end{figure}
 
 \section{Event logs and the history server}
 \label{sec:debug-history}

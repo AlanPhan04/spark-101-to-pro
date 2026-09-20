@@ -1,0 +1,35 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="ui-diagnostic-funnel" id="uifunnel">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="420" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="l1" value="&lt;b&gt;SQL tab&lt;/b&gt; --- which operator is expensive" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="540" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l2" value="&lt;b&gt;Stages tab&lt;/b&gt; --- which stage, and is it skewed" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="80" y="86" width="460" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l3" value="&lt;b&gt;Executors tab&lt;/b&gt; --- imbalance across executors,&lt;br&gt;not just within one stage" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=11;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="120" y="162" width="380" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l4" value="&lt;b&gt;Task metrics&lt;/b&gt; --- shuffle size, spill,&lt;br&gt;GC time for the specific task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=11;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="160" y="252" width="300" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note" value="Read top to bottom, not bottom-up: naming the operator and the stage first is&lt;br&gt;what makes individual task metrics worth drilling into, rather than the first stop." style="text;html=1;align=center;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="20" y="330" width="600" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edges=1;html=1;endArrow=block;strokeColor=#6b7280;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="l1" target="l2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edges=1;html=1;endArrow=block;strokeColor=#6b7280;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="l2" target="l3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edges=1;html=1;endArrow=block;strokeColor=#6b7280;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="l3" target="l4"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
