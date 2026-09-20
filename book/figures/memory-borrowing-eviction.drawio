@@ -1,0 +1,36 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="memory-borrowing-eviction" id="borrowevict">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="700" pageHeight="330" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t1" value="&lt;b&gt;1. Storage borrows idle execution space&lt;/b&gt;" style="text;html=1;align=left;fontSize=11;fontColor=#2f3b52;" vertex="1" parent="1">
+          <mxGeometry x="20" y="10" width="320" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="a-storage2" value="&lt;b&gt;Storage&lt;/b&gt; --- its own half, plus borrowed idle execution space&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;(dashed edge: this part is borrowed, not owned)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;dashed=1;fontSize=10;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="20" y="44" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="t2" value="&lt;b&gt;2. Execution reclaims it by evicting&lt;/b&gt;" style="text;html=1;align=left;fontSize=11;fontColor=#2f3b52;" vertex="1" parent="1">
+          <mxGeometry x="380" y="10" width="320" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="b-exec" value="&lt;b&gt;Execution&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;a join needs&lt;br&gt;its space back&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="380" y="44" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="b-storage" value="&lt;b&gt;Storage&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;its own half, kept&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=10;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="530" y="44" width="150" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="evicted" value="LRU block evicted,&lt;br&gt;recomputed later" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=9;fontColor=#7d2f38;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="130" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="earrow" style="edges=1;html=1;endArrow=block;strokeColor=#b5545e;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="b-exec" target="evicted"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="note" value="Execution can always evict a borrower to reclaim its half.&lt;br&gt;Storage can never evict a running task to reclaim borrowed space --- it waits." style="text;html=1;align=center;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="20" y="220" width="660" height="50" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

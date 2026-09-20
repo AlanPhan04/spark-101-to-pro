@@ -107,7 +107,17 @@ sides want space at the same time, and the two directions are not symmetric:
 Execution always wins a live contest, because failing to complete a running
 operator is worse than evicting a cache entry and recomputing it later. This
 is also why a cache that is evicted mid-job is not a bug: it is unified memory
-doing exactly what it is for.
+doing exactly what it is for (\Cref{fig:memory-borrowing-eviction}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{memory-borrowing-eviction.pdf}
+  \caption{Borrowing is symmetric; reclaiming is not. Storage can spread
+  into idle execution space, but the moment a join or sort needs that space
+  back, execution evicts the borrower's cached blocks to reclaim it ---
+  storage has no equivalent power over a running task.}
+  \label{fig:memory-borrowing-eviction}
+\end{figure}
 
 \section{Exchange and subquery reuse}
 \label{sec:caching-reuse}
