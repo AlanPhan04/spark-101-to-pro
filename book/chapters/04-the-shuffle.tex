@@ -30,9 +30,16 @@ large ones split so that each input partition is close to the target size.
 \begin{note}
 Both configs measure the file's \emph{on-disk} (compressed) length, never the
 decompressed size --- neither Spark nor Iceberg opens a file just to plan
-splits. For a well-compressed Parquet file this is the same amplification as
-\Cref{sec:mem-heap}, one step earlier: a ``128~MB'' input partition can decode
-to several times that in a task's execution memory.
+splits. For a compressed columnar file this is the same amplification as
+\Cref{sec:mem-heap}, one step earlier: a ``128~MB'' partition can decode to
+several times that in a task's execution memory, a quiet cause of spill
+unrelated to shuffle-partition sizing.
+
+Splittability is a separate question from ratio: Parquet and ORC stay
+splittable at any codec, since Spark cuts at independently-decodable row-group
+or stripe boundaries. A \texttt{.gz}-compressed text/CSV/JSON file cannot ---
+gzip's stream has no resume point, so the whole file is one partition
+regardless of size.
 \end{note}
 
 A \textbf{shuffle partition} is created when a wide operator redistributes data.
