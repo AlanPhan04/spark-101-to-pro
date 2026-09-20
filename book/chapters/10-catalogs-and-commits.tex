@@ -11,28 +11,165 @@ tune retries so a busy table does not fail commits under contention.
 \end{chapterintro}
 
 \section{What a catalog does}
-\tbd
+\label{sec:cat-what}
+
+Everything in \Cref{ch:iceberg-spec}'s metadata tree is reachable once you have
+the path to the current table metadata file --- the catalog's only job is to
+be the durable, atomically-updatable record of that one path per table name.
+Concretely, a catalog answers two questions: given \texttt{db.table}, what
+metadata file is current, and, on a commit, can I swap that pointer to a new
+file \emph{only if} no one else has moved it since I last read it. Nothing
+about the manifest tree, delete files, or partitioning from
+\Cref{ch:iceberg-spec} lives in the catalog at all --- it is small and simple
+by design, because it is the one piece of the whole system every reader and
+writer has to agree on synchronously.
 
 \section{The Hive Metastore catalog}
-\tbd
+\label{sec:cat-hms}
+
+On this stack, \texttt{spark.sql.catalog.<name>.type=hive} points Iceberg at
+the same Hive Metastore (HMS) already serving classic Hive tables. Iceberg
+stores the current metadata file's location in the Metastore's own table
+properties (\texttt{metadata\_location}), and the swap is one HMS
+\texttt{alter\_table} call with an expected-old-value check --- HMS itself
+functions as the lock, rejecting the call if \texttt{metadata\_location}
+already differs from what the writer last read. This is why an HMS-catalog
+table can be queried by any engine that already speaks Hive Metastore
+(Kyuubi included, on this stack) without extra configuration: to that engine,
+an Iceberg table's catalog entry looks like any other table, only the
+properties differ.
 
 \section{The REST catalog}
-\tbd
+\label{sec:cat-rest}
+
+A REST catalog (\texttt{spark.sql.catalog.<name>.type=rest}, with a
+\texttt{uri}) puts a dedicated service between every engine and the metadata
+store, instead of each engine's client implementing Metastore's Thrift
+protocol directly. The service owns the atomic swap internally --- backed by
+whatever it chooses (a database, HMS, cloud-native locking) --- and every
+client, regardless of language or engine, calls the same small HTTP API to
+read or commit a table. The practical difference from HMS shows up at the
+edges: a REST catalog can support features HMS's schema was never built for
+(multi-table transactions, credential vending scoped per table) without every
+client needing new Thrift-parsing logic, at the cost of running and operating
+one more service.
+
+\begin{note}
+Both catalog types answer the same two questions from
+\Cref{sec:cat-what}; nothing in \Cref{ch:iceberg-spec} or the rest of this
+book depends on which one a table uses. Pick based on what already exists
+in the platform (HMS is already running on this stack) and what the ecosystem
+around the table needs, not on a claimed metadata-format difference --- there
+is none.
+\end{note}
 
 \section{The atomic pointer swap}
-\tbd
+\label{sec:cat-swap}
+
+A commit's actual sequence, regardless of catalog:
+
+\begin{enumerate}
+  \item read the current metadata file to get the base snapshot;
+  \item build new manifests, a new manifest list, and a new snapshot on top
+        of that base, writing all of it to storage --- none of this is
+        visible to any reader yet;
+  \item write a new table metadata file referencing the new snapshot;
+  \item ask the catalog to swap its pointer from the base metadata file to
+        the new one, \emph{conditioned on} the pointer still being the base
+        file.
+\end{enumerate}
+
+Step 4 is the only step that touches shared, contended state; steps 1--3 are
+pure writes to storage that never conflict with another writer's steps 1--3,
+because each writer is writing its own new files. This is exactly why
+Iceberg calls its concurrency model \emph{optimistic}: every writer does the
+expensive part assuming it will win, and only the cheap, final compare-and-swap
+can fail.
 
 \section{Optimistic concurrency and retries}
-\tbd
+\label{sec:cat-retries}
+
+When step 4 fails because another commit already moved the pointer, Iceberg
+does not discard the writer's work --- it re-reads the new current metadata
+file, re-applies the same logical change on top of it (a new manifest
+referencing the same underlying data/delete files, at most a cheap manifest
+rewrite rather than a data rewrite), and retries the swap. \Cref{tab:cat-retry-props}
+controls how persistent that retry is.
+
+\begin{table}[htbp]
+\centering
+\caption{Iceberg commit-retry table properties}
+\label{tab:cat-retry-props}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Property} & \textbf{Default} & \textbf{Meaning} \\
+\midrule
+\texttt{commit.retry.num-retries} & 4 & Max retry attempts before failing the commit \\
+\texttt{commit.retry.min-wait-ms} & 100 & Initial backoff between attempts \\
+\texttt{commit.retry.max-wait-ms} & 60{,}000 & Backoff ceiling \\
+\texttt{commit.retry.total-timeout-ms} & 1{,}800{,}000 & Overall time budget across all retries \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A table with many concurrent writers hitting the same partitions --- several
+streaming jobs upserting into one table, say --- can exhaust the default 4
+retries under sustained contention; raising \texttt{commit.retry.num-retries}
+(a table property, set via \texttt{ALTER TABLE ... SET TBLPROPERTIES}) trades
+a slower worst-case commit for a much lower failure rate. It does not help a
+table where every writer touches the \emph{same} partition on every commit ---
+retries only help when the underlying data actually merges cleanly with the
+new base, which \Cref{sec:ice-partitioning}'s partition design controls more
+than any retry setting does.
+
+\begin{warning}
+Retrying a failed swap is safe because retries re-read the real current state
+and reapply on top of it --- it is not blind resubmission of the same
+metadata file. A writer that instead cached the base snapshot and kept
+resubmitting it would silently lose every commit that happened in between.
+\end{warning}
 
 \section{Catalog configuration in Spark}
-\tbd
+\label{sec:cat-spark-config}
+
+A catalog is registered per Spark session under a name of your choosing:
+
+\begin{lstlisting}[language=bash,caption={Registering an Iceberg catalog against the Hive Metastore},captionpos=b]
+spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog
+spark.sql.catalog.lakehouse.type=hive
+spark.sql.catalog.lakehouse.uri=thrift://hive-metastore:9083
+spark.sql.catalog.lakehouse.warehouse=gs://my-bucket/warehouse
+\end{lstlisting}
+
+Every table reference is then three-part,
+\texttt{lakehouse.analytics.trips}, resolved through that specific catalog ---
+which matters the moment more than one catalog is registered (a Hive-backed
+one for the existing warehouse, a REST-backed one for a newer set of tables):
+the catalog name in the identifier, not any global default, decides which
+metadata store and which commit protocol from this chapter actually apply.
 
 \section{Summary}
-\tbd
+\label{sec:cat-summary}
+
+The catalog's whole job is a name-to-current-metadata-file mapping that can be
+swapped atomically; the Hive Metastore catalog does this with a conditional
+\texttt{alter\_table} against the same Metastore serving classic Hive tables,
+a REST catalog does it behind an HTTP API that can support more than HMS's
+schema allows, and neither changes anything about the metadata tree itself.
+A commit writes all its new files optimistically, then attempts one
+conditional swap; on conflict it re-reads the real current state, reapplies
+the same change on top of it, and retries within the bounds of
+\texttt{commit.retry.*}, which is the lever to raise for a table under
+genuine concurrent-writer contention.
 
 \exercisehead
 \begin{exercises}
-\item Run two writers into the same table. Observe the retry, then find the
-      winning and losing commit attempts in the snapshot log.
+\item Run two writers into the same table concurrently. Observe the retry,
+      then find the winning and losing commit attempts in the snapshot log.
+\item Register the same physical warehouse location under two differently
+      named catalogs in one Spark session. Confirm both resolve the same
+      table to the same current snapshot.
+\item Lower \texttt{commit.retry.num-retries} to 1 on a table and reproduce a
+      commit failure under two concurrent writers; raise it back and confirm
+      both succeed.
 \end{exercises}

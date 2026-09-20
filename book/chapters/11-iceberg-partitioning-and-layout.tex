@@ -13,25 +13,153 @@ writer have to move.
 
 \section{Hidden partitioning and partition transforms}
 \label{sec:ice-partitioning}
-\tbd
+
+A classic Hive table's partition column is a real column duplicated into the
+directory path --- a query has to filter on that exact derived value
+(\texttt{WHERE event\_date = '2026-09-20'}) for pruning to fire, and a filter
+on the underlying timestamp (\texttt{WHERE event\_ts >= \ldots}) does not
+automatically resolve to it. Iceberg's partition spec instead names a
+\emph{transform} of a source column --- \texttt{day(event\_ts)},
+\texttt{bucket(16, route\_id)}, \texttt{truncate(4, zone)} --- and stores the
+computed value in the manifest, not as a queryable column at all. The planner
+derives the partition predicate from a filter on the source column itself, so
+the specimen query's plain \texttt{event\_ts >= TIMESTAMP '\ldots'} filter
+from \Cref{sec:pruning-static} prunes correctly with no partition column ever
+appearing in the query text.
+
+\Cref{tab:ice-transforms} covers the transforms this stack uses.
+
+\begin{table}[htbp]
+\centering
+\caption{Common Iceberg partition transforms}
+\label{tab:ice-transforms}
+\begin{tabular}{@{}llp{5.2cm}@{}}
+\toprule
+\textbf{Transform} & \textbf{Use case} & \textbf{Notes} \\
+\midrule
+\texttt{day} / \texttt{hour} & Time-series data filtered by a timestamp range &
+  Coarser (\texttt{day}) means fewer, larger partitions; \texttt{hour} suits
+  high-volume streams (\Cref{ch:streaming}) \\
+\texttt{bucket(n, col)} & High-cardinality key with equality or join
+  predicates & Even file distribution by hash; enables storage-partitioned
+  joins (\Cref{sec:joins-spj}) when both sides share the spec \\
+\texttt{truncate(n, col)} & String or numeric prefix filters & Groups by a
+  value prefix without one partition per distinct value \\
+\texttt{identity} & Low-cardinality column filtered directly & Same as
+  classic partitioning, just recorded the hidden way \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{tip}
+Prefer \texttt{day} over \texttt{identity} on a raw timestamp: an
+\texttt{identity} partition on \texttt{event\_ts} would create one partition
+\emph{per distinct timestamp value}, which is not partitioning at all --- it is
+one file per row's worth of metadata. Always partition on a transform coarse
+enough to group many rows per partition.
+\end{tip}
 
 \section{Partition evolution}
-\tbd
+\label{sec:ice-partition-evolution}
+
+A classic Hive table's partitioning is fixed at creation; changing it means
+rewriting every file under the new scheme. Iceberg's partition spec can
+change (\texttt{ALTER TABLE \ldots ADD PARTITION FIELD}) without touching a
+single existing file, because the transform that produced a file's partition
+value is recorded per-manifest, not assumed globally --- old manifests keep
+describing old files under the old spec, new manifests describe new files
+under the new spec, and a query spans both by evaluating each manifest
+against its own recorded spec.
+
+This is why moving from \texttt{month(event\_ts)} to \texttt{day(event\_ts)}
+as a table grows is a metadata-only operation, not a maintenance project: new
+data lands under the finer scheme immediately, old data keeps the coarser
+scheme it was written with, and a query filtering by date prunes correctly
+against both --- coarser pruning on the old partitions, finer pruning on the
+new ones, with no explicit migration step and no downtime.
 
 \section{Sort orders and Z-ordering}
-\tbd
+\label{sec:ice-sort-order}
+
+A partition spec controls which \emph{files} a filter can skip; a
+\emph{sort order} controls how much of the \emph{content} within a kept file
+can still be skipped, via the column min/max statistics
+\Cref{ch:iceberg-spec}'s manifests already carry per file. Files written
+sorted by a column have tight, non-overlapping min/max ranges across files ---
+a filter on that column can then skip whole files even within one partition,
+the same statistics-based pruning \Cref{sec:c-pushdown} described for row
+groups, just at the file level.
+
+A single sort order only helps predicates on the columns it is sorted by,
+front to back. \emph{Z-ordering} (\texttt{rewrite\_data\_files} with
+\texttt{sort\_order} type \texttt{zorder}) interleaves the bits of several
+columns into one sort key instead, trading perfect single-column ordering for
+imperfect-but-useful ordering on every column in the set simultaneously ---
+the right choice when queries filter on different columns unpredictably
+rather than one column consistently.
 
 \section{Target file size and the small-files problem}
-\tbd
+\label{sec:ice-file-size}
+
+Every file a reader opens costs a fixed overhead --- opening the file, reading
+its footer, resolving its schema --- independent of how many rows it holds
+(\Cref{sec:shape-jobs}'s input-partition sizing runs into the same fixed cost
+from the other direction). A table accumulating many small files, typically
+from frequent low-volume commits (a streaming job flushing every micro-batch,
+\Cref{ch:streaming}), pays that overhead over and over for little data each
+time. \texttt{write.target-file-size-bytes} (512~MB by default) sets what a
+write aims for; \Cref{ch:iceberg-write}'s compaction procedures are the
+after-the-fact fix for files that already landed too small.
 
 \section{Write distribution modes}
-\tbd
+\label{sec:ice-write-distribution}
+
+Before a write's rows are grouped into per-partition files, Spark may need to
+shuffle them so that all rows for a given partition value land together
+rather than scattered across every task's output --- exactly the shuffle
+mechanics from \Cref{ch:shuffle}, applied to a write instead of a read.
+\texttt{write.distribution-mode} chooses how:
+
+\begin{description}
+  \item[\texttt{none}] writes rows in whatever order the upstream plan already
+        produced them, with no shuffle. Cheapest, but every task can touch
+        every partition, so a table with many partitions ends up with many
+        small files per commit --- one per (task, partition) pair touched.
+  \item[\texttt{hash}] (the default for unpartitioned or partitioned tables
+        with a defined spec) shuffles by partition value first, so each task
+        after the shuffle owns one partition's rows and writes one file for
+        it. This is the direct fix for the \texttt{none} mode's small-files
+        problem, at the cost of the shuffle itself.
+  \item[\texttt{range}] shuffles by a sampled range of the sort order instead
+        of a hash, producing files with tighter, non-overlapping value
+        ranges --- the write-time complement to \Cref{sec:ice-sort-order}'s
+        pruning benefit, at a higher planning cost (a sampling pass before
+        the real shuffle).
+\end{description}
 
 \section{Summary}
-\tbd
+\label{sec:ice-layout-summary}
+
+Iceberg partitioning is hidden behind a transform of a source column, so
+pruning works from a plain filter on that column with no partition column in
+the query; \texttt{day}/\texttt{hour} suit time-series filters,
+\texttt{bucket} suits high-cardinality keys and storage-partitioned joins,
+and an \texttt{identity} transform on a high-cardinality column is a
+modeling mistake, not a partitioning choice. Evolving the spec is
+metadata-only because old files keep the spec they were written under. A
+sort order or Z-order tightens the per-file statistics that let a reader
+skip whole files inside a kept partition; target file size and the write
+distribution mode are what decide whether a write produces a few
+well-sized files or many small ones in the first place.
 
 \exercisehead
 \begin{exercises}
 \item Given a daily data volume and a query pattern, choose a partition spec.
       Justify it against the target of 128~MB--1~GB per partition per write.
+\item Evolve a table's partition spec from \texttt{month(event\_ts)} to
+      \texttt{day(event\_ts)}. Confirm from the \texttt{partitions} metadata
+      table that old and new data report different specs.
+\item Write the same DataFrame with \texttt{write.distribution-mode} set to
+      \texttt{none} and then \texttt{hash}. Compare the file count per
+      partition in each case.
 \end{exercises}

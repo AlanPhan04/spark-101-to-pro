@@ -12,31 +12,192 @@ without deleting data a reader still needs.
 \end{chapterintro}
 
 \section{Copy-on-write versus merge-on-read}
-\tbd
+\label{sec:ice-write-cow-mor}
+
+Every \texttt{UPDATE}, \texttt{DELETE}, or \texttt{MERGE} against a matched
+row is, underneath, one of two things: rewrite the data file that row lives
+in with that row changed or removed (\emph{copy-on-write}, CoW), or leave the
+data file untouched and record the change as a delete file plus, for an
+update, a new data file holding only the changed rows
+(\emph{merge-on-read}, MoR, built on \Cref{sec:ice-delete-files}'s delete
+files). \texttt{write.delete.mode}, \texttt{write.update.mode}, and
+\texttt{write.merge.mode} set this independently per operation type; check a
+table's current properties rather than assuming a default, since Iceberg has
+changed which mode ships as the default across releases.
+
+The trade is exactly where each mode's name says it is: CoW pays the full
+cost of rewriting a file at write time so every subsequent read sees plain
+data files with no delete files to merge; MoR pays almost nothing at write
+time --- a small delete file, no data rewrite --- and pushes the cost onto
+every read until compaction (\Cref{sec:ice-write-compaction}) catches up.
+\Cref{tab:ice-cow-mor} is the concrete rule: a table with a low update rate
+and latency-sensitive reads wants CoW; a table absorbing frequent small
+updates (a streaming upsert, \Cref{ch:streaming}) wants MoR, because CoW
+there would mean rewriting the same large file on nearly every micro-batch.
+
+\begin{table}[htbp]
+\centering
+\caption{Choosing copy-on-write versus merge-on-read}
+\label{tab:ice-cow-mor}
+\begin{tabular}{@{}lp{3.6cm}p{3.6cm}@{}}
+\toprule
+ & \textbf{Copy-on-write} & \textbf{Merge-on-read} \\
+\midrule
+Write cost & Rewrites whole matched files & Small delete file, no rewrite \\
+Read cost & Plain data files, no merge & Merges delete files at read time \\
+Best fit & Infrequent updates, latency-sensitive reads & Frequent small
+  updates, write-latency-sensitive \\
+Needs & --- & Regular compaction to bound read cost \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{\texttt{MERGE}, \texttt{UPDATE}, and \texttt{DELETE}}
-\tbd
+\label{sec:ice-write-merge}
+
+A row-level operation's \texttt{ON} or \texttt{WHERE} predicate does two
+different jobs, and conflating them is the single most common performance
+mistake against these tables. If the predicate matches whole partitions ---
+resolvable the same way \Cref{sec:pruning-static} resolves a scan filter ---
+Iceberg performs a \emph{metadata-only delete}: it drops the file references
+from the manifest without reading or rewriting a single row, because no row
+inside an untouched partition needed to change. If the predicate only
+narrows which \emph{rows} inside a file match, Iceberg has to open those
+files, find the matching rows, and rewrite (CoW) or emit deletes for (MoR)
+exactly the files that contained a match --- every other file in the table
+is untouched either way, provided the predicate lets partition pruning rule
+them out first.
+
+\begin{lstlisting}[language=SQL,caption={Partition predicate in the ON clause keeps the scan narrow},captionpos=b]
+MERGE INTO trips t
+USING staged_trips s
+ON t.event_date = s.event_date AND t.trip_id = s.trip_id
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *;
+\end{lstlisting}
+
+Dropping \texttt{t.event\_date = s.event\_date} from the \texttt{ON} clause
+does not change which rows match --- \texttt{trip\_id} alone is still
+sufficient --- but it removes the one predicate the planner could resolve
+against partition values before scanning, so every partition in
+\texttt{trips} is opened to search for a \texttt{trip\_id} match instead of
+only the partitions \texttt{staged\_trips} actually touches. This is
+\Cref{ch:pruning}'s pruning story again, specific to the write path: a
+\texttt{MERGE} without a partition predicate is not wrong, it is just a full
+scan wearing a row-level operation's syntax.
 
 \section{Write distribution and skew on write}
-\tbd
+\label{sec:ice-write-skew}
+
+\Cref{sec:ice-write-distribution} covered \texttt{write.distribution-mode}
+for a plain append; a row-level operation inherits the same choice, with one
+extra failure mode. A \texttt{MERGE} whose matched rows are concentrated in
+a handful of partitions --- a backfill touching one day's data, say ---
+shuffles unevenly under \texttt{hash} mode exactly the way a skewed join
+does (\Cref{sec:aqe-skew}), except AQE's skew-split machinery is a read-side
+mechanism and does not rebalance a write. A CoW rewrite of a skewed
+partition's files runs as one or a few oversized tasks with the rest of the
+stage idle, the same straggler pattern from \Cref{sec:aqe-skew}'s figure,
+just on the write side where nothing currently detects and splits it
+automatically.
 
 \section{Compacting data files}
-\tbd
+\label{sec:ice-write-compaction}
+
+\texttt{rewrite\_data\_files} is the direct fix for both small files
+(\Cref{sec:ice-file-size}) and MoR read cost: it rewrites a set of files into
+fewer, better-organized ones, in one of three strategies.
+\texttt{binpack} (the default) merges small files toward the target size with
+no reordering --- cheapest, and sufficient when the only problem is file
+count. \texttt{sort} rewrites according to a defined sort order
+(\Cref{sec:ice-sort-order}), restoring tight min/max ranges that ordinary
+appends erode over time. \texttt{zorder} does the same for several columns
+interleaved together, at a higher compute cost, when queries filter on
+different columns unpredictably. All three also apply outstanding delete
+files to the data they rewrite, which is why running compaction is the
+concrete answer to a MoR table whose reads have been getting slower.
 
 \section{Rewriting manifests}
-\tbd
+\label{sec:ice-write-manifests}
+
+Manifests accumulate their own version of the small-files problem: many
+small commits each add a small manifest, and a scan's manifest-list pruning
+(\Cref{sec:ice-read-manifest-pruning}) works less well the more, smaller
+manifests it has to consult individually. \texttt{rewrite\_manifests}
+consolidates them into fewer, larger manifests with the same entries,
+improving planning time without touching a single data or delete file --- a
+metadata-only compaction, distinct from and cheaper than
+\texttt{rewrite\_data\_files}.
 
 \section{Snapshot expiration and orphan files}
-\tbd
+\label{sec:ice-write-expiration}
+
+\Cref{sec:ice-snapshots} noted that superseded files stay reachable until
+something removes their snapshot from the log --- that something is
+\texttt{expire\_snapshots}: past a retention window, it drops old snapshot
+entries and, for any file no longer referenced by \emph{any} remaining
+snapshot, deletes the physical file. This is the mechanism that actually
+reclaims the disk space compaction's rewrites and a row-level operation's
+rewritten files leave behind; skipping it does not corrupt anything, it
+just means old files accumulate indefinitely.
+
+\texttt{remove\_orphan\_files} is a different, independent safety net: it
+scans the table's storage location directly for files that are not
+referenced by \emph{any} manifest at all --- typically the debris of a
+failed write that never committed, since a successful commit's files are
+always referenced. Because it does its own storage listing rather than
+reasoning from snapshots, it needs a generous \texttt{older\_than} window
+(the default is three days) to avoid racing an in-flight write that has
+written files but not yet committed the metadata referencing them.
+
+\begin{warning}
+Guides disagree on a strict global order for these two procedures, and the
+official documentation does not mandate one. The mechanism explains why:
+\texttt{expire\_snapshots} is what makes old files eligible for deletion by
+un-referencing them, and it is reasonable to run it before or interleaved
+with \texttt{remove\_orphan\_files}, which only ever touches files no
+snapshot ever referenced in the first place --- the two operate on disjoint
+sets of files by construction, as long as \texttt{remove\_orphan\_files}'s
+retention window is wide enough to never touch a write still in flight.
+Treat the "run compaction, then expire, then remove orphans" sequencing
+some operational guides recommend as a safe default cadence, not a
+correctness requirement.
+\end{warning}
 
 \section{Metadata management for streaming tables}
-\tbd
+\label{sec:ice-write-streaming}
+
+A streaming job committing every micro-batch (\Cref{ch:streaming}) is the
+worst case for every mechanism in this chapter at once: many small commits
+mean many small files, many small manifests, and a rapidly growing snapshot
+log, all from normal operation rather than a mistake. The practical answer
+is scheduling all three maintenance operations to run continuously and
+automatically against a streaming table --- compaction and manifest
+rewriting on a short cadence matched to the commit interval, snapshot
+expiration on a looser one --- rather than treating maintenance as an
+occasional manual task the way it can be on a table that only receives
+periodic batch writes.
 
 \section{Summary}
-\tbd
+\label{sec:ice-write-summary}
+
+Copy-on-write and merge-on-read trade write cost against read cost in
+opposite directions, set independently per operation type; pick from the
+update rate and the read-latency budget, not by default. A row-level
+operation's predicate does double duty --- matching rows and, if it also
+resolves against partition values, keeping the scan narrow the same way any
+other filter does. Compaction and manifest rewriting are metadata- and
+data-level cleanups that keep reads fast; snapshot expiration and orphan-file
+removal are what actually reclaim disk space, operating on disjoint sets of
+files with no single mandated order between them. A streaming table needs
+all of this running continuously rather than occasionally.
 
 \exercisehead
 \begin{exercises}
 \item Run a \texttt{MERGE} with and without the partition column in the
       \texttt{ON} clause. Explain the difference in files scanned from the plan.
+\item Set a table to merge-on-read, run ten small updates, then run
+      \texttt{rewrite\_data\_files}. Compare scan latency before and after.
+\item Delete an entire partition's worth of rows in one statement and confirm
+      from the plan that it resolved as a metadata-only delete.
 \end{exercises}

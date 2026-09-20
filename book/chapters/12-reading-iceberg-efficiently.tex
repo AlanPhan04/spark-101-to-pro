@@ -11,31 +11,173 @@ as a diagnostic.
 \end{chapterintro}
 
 \section{Manifest pruning and metadata filtering}
-\tbd
+\label{sec:ice-read-manifest-pruning}
+
+A scan resolves in layers, each cheaper than the last and each capable of
+excluding the whole layer below it (\Cref{tab:ice-pruning-layers} lists them
+top to bottom): the manifest list's per-manifest partition
+summaries (\Cref{sec:ice-spec-v2}) let the planner skip an entire manifest
+without opening it; the surviving manifests' per-file partition values and
+column statistics let it skip individual files without opening them; only
+files that survive both layers are opened at all, and even then column
+pruning (\Cref{sec:pruning-column}) and row-group statistics
+(\Cref{sec:c-pushdown}) keep working exactly as they do for any Parquet scan.
+Static and dynamic partition pruning (\Cref{ch:pruning}) are what feed the
+literal or derived values these layers filter against --- this chapter is
+about what Iceberg does with a value once Spark has produced one, not about
+producing the value itself.
+
+\begin{table}[htbp]
+\centering
+\caption{The pruning layers a scan passes through, in order}
+\label{tab:ice-pruning-layers}
+\begin{tabular}{@{}lp{7.5cm}@{}}
+\toprule
+\textbf{Layer} & \textbf{Skips} \\
+\midrule
+Manifest list & Whole manifests, via per-manifest partition summaries \\
+Manifest entries & Whole data/delete files, via partition value and column
+  min/max/null statistics \\
+Bloom filter (optional) & Row groups, for an equality lookup on a
+  high-cardinality column \\
+Row-group statistics & Row groups within an opened file, via Parquet's own
+  min/max (\Cref{sec:c-pushdown}) \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Column statistics and predicate pushdown into Iceberg}
-\tbd
+\label{sec:ice-read-stats}
+
+The manifest-level statistics that power the second layer above --- per-file
+min, max, null count, and value count per column --- are exactly the numbers
+the \emph{metrics modes} in the next section control the granularity of.
+Iceberg pushes a Spark filter down to this layer the same way it pushes one
+into Parquet row groups (\Cref{sec:c-pushdown}): a plain comparison against a
+literal resolves; a \texttt{CAST}, a UDF, or a non-deterministic expression
+does not, and defeats file-level pruning for exactly the reasons already
+catalogued there. A filter that fails to push down still runs correctly ---
+Spark applies it after reading --- it is only pruning, not correctness, that
+is lost.
 
 \section{Metrics modes: \texttt{full}, \texttt{truncate}, \texttt{counts}, \texttt{none}}
-\tbd
+\label{sec:ice-read-metrics-modes}
+
+\texttt{write.metadata.metrics.default} (default \texttt{truncate(16)})
+controls how much of each column's statistics get written into the
+manifest in the first place, and it is a write-time property with a direct
+read-time consequence:
+
+\begin{description}
+  \item[\texttt{full}] stores the exact min and max value, uncapped. Best
+        pruning, largest manifest entries --- expensive for a wide string
+        column with long values.
+  \item[\texttt{truncate(16)}] (the default) stores only the first 16 bytes
+        of a string's min/max. Pruning still works for any predicate that
+        differs within the first 16 bytes; two values agreeing on their
+        first 16 bytes look identical to the pruning layer even if they
+        differ further in.
+  \item[\texttt{counts}] keeps null and value counts only, no min/max at
+        all --- rules out "is this file all-null" checks but nothing
+        value-based.
+  \item[\texttt{none}] keeps nothing; the file is never skipped by this
+        layer regardless of the filter.
+\end{description}
+
+\texttt{write.metadata.metrics.column.<col>} overrides the default per
+column, which is the practical lever: set \texttt{full} on the column your
+biggest queries filter by most (the specimen's \texttt{event\_ts}, say) and
+leave wide free-text columns at \texttt{counts} so their manifests do not
+balloon for no pruning benefit.
 
 \section{Bloom filters}
-\tbd
+\label{sec:ice-read-bloom}
+
+Min/max statistics prune well for a range predicate but not for a point
+lookup on a high-cardinality column with no ordering to exploit --- a
+\texttt{WHERE trip\_id = '...'} on an unsorted column has a min/max range
+covering nearly every file, so almost nothing gets skipped. A Parquet bloom
+filter, enabled per column with
+\texttt{write.parquet.bloom-filter-enabled.column.<col>=true}, answers a
+narrower question directly --- "can this row group possibly contain this
+exact value" --- with no false negatives and a small, tunable false-positive
+rate (\texttt{write.parquet.bloom-filter-max-bytes}, 1~MB default, per row
+group). It costs write-time CPU and file size to build and is only worth
+enabling on columns that are actually queried by equality, not by range.
 
 \section{Vectorized reads}
-\tbd
+\label{sec:ice-read-vectorized}
+
+\texttt{read.parquet.vectorization.enabled} (default \texttt{true}) reads a
+\emph{batch} of rows into a columnar, Tungsten-friendly in-memory format
+(\Cref{ch:tungsten}) per call instead of materializing one Java object per
+row --- the same columnar-processing benefit Parquet's own layout is built
+for, carried through into Spark's execution rather than undone by
+row-at-a-time decoding. \texttt{read.parquet.vectorization.batch-size}
+(default 5{,}000) sets how many rows make up one batch; larger batches
+amortize per-batch overhead further but hold more decoded data in memory at
+once.
 
 \section{Split planning}
-\tbd
+\label{sec:ice-read-splits}
+
+\Cref{sec:shape-jobs} described input partitions as roughly
+\texttt{read.split.target-size} (128~MB default) worth of data each; here is
+where that number actually comes from for an Iceberg scan. The planner bins
+manifest entries toward that target, using
+\texttt{read.split.open-file-cost} (4~MB default) as a floor weight per file
+so that many small files are not treated as free to combine --- each one
+still carries roughly 4~MB of assumed per-file overhead in the packing
+decision, whether or not it is actually that large.
+\texttt{read.split.planning-lookback} (10) bounds how many candidate bins the
+packer considers at once, trading perfect packing for bounded planning time
+on a manifest with very many files.
 
 \section{The metadata tables as a diagnostic}
-\tbd
+\label{sec:ice-read-metadata-tables}
+
+Every layer above is inspectable directly, without guessing from query
+latency: \texttt{table.files} lists every live data and delete file with its
+size and record count; \texttt{table.manifests} shows manifest-level
+summaries; \texttt{table.partitions} aggregates file counts and sizes per
+partition, the fastest way to spot a partition accumulating too many small
+files (\Cref{sec:ice-file-size}); \texttt{table.snapshots} and
+\texttt{table.history} show the commit sequence a scan report's
+\texttt{snapshot-id} resolves against. Reading these tables directly, rather
+than inferring layout from query behavior, is usually the faster way to
+confirm a suspicion from the scan report below.
+
+\begin{tip}
+Spark's \texttt{EXPLAIN} on an Iceberg scan reports \texttt{skippedDataManifests},
+\texttt{scannedDataManifests}, \texttt{resultDataFiles}, and
+\texttt{resultDataFileSize} (\Cref{sec:c-scan}) --- the pruning ratio at each
+of the first two layers in \Cref{tab:ice-pruning-layers} is just
+\texttt{skipped / (skipped + scanned)} at the manifest level, and
+\texttt{resultDataFiles} against \texttt{table.files}'s total count at the
+file level.
+\end{tip}
 
 \section{Summary}
-\tbd
+\label{sec:ice-read-summary}
+
+A scan prunes in layers of increasing cost --- manifest list, manifest
+entries, optional bloom filter, row-group statistics --- and each depends on
+the query's filter surviving pushdown the same way it must for plain
+Parquet. Metrics modes decide how much statistics-based pruning is even
+possible per column, trading manifest size against pruning power; bloom
+filters answer point lookups that min/max cannot; vectorized reads carry
+Parquet's columnar layout through execution instead of decoding row by row;
+and split planning is where the 128~MB input-partition target from
+\Cref{ch:shape} is actually computed for an Iceberg table. The metadata
+tables and the scan report's own counters are how you confirm any of this
+actually fired, rather than assuming it from configuration alone.
 
 \exercisehead
 \begin{exercises}
 \item Run a selective query and, from the scan report, compute the fraction of
       data pruned at each layer (partition, manifest, file).
+\item Enable a bloom filter on a high-cardinality column, run an equality
+      lookup before and after, and compare \texttt{resultDataFiles}.
+\item Query \texttt{table.partitions} on a table you suspect has small-file
+      pressure and identify which partitions need compaction first.
 \end{exercises}

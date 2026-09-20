@@ -11,26 +11,200 @@ tables so you can draw the tree from memory.
 \end{chapterintro}
 
 \section{From Hive tables to table formats}
-\tbd
+\label{sec:ice-from-hive}
+
+A classic Hive table's truth is the filesystem: the Hive Metastore records a
+table's schema and its partition-to-directory mapping, but knowing which
+\emph{files} exist inside a partition means listing the directory at query
+time. That listing is slow at scale (\Cref{sec:shape-jobs}'s driver work
+before any task runs), and it is not atomic: a writer that has written three
+of five new files and a reader that lists the directory in between sees a
+table that never existed, with no snapshot to fall back to and no way to tell
+that a write is in progress.
+
+A \emph{table format} --- Iceberg, Delta Lake, Hudi are the three in wide use
+--- moves that truth out of the filesystem and into an explicit metadata layer
+the engine reads instead of listing directories. Every file that belongs to
+the table is named individually, in a structure written once and never
+mutated in place; a commit is complete the instant one pointer is swapped to
+reference a new version of that structure, and a reader either sees the whole
+new version or the whole old one, never a partial write. Everything else in
+this chapter is what that metadata layer is actually made of.
 
 \section{The Iceberg spec, format version 2}
-\tbd
+\label{sec:ice-spec-v2}
+
+Iceberg's metadata is a tree of four kinds of file, each immutable once
+written, each read by the layer above it, top to bottom:
+
+\begin{description}
+  \item[Table metadata file] (JSON) is the object a catalog entry points to.
+        It holds the current schema, the partition spec, the full list of
+        snapshots and a \emph{snapshot log}, and the current snapshot's
+        pointer to its manifest list. This is the one file a reader must
+        locate through the catalog; everything below it is found by following
+        pointers already inside it.
+  \item[Manifest list] (Avro), one per snapshot, is the list of manifest files
+        that make up that snapshot, each entry carrying the manifest's path,
+        its partition-spec ID, and summary statistics (row counts, per-column
+        value ranges) for the partitions it covers --- enough for a reader to
+        skip an entire manifest without opening it, the first pruning layer
+        \Cref{ch:iceberg-read} builds on.
+  \item[Manifests] (Avro) each list a set of data files \emph{or} delete files
+        (never both) as \texttt{manifest\_entry} records, one row per file,
+        carrying the file's path, format, partition values, per-column
+        min/max and null counts, and the sequence number it was added at.
+        Manifests are grouped by partition spec and reused across snapshots
+        when their files have not changed, which is why an append does not
+        rewrite every manifest in the table --- only the ones touched by that
+        commit.
+  \item[Data and delete files] (Parquet on this stack) are the files
+        themselves; delete files are the subject of
+        \Cref{sec:ice-delete-files}.
+\end{description}
+
+\begin{note}
+Nothing in this tree is a directory listing. A reader that wants to know
+which files exist reads exactly the metadata file, manifest list, and
+manifests that the current snapshot's pruning has not already excluded ---
+never the filesystem. \Cref{ch:iceberg-read} is entirely about how much of
+that tree a well-formed query gets to skip.
+\end{note}
 
 \section{Snapshots and the metadata tree}
-\tbd
+\label{sec:ice-snapshots}
+
+A \emph{snapshot} is one committed version of the table: a \texttt{snapshot-id},
+a pointer to its manifest list, an optional \texttt{parent-snapshot-id}
+linking it to the version it replaced, a \texttt{timestamp-ms}, and --- the
+detail that makes format v2 usable for row-level deletes --- a monotonically
+increasing \texttt{sequence-number}. Every file recorded anywhere in the tree
+inherits the sequence number of the snapshot that added it, and that number is
+what lets a reader decide, cheaply, whether a given delete file is even
+relevant to a given data file: a delete only applies to a data file with an
+\emph{older} sequence number, so a data file written after a delete was
+committed is never touched by it.
+
+The table metadata file's \emph{snapshot log} is the ordered history of every
+snapshot the table has ever had, and it is what powers time travel ---
+\texttt{VERSION AS OF} / \texttt{TIMESTAMP AS OF} in Spark SQL resolve to a
+past \texttt{snapshot-id} by walking this log, then read that snapshot's
+manifest list exactly as if it were current. A commit does not delete an
+old snapshot's entry from this log; that is a separate, deliberate operation
+(\texttt{expire\_snapshots}, \Cref{ch:iceberg-write}) --- until it runs, the
+old files a superseded snapshot referenced are still reachable, which is
+also why an append does not immediately reclaim the disk space of files it
+replaced.
+
+\subsection{The commit as an atomic pointer swap}
+\label{sec:ice-commit-swap}
+
+Writing new data and delete files, and new manifests and a new manifest list
+to describe them, does not change the table at all --- none of it is visible
+until the table metadata file's pointer is swapped to reference the new
+snapshot, and that swap is the one atomic operation the catalog performs
+(\Cref{ch:catalogs} covers exactly how). A reader holding an open scan against
+the old snapshot is unaffected by a commit happening concurrently: it keeps
+reading the manifest list it already resolved, which still points at files
+that still exist, because nothing in this tree is ever mutated in place.
 
 \section{Position deletes versus equality deletes}
-\tbd
+\label{sec:ice-delete-files}
+
+Format v1 could only append or replace whole files; format v2's core addition
+is deleting or replacing individual \emph{rows} inside an existing, untouched
+data file by recording the deletion in a separate delete file instead of
+rewriting the data file itself. Two encodings exist, and they trade off
+\emph{write} cost against \emph{read} cost in opposite directions.
+
+\begin{description}
+  \item[Position deletes] identify a deleted row by \texttt{(file\_path,
+        pos)} --- the exact data file and its 0-indexed row ordinal. Applying
+        one at read time is cheap: merge the sorted list of deleted
+        positions against the data file's rows as they stream past, an
+        operation with no lookup and no hashing. Writing one requires
+        knowing the row's exact position, which means the writer has usually
+        already read the data file --- the natural output of a
+        \texttt{MERGE} or \texttt{DELETE} that identifies matching rows
+        during a scan (\Cref{sec:ice-write-merge}).
+  \item[Equality deletes] identify a deleted row by column value ---
+        \texttt{id = 5} --- recorded once, independent of which data files
+        happen to contain a matching row. Writing one is cheap, because the
+        writer needs to know only the key, not any row's position; it is the
+        only option available to a writer that never reads the data it is
+        deleting, which is exactly the position a streaming or CDC job is in
+        (\Cref{ch:streaming}). Applying one at read time costs a value
+        comparison against every row of every data file it could apply to,
+        which is why a table accumulating equality deletes without
+        compaction gets measurably slower to read from over time.
+\end{description}
+
+\begin{tip}
+A batch \texttt{MERGE INTO} on this stack writes position deletes, because
+the join already located the exact rows; a table only accumulates equality
+deletes if something writes them deliberately (typically a streaming
+upsert). If read performance is degrading on a table you know only runs
+batch merges, the delete files are not why --- look at file count and
+partition pruning instead (\Cref{ch:iceberg-read}).
+\end{tip}
 
 \section{Iceberg, Delta Lake, and Hudi}
-\tbd
+\label{sec:ice-comparison}
+
+All three formats solve the same problem this chapter opened with ---
+metadata as truth instead of directory listing --- with different defaults.
+\Cref{tab:ice-comparison} is not a ranking; it is what to expect walking into
+a table built on one of the others.
+
+\begin{table}[htbp]
+\centering
+\caption{Where the three table formats put their defaults}
+\label{tab:ice-comparison}
+\begin{tabular}{@{}lp{3.3cm}p{3.3cm}p{3.3cm}@{}}
+\toprule
+ & \textbf{Iceberg} & \textbf{Delta Lake} & \textbf{Hudi} \\
+\midrule
+Metadata & Manifest list + manifests (Avro) & JSON + Parquet
+  transaction log & Timeline + per-partition metadata \\
+Default write mode & Copy-on-write; merge-on-read opt-in per table & Copy-on-write;
+  deletion vectors opt-in & Merge-on-read is the common case \\
+Partitioning & Hidden, engine-computed (\Cref{ch:iceberg-layout}) & Explicit
+  partition columns & Explicit partition columns \\
+Primary engine origin & Netflix / multi-engine from the start & Databricks /
+  Spark-first & Uber / Spark-first, CDC-oriented \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The mechanism-level questions this book answers --- what makes a commit
+atomic, why a delete file changes read cost, why hidden partitioning survives
+a scheme change --- transfer directly to Delta and Hudi tables even though
+the concrete file layout differs; only the exact metadata format is
+Iceberg-specific.
 
 \section{Summary}
-\tbd
+\label{sec:ice-spec-summary}
+
+A table format replaces filesystem listing with an explicit, immutable
+metadata tree: a catalog-resolved metadata file points to a manifest list per
+snapshot, which points to manifests, which list data and delete files. A
+commit is one atomic swap of that top pointer, which is why a reader never
+sees a partial write. Format v2's sequence numbers let a reader tell which
+delete files apply to which data files without comparing every pair;
+position deletes are cheap to read and require the writer to have already
+scanned the row, while equality deletes are cheap to write and progressively
+more expensive to read as they accumulate. The next chapter covers exactly
+how that top-level pointer swap becomes atomic when two writers race for it.
 
 \exercisehead
 \begin{exercises}
 \item Commit three appends to a table, then inspect \texttt{metadata\_log\_entries},
       \texttt{snapshots}, and \texttt{manifests}. Explain how many metadata files
       and manifests exist and why.
+\item Run one \texttt{MERGE INTO} and, separately, simulate an equality-delete
+      write. Compare the resulting delete files' schema in the
+      \texttt{files} metadata table.
+\item Query a table with \texttt{VERSION AS OF} an old snapshot after a
+      subsequent commit. Confirm from \texttt{metadata\_log\_entries} which
+      manifest list that snapshot still points to.
 \end{exercises}
