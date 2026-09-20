@@ -45,9 +45,14 @@ properties differ.
 A REST catalog (\texttt{spark.sql.catalog.<name>.type=rest}, with a
 \texttt{uri}) puts a dedicated service between every engine and the metadata
 store, instead of each engine's client implementing Metastore's Thrift
-protocol directly. The service owns the atomic swap internally --- backed by
-whatever it chooses (a database, HMS, cloud-native locking) --- and every
-client, regardless of language or engine, calls the same small HTTP API to
+protocol directly. A commit is one HTTP request --- typically a
+\texttt{POST} to that table's endpoint carrying the base metadata file's
+identity (its UUID or version number) alongside the new one --- and the
+service rejects it with a conflict response if its own record of the
+current metadata no longer matches that base, the same expected-old-value
+check HMS does, just enforced by application code and its own backing store
+(a database row, most commonly) instead of by a Thrift call into HMS. Every
+client, regardless of language or engine, calls this same small HTTP API to
 read or commit a table. The practical difference from HMS shows up at the
 edges: a REST catalog can support features HMS's schema was never built for
 (multi-table transactions, credential vending scoped per table) without every
@@ -93,8 +98,42 @@ When step 4 fails because another commit already moved the pointer, Iceberg
 does not discard the writer's work --- it re-reads the new current metadata
 file, re-applies the same logical change on top of it (a new manifest
 referencing the same underlying data/delete files, at most a cheap manifest
-rewrite rather than a data rewrite), and retries the swap. \Cref{tab:cat-retry-props}
+rewrite rather than a data rewrite), and retries the swap. That rewrite is
+cheap specifically because a manifest is a small listing of file paths and
+statistics (\Cref{sec:ice-spec-v2}), not the data itself --- its size tracks
+the number of files touched by \emph{this} commit, entirely decoupled from
+how large the table as a whole has grown. \Cref{tab:cat-retry-props}
 controls how persistent that retry is.
+
+\paragraph{Watching it happen.} Say a nightly compaction job
+(\texttt{rewrite\_data\_files} on \texttt{orders}, \Cref{ch:iceberg-write})
+and an ad-hoc \texttt{INSERT} from a Kyuubi user session both reach step~4
+within the same second. Whichever request the catalog processes first ---
+say the compaction job --- succeeds: \texttt{metadata\_location} moves from
+\texttt{v42.metadata.json} to \texttt{v43.metadata.json}. The
+\texttt{INSERT}'s swap arrives a moment later still expecting \texttt{v42}
+as the base, HMS rejects it (the expected-old-value check fails), and
+Iceberg's client re-reads \texttt{v43} as the new base, rebuilds a manifest
+referencing its two new files on top of it, and retries --- succeeding as
+\texttt{v44}. Querying the table's snapshot history right after both
+commits shows exactly this, with no failure visible to either job:
+
+\begin{lstlisting}[language=SQL,caption={Confirming a retried commit in the snapshot log},captionpos=b]
+SELECT snapshot_id, parent_id, committed_at, operation
+FROM lakehouse.analytics.orders.snapshots
+ORDER BY committed_at DESC LIMIT 2;
+
+-- snapshot_id | parent_id | committed_at            | operation
+-- 5821...044  | 5821...043| 2026-03-08 02:00:01.812  | append
+-- 5821...043  | 5821...042| 2026-03-08 02:00:01.406  | replace
+\end{lstlisting}
+
+Two snapshots land within half a second of each other, each with a
+different \texttt{parent\_id} --- \texttt{v43} (the \texttt{replace} from
+compaction) and \texttt{v44} (the \texttt{append} from the retried
+\texttt{INSERT}, now parented on \texttt{v43} rather than the \texttt{v42}
+it originally read). Neither job's caller ever saw an error; the retry
+happened entirely inside the client library.
 
 \begin{table}[htbp]
 \centering
@@ -147,6 +186,17 @@ which matters the moment more than one catalog is registered (a Hive-backed
 one for the existing warehouse, a REST-backed one for a newer set of tables):
 the catalog name in the identifier, not any global default, decides which
 metadata store and which commit protocol from this chapter actually apply.
+
+\begin{note}
+\texttt{org.apache.iceberg.spark.SparkCatalog} has to actually be on the
+JVM's classpath for this registration to resolve to anything --- on this
+stack, that means the Iceberg Spark runtime jar is baked into the engine
+image Kyuubi launches (or added via an init container), not something set
+by this config block alone. A catalog name that fails to resolve with a
+\texttt{ClassNotFoundException} rather than a clear catalog-not-found error
+is almost always this: the config is correct, the jar is missing from the
+engine that tried to honor it.
+\end{note}
 
 \section{Summary}
 \label{sec:cat-summary}

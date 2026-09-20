@@ -32,28 +32,51 @@ whole computation from the beginning.
 
 A source only needs to support one contract: given a starting offset, return
 the new records since it, and report the latest offset available. Kafka is
-the common source on this kind of stack, with a Kafka partition's offset
-serving directly as the streaming offset; a sink is symmetric, needing to
-either support exactly-once writes idempotently keyed by batch ID, or
-tolerate the batch being reprocessed after a failure. Writing to an Iceberg
-table as a sink (\Cref{sec:stream-iceberg-write}) satisfies this because a
-commit is already atomic (\Cref{sec:ice-commit-swap}) --- a batch that failed
-after writing files but before committing simply never became visible, and
+the most common source in the wild, with a Kafka partition's offset serving
+directly as the streaming offset, and is used here as the running example
+for exactly that reason --- nothing in this chapter is Kafka-specific,
+though, and the same offset contract is what lets Spark treat a directory
+of arriving files (the \texttt{file} source, polling GCS for new objects
+under a prefix, using each file's name as its offset) exactly the same way.
+A sink is symmetric, needing to either support exactly-once writes
+idempotently keyed by batch ID, or tolerate the batch being reprocessed
+after a failure. Writing to an Iceberg table as a sink
+(\Cref{sec:stream-iceberg-write}) satisfies this because a commit is
+already atomic (\Cref{sec:ice-commit-swap}) --- a batch that failed after
+writing files but before committing simply never became visible, and
 retrying it from the same checkpointed offset produces the same rows again
-with no duplicate ever committed.
+with no duplicate ever committed. A stream ingesting order events into the
+specimen's \texttt{orders} table, for instance, would run a Kafka source
+(one partition per, say, a coarse hash of \texttt{customer\_id}) into a
+\texttt{writeStream} targeting \texttt{lakehouse.analytics.orders}, with
+every micro-batch's rows carrying the same columns Chapter 1's batch
+queries already read.
 
 \section{Event time and watermarking}
 \label{sec:stream-watermark}
 
-Grouping by \emph{event time} (when something happened, carried in the data)
-rather than \emph{processing time} (when Spark saw it) needs a rule for when
-a time-based group is finally complete, since late-arriving data can always
-show up for a window Spark already emitted a result for. A
-\emph{watermark} (\texttt{withWatermark("event\_ts", "10 minutes")})
-declares how late data is tolerated to be: Spark tracks the maximum event
-time seen so far and treats any window ending more than the watermark delay
-before that maximum as closed, discarding (or routing separately) anything
-arriving later for it. The watermark is also the mechanism that bounds state
+Grouping by \emph{event time} (when something happened, carried in the data
+--- the specimen's \texttt{order\_ts}) rather than \emph{processing time}
+(when Spark saw it) needs a rule for when a time-based group is finally
+complete, since late-arriving data can always show up for a window Spark
+already emitted a result for. A \emph{watermark}
+(\texttt{withWatermark("order\_ts", "10 minutes")}) declares how late data
+is tolerated to be: Spark tracks the maximum \texttt{order\_ts} seen so far
+and treats any window ending more than the watermark delay before that
+maximum as closed, discarding (or routing separately) anything arriving
+later for it.
+
+\begin{lstlisting}[language=text,numbers=none,caption={Which orders close a 10-minute window, and which arrive too late},captionpos=b]
+Max order_ts seen so far: 10:47   ->  watermark = 10:37
+Window [10:30, 10:40) already closed (ends before 10:37)   -> emitted, forgotten
+Window [10:40, 10:50) still open   (ends after 10:37)      -> still accepting rows
+An order_ts=10:35 row arrives late -> falls in the closed [10:30,10:40)
+                                       window -> dropped, not counted
+An order_ts=10:41 row arrives late -> falls in the still-open
+                                       [10:40,10:50) window -> counted normally
+\end{lstlisting}
+
+The watermark is also the mechanism that bounds state
 size (\Cref{sec:stream-state}) --- without one, a windowed aggregation would
 have to keep every window's partial state forever, since nothing would ever
 tell it a window was safe to forget.
@@ -64,14 +87,21 @@ tell it a window was safe to forget.
 A windowed aggregation or a streaming join needs to remember partial results
 across micro-batches --- this is the \emph{state store}, checkpointed
 alongside the offsets so it survives a restart. The default in-memory
-provider keeps state as JVM objects subject to the same heap and GC pressure
-as any other data in \Cref{sec:mem-model}; \texttt{RocksDBStateStoreProvider}
-(\conf{spark.sql.streaming.stateStore.providerClass}) instead keeps state in
-an embedded RocksDB instance per task, off the JVM heap, trading some access
-latency for a state size that does not compete with execution memory at all
---- the practical choice once state size (a wide window, a large number of
-distinct keys) makes the default provider's GC pressure the bottleneck rather
-than the actual streaming computation.
+provider keeps state as JVM objects, off-heap's usual trade from
+\Cref{sec:tungsten-offheap} in reverse: fast access, but subject to the
+same GC pressure as any other heap data once state grows large.
+\texttt{RocksDBStateStoreProvider}
+(\conf{spark.sql.streaming.stateStore.providerClass}) moves state into an
+embedded RocksDB instance per task instead --- not a plain off-heap byte
+buffer the way Tungsten's pages are, but a full log-structured merge tree:
+writes land in an in-memory buffer that flushes to immutable on-disk
+sorted files, which are periodically compacted in the background to bound
+how many files a read has to check. That structure is what lets RocksDB
+hold far more state than fits comfortably in the JVM heap, at the cost of
+an occasional compaction pause and a disk read for state that is not in
+its block cache --- the practical choice once state size (a wide window, a
+large number of distinct keys) makes the default provider's GC pressure the
+bottleneck rather than the actual streaming computation.
 
 \section{Output modes and triggers}
 \label{sec:stream-modes-triggers}
@@ -81,13 +111,30 @@ only new rows that are already final (rows in a closed watermark window, or
 a stateless transform); \texttt{update} emits any row whose aggregate result
 changed this batch, including one already emitted before; \texttt{complete}
 re-emits the entire result table every batch, viable only for a small
-aggregate. \emph{Trigger} controls when a micro-batch runs:
-\texttt{ProcessingTime} fires on a fixed interval regardless of how much data
-is waiting; \texttt{Once} (and its successor, \texttt{AvailableNow}) runs
-exactly one batch over everything currently available and stops, which is
-the trigger that turns Structured Streaming into a scheduled incremental
-batch job rather than an always-on process --- a useful way to get exactly-once
-incremental processing without paying for a permanently running cluster.
+aggregate. Take a streaming count of orders per category, windowed hourly:
+under \texttt{update}, a batch that saw three new \texttt{electronics}
+orders emits one row, \texttt{(electronics, count=+3\ldots)}, for the
+category that changed --- categories with no new orders this batch emit
+nothing; under \texttt{complete}, the same batch emits one row for
+\emph{every} category, changed or not, which is only affordable because the
+number of categories is small and fixed, unlike the number of orders.
+\texttt{append} would reject this query outright, because a running count
+has no notion of "final" until its window closes.
+
+\emph{Trigger} controls when a micro-batch runs: \texttt{ProcessingTime}
+fires on a fixed interval regardless of how much data is waiting, running
+the same \texttt{StreamExecution} loop from \Cref{sec:stream-microbatch}
+forever; \texttt{Once} (and its successor, \texttt{AvailableNow}) reuses
+that identical loop for exactly one iteration --- it asks the source for
+everything available, runs one micro-batch over all of it, checkpoints, and
+then simply does not ask for a next range --- rather than following a
+separate code path, which is exactly why the claim that streaming is "the
+same query engine, incrementally" holds even in this mode. This is the
+trigger that turns Structured Streaming into a scheduled incremental batch
+job rather than an always-on process: point a nightly Kubernetes cron job
+at a streaming query with \texttt{AvailableNow}, and it processes everything
+that landed since the last run and exits, without paying for a permanently
+running cluster.
 
 \section{Exactly-once and the commit}
 \label{sec:stream-exactly-once}
@@ -99,12 +146,19 @@ after a mid-batch failure replays the same range rather than skipping or
 duplicating input; and the sink must make committing that batch's output
 idempotent, so replaying the same range twice does not produce the output
 twice. Writing to Iceberg gets the second half for free, structurally:
-because a commit is one atomic snapshot append keyed to the batch, a
-retried batch either has not committed yet (retry proceeds normally) or has
-already committed (the retry's commit attempt for already-applied changes
-is what the streaming write path's own idempotency tracking, keyed by
-batch ID, is designed to detect and skip) --- there is no in-between state
-where a duplicate partial write is visible to a reader.
+Spark's Iceberg sink writes each micro-batch's incrementing batch id into
+that snapshot's own summary metadata (\texttt{spark.batch-id}) as part of
+the ordinary atomic commit from \Cref{sec:ice-commit-swap} --- no extra
+write, no separate bookkeeping table. On a retry, before committing, the
+sink checks the table's existing snapshots for one already carrying that
+batch id: if the previous attempt's commit already succeeded (crashed only
+after the swap, before acknowledging the driver), the sink finds its own
+batch id already there and skips committing again; if the previous attempt
+never reached the swap, no snapshot carries that id yet and the commit
+proceeds normally. Either way there is no in-between state where a
+duplicate partial write is visible to a reader --- the batch id living
+inside the same atomic commit it protects is what makes the check
+race-free.
 
 \section{Writing to Iceberg: cadence, small files, maintenance}
 \label{sec:stream-iceberg-write}
@@ -119,14 +173,28 @@ against a source producing a few megabytes per batch commits a new,
 small-file-laden snapshot six times a minute, all day, whether or not the
 table's total data volume ever justifies that many files.
 
+\paragraph{Sizing it for the specimen.} Say order events arrive steadily
+enough to add 5~MB of new rows to \texttt{orders} per micro-batch, and the
+write uses \conf{write.distribution-mode}\,=\,\texttt{hash}
+(\Cref{sec:ice-write-distribution}), so each batch produces roughly one file
+per touched partition rather than scattering across all of them --- close
+to one 5~MB file per commit at low traffic. At a 10-second
+\texttt{ProcessingTime} trigger that is $6 \times 60 = 360$ commits, and so
+also roughly 360 new small files, every hour: $360 \times 24 \approx 8{,}600$
+files a day, almost all far below the 512~MB target from
+\Cref{sec:ice-file-size}. Widening the trigger to 2 minutes drops that to
+30 commits an hour --- 720 files a day, each nearer 60~MB --- at the cost of
+up to 2 minutes' extra latency before a row is queryable instead of up to
+10 seconds.
+
 \begin{tip}
 The lever is the trigger interval traded against latency, not the Iceberg
-side of the write. Widening \texttt{ProcessingTime} from 10 seconds to a few
-minutes multiplies the average file size roughly proportionally for the
-same throughput, at the cost of that much more end-to-end latency before a
-row becomes queryable --- decide the interval from the latency budget first,
-then treat \Cref{sec:ice-write-streaming}'s continuous-maintenance schedule
-as the backstop for whatever file size the chosen interval implies, not as a
+side of the write. Widening \texttt{ProcessingTime} multiplies the average
+file size roughly proportionally for the same throughput, at the cost of
+that much more end-to-end latency before a row becomes queryable ---
+decide the interval from the latency budget first, then treat
+\Cref{sec:ice-write-streaming}'s continuous-maintenance schedule as the
+backstop for whatever file size the chosen interval implies, not as a
 substitute for choosing a sane interval.
 \end{tip}
 

@@ -59,6 +59,21 @@ one file per row's worth of metadata. Always partition on a transform coarse
 enough to group many rows per partition.
 \end{tip}
 
+\paragraph{Choosing the specimen's actual spec.} \texttt{orders} holds a few
+hundred million rows a month (\Cref{app:refenv}); at roughly 70 bytes a row
+once Parquet-encoded, that is on the order of 20~GB a month, or
+$\sim$700~MB a day. \texttt{day(order\_ts)} lands squarely inside the
+128~MB--1~GB per-partition target this chapter's exercises ask you to hit,
+with room to spare before an \texttt{hour} transform would be justified ---
+\texttt{hour} only earns its keep once daily volume grows past roughly
+15--20~GB, the point past which a single day's partition starts exceeding a
+few gigabytes and a query filtering a narrow time window would otherwise
+scan a whole day's files to find a few hours' worth of rows. This is the
+concrete version of the abstract choice \Cref{sec:ice-partitioning}
+describes: pick the coarsest transform that still keeps a typical partition
+in the target band, and re-derive it as volume grows rather than guessing
+once and never revisiting it.
+
 \section{Partition evolution}
 \label{sec:ice-partition-evolution}
 
@@ -91,12 +106,26 @@ the same statistics-based pruning \Cref{sec:c-pushdown} described for row
 groups, just at the file level.
 
 A single sort order only helps predicates on the columns it is sorted by,
-front to back. \emph{Z-ordering} (\texttt{rewrite\_data\_files} with
-\texttt{sort\_order} type \texttt{zorder}) interleaves the bits of several
-columns into one sort key instead, trading perfect single-column ordering for
-imperfect-but-useful ordering on every column in the set simultaneously ---
-the right choice when queries filter on different columns unpredictably
-rather than one column consistently.
+front to back --- a table sorted by \texttt{(category, customer\_id)} gives
+\texttt{category} clean file-skipping and gives \texttt{customer\_id} almost
+none, because rows are grouped by category first and only ordered by
+customer \emph{within} that grouping.
+
+\emph{Z-ordering} (\texttt{rewrite\_data\_files} with \texttt{sort\_order}
+type \texttt{zorder}) fixes exactly that asymmetry by building one sort key
+out of \emph{interleaved bits} from several columns, so no single column
+gets front-of-key priority. Interleaving means taking each column's bits one
+at a time in round-robin order: with two columns $A$ and $B$ whose binary
+values are $a_2a_1a_0$ and $b_2b_1b_0$, the Z-order key is
+$a_2b_2a_1b_1a_0b_0$. Sorting by that combined key groups rows that are
+close in \emph{either} column, because a small change in $A$ or $B$ alone
+only flips a few bits near the end of the interleaved key --- rows near
+each other in the two-dimensional $(A, B)$ space end up near each other in
+the one-dimensional sort order, in both directions at once, at the cost of
+neither column getting the clean front-of-key locality \Cref{sec:c-pushdown}
+described for a plain sort. This is the right trade when queries filter on
+\texttt{category} sometimes and \texttt{customer\_id} other times, rather
+than one column consistently.
 
 \section{Target file size and the small-files problem}
 \label{sec:ice-file-size}
@@ -133,9 +162,23 @@ mechanics from \Cref{ch:shuffle}, applied to a write instead of a read.
   \item[\texttt{range}] shuffles by a sampled range of the sort order instead
         of a hash, producing files with tighter, non-overlapping value
         ranges --- the write-time complement to \Cref{sec:ice-sort-order}'s
-        pruning benefit, at a higher planning cost (a sampling pass before
-        the real shuffle).
+        pruning benefit. A hash sends a given key to the same partition every
+        time, but two different keys can land in the same partition or two
+        adjacent keys can land in different ones --- a hash has no notion of
+        order. Range partitioning needs to know \emph{where} the value
+        boundaries between partitions should fall to keep them evenly sized,
+        so a lightweight sampling pass reads a small fraction of the rows
+        first, estimates the value distribution, and picks boundaries from
+        that sample before the real, boundary-aware shuffle runs --- the
+        extra planning cost this mode carries.
 \end{description}
+
+For the specimen table, this is the mode that determines what a write does
+with the viral product from \Cref{sec:shape-ui}'s skew: under \texttt{hash}
+distribution, every row for that one \texttt{product\_id} lands in the same
+write task regardless of how many there are, so a write task for that key
+can end up far larger than the others --- the write-side version of the
+same skew, covered in full in \Cref{sec:ice-write-skew}.
 
 \section{Summary}
 \label{sec:ice-layout-summary}

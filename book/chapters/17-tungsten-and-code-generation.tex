@@ -20,12 +20,32 @@ primitives, object headers --- is exactly the per-object overhead
 buffer instead of a graph of objects: a fixed-size null-tracking bitset
 first, then one 8-byte slot per field (a primitive stored inline, or an
 offset-and-length pair pointing into a variable-length region at the end of
-the same buffer for a string or binary value). Reading a field is a direct
-byte-offset access with no pointer chasing and no per-field object to
-allocate or garbage-collect; the trade is that every value must fit this
-fixed encoding, which is exactly why Catalyst carries a strict, fully
-resolved schema (\Cref{ch:catalyst}) all the way to execution --- the row
-format has no room for a value whose type or size was not known in advance.
+the same buffer for a string or binary value). \Cref{fig:unsaferow-layout}
+shows this for one row of the specimen's \texttt{orders} table: three fixed
+8-byte fields sit inline, while \texttt{product\_id} --- a string, so its
+length varies row to row --- carries only an (offset, length) pair in its
+fixed slot, pointing further into the same buffer where its actual bytes
+live.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{unsaferow-layout.pdf}
+  \caption{One \texttt{UnsafeRow}: a null bitset, one 8-byte slot per field,
+  and a variable-length region past the last fixed slot. A fixed field's
+  slot holds its value directly; a variable field's slot holds an
+  (offset, length) pointer into the variable region of the same buffer.}
+  \label{fig:unsaferow-layout}
+\end{figure}
+
+Reading a field is a direct byte-offset access into this buffer --- for a
+fixed field, read 8 bytes at a statically known offset; for a variable
+field, read the (offset, length) pair, then read that many bytes starting
+at that offset --- with no pointer chasing through a graph of objects and
+no per-field object to allocate or garbage-collect. The trade is that every
+value must fit this fixed encoding, which is exactly why Catalyst carries a
+strict, fully resolved schema (\Cref{ch:catalyst}) all the way to execution
+--- the row format has no room for a value whose type or size was not known
+in advance.
 
 \section{Off-heap memory management}
 \label{sec:tungsten-offheap}
@@ -72,19 +92,59 @@ one generated Java method, using a \emph{produce/consume} protocol: each
 operator's \texttt{produce()} emits the code that generates its rows, and
 calls into the next operator's \texttt{consume()} inline rather than through
 a virtual dispatch --- the whole fused chain becomes one straight-line loop
-the JIT compiler can then optimize as a single unit. \texttt{EXPLAIN CODEGEN}
-prints the actual generated Java source; in the tree-form plan, an asterisk
-plus a number (\texttt{*(1)}, \texttt{*(2)}, \ldots) marks which operators
-were fused into which generated stage --- operators sharing a number were
-compiled together into one method, and a number change marks a boundary
-codegen could not cross.
+the JIT compiler can then optimize as a single unit. The \texttt{*(n)}
+markers this produces in a plan were already introduced in
+\Cref{sec:wholestage-codegen} and catalogued in \Cref{sec:c-codegen}; what
+those two places don't show is what the generated method actually looks
+like, which is the point of running \texttt{EXPLAIN CODEGEN} yourself rather
+than taking the marker on faith.
+
+\Cref{lst:shape-query}'s stage~1 scan-and-filter of \texttt{orders}
+(\Cref{sec:catalyst-explain}'s plan, node \texttt{*(1)}) compiles to
+something close to this, trimmed to the produce/consume skeleton:
+
+\begin{lstlisting}[language=text,numbers=none,caption={EXPLAIN CODEGEN, trimmed to the *(1) scan-filter stage},captionpos=b]
+== Subtree 1 / 2 (maxMethodCodeSize:389) ==
+*(1) Filter (order_ts#12 >= 2026-03-01 AND order_ts#12 < 2026-03-08)
++- *(1) ColumnarToRow
+   +- BatchScan orders
+
+Generated code:
+final class GeneratedIteratorForCodegenStage1 extends BufferedRowIterator {
+  protected void processNext() throws java.io.IOException {
+    while (scan_input.hasNext()) {
+      InternalRow scan_row = (InternalRow) scan_input.next();
+      long scan_value = scan_row.getLong(1);           // order_ts, inline field
+      // Filter.consume(): the range check, straight-line, no virtual call
+      if (scan_value >= 1772323200000000L
+          && scan_value < 1772928000000000L) {
+        append(scan_row);                              // -> next operator's consume()
+      }
+    }
+  }
+}
+\end{lstlisting}
+
+One loop, one method: the scan's \texttt{next()}, the columnar-to-row
+conversion, and the filter's comparison all inline into
+\texttt{processNext()} with no call back out to a generic \texttt{Filter}
+object per row --- this is the whole payoff whole-stage codegen exists for,
+made concrete instead of asserted.
 
 \begin{note}
-Not everything fuses. A full sort-merge join or an aggregation with certain
-UDFs breaks the chain --- visible as the codegen number resetting, or a plan
-node with no asterisk at all --- because their control flow (materializing a
-full side of a join, or an opaque function call) does not fit the linear
-produce/consume model.
+Not everything fuses. An \texttt{Exchange} always breaks the chain --- you
+cannot generate one straight-line loop across a network boundary, so codegen
+restarts on the far side of every shuffle, exactly the stage boundary
+\Cref{sec:catalyst-physical} already described from the other direction. A
+sort-merge join itself, despite materializing state per key, does implement
+\texttt{CodegenSupport} and fuses like any other operator --- this is why
+the specimen's own plan (\Cref{lst:explain-anatomy}) shows \texttt{*(2)
+SortMergeJoin Inner (9)} carrying a star rather than breaking the chain.
+What genuinely does not fuse is an aggregate whose buffer needs arbitrary
+objects (\texttt{ObjectHashAggregate} falling back past its distinct-key
+threshold, \Cref{sec:c-agg}) or a row-at-a-time UDF Catalyst cannot
+generate code for at all --- both visible as a plan node with no asterisk,
+or the codegen number resetting around it.
 \end{note}
 
 \section{Expression code generation}
@@ -113,10 +173,15 @@ buffer per \emph{column} across many rows --- exactly the layout
 \Cref{sec:ice-read-vectorized}'s vectorized Parquet reader produces directly
 from the file's own columnar encoding, with no row-oriented conversion step
 in between. This is also the representation a Pandas UDF or Arrow-based
-Python UDF communicates through: converting a batch to and from Arrow's wire
-format is fast specifically because both sides already agree on a
-columnar, contiguous layout, unlike a row-at-a-time Python UDF that must
-convert one Python object per row.
+Python UDF communicates through, and the reason it is fast is more specific
+than "same layout": \texttt{ColumnarBatch} and Arrow's own in-memory format
+are close enough in byte-level structure that handing a batch to the Python
+process can reuse the same underlying buffers rather than walking the data
+and re-encoding it --- the JVM and Python sides read the identical bytes
+over shared memory, with no per-value (de)serialization loop in between.
+A row-at-a-time Python UDF has no such shortcut: every row crosses the
+JVM/Python boundary as its own converted Python object, one round trip per
+row instead of one per batch.
 
 \section{Summary}
 \label{sec:tungsten-summary}

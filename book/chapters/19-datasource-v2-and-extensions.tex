@@ -14,17 +14,32 @@ statistics, and how to add your own Catalyst rules and SQL extensions.
 \label{sec:dsv2-api}
 
 DataSource V2 (DSv2) is the interface contract between Catalyst and an
-external table source: a \texttt{TableProvider} resolves a table name to a
-\texttt{Table}, which reports its schema and capabilities and, for a read,
-hands back a \texttt{ScanBuilder} the planner negotiates with
-(\Cref{sec:dsv2-pushdown}) before it ever produces a physical scan. This is
-the same interface every Iceberg catalog type from \Cref{ch:catalogs}
-implements underneath, and it is also what lets a single Spark session read
-an Iceberg table, a JDBC table, and a plain Parquet directory through one
-consistent planner path --- DSv2 does not know or care that Iceberg has a
-metadata tree at all; from the planner's point of view, Iceberg is simply an
-implementation of this contract that happens to be unusually good at
-answering its questions cheaply.
+external table source, with a symmetric shape on the read and write sides.
+For a read, a \texttt{TableProvider} resolves a table name to a
+\texttt{Table}, which reports its schema and capabilities and hands back a
+\texttt{ScanBuilder} the planner negotiates with (\Cref{sec:dsv2-pushdown})
+before it ever produces a physical scan. For a write, the same
+\texttt{Table} hands back a \texttt{WriteBuilder}, which produces a
+\texttt{BatchWrite} (or, for a streaming sink, a \texttt{StreamingWrite}):
+Spark asks it for one \texttt{DataWriterFactory}, ships that factory to
+every executor, and each task's \texttt{DataWriter} independently writes
+its own partition's rows and returns a small \texttt{WriterCommitMessage}
+--- a per-task summary (for Iceberg, the list of files that task wrote) ---
+back to the driver. Only once \emph{every} task's message has arrived does
+the driver call \texttt{BatchWrite.commit()} with the whole collected set,
+which is the DSv2-level hook Iceberg's atomic pointer swap
+(\Cref{sec:cat-swap}) runs behind: nothing becomes visible until this one
+call, so a job that fails after some tasks finish writing simply never
+reaches \texttt{commit()}, and no partial write is ever visible to a
+reader.
+
+This is the same interface every Iceberg catalog type from
+\Cref{ch:catalogs} implements underneath, and it is also what lets a single
+Spark session read an Iceberg table, a JDBC table, and a plain Parquet
+directory through one consistent planner path --- DSv2 does not know or
+care that Iceberg has a metadata tree at all; from the planner's point of
+view, Iceberg is simply an implementation of this contract that happens to
+be unusually good at answering its questions cheaply.
 
 \section{Pushdown negotiation}
 \label{sec:dsv2-pushdown}
@@ -40,7 +55,25 @@ as a safety net) --- exactly the distinction behind
 Iceberg's manifest-and-statistics pruning is not rejected outright, it is
 simply reported back as unhandled, and Spark's own \texttt{Filter} node
 downstream is what actually enforces it, correctly but without any pruning
-benefit. \texttt{SupportsPushDownRequiredColumns} is the same negotiation for
+benefit.
+
+For the specimen's own \texttt{o.order\_ts >= TIMESTAMP '2026-03-01
+\ldots'} filter, this negotiation is why the scan node shows it in
+\emph{both} \texttt{PartitionFilters} and \texttt{PushedFilters}
+(\Cref{sec:c-scan}) rather than as a separate \texttt{Filter} operator
+above the scan: Iceberg's \texttt{ScanBuilder} claims the predicate as
+fully handled --- it resolves against \texttt{day(order\_ts)} for partition
+skipping \emph{and} against row-group statistics for file-level skipping,
+so nothing is left over for Spark to re-check. Changing it to
+\texttt{WHERE CAST(o.order\_ts AS STRING) >= '2026-03-01'} breaks the
+negotiation, not the filter's correctness: the \texttt{CAST} makes the
+predicate one \texttt{SupportsPushDownFilters} cannot resolve against
+either partition values or column statistics, so it reports the filter back
+as unhandled, and a standalone \texttt{Filter} node reappears above the
+scan, evaluating the same logical condition row-by-row after every row has
+already been read.
+
+\texttt{SupportsPushDownRequiredColumns} is the same negotiation for
 column pruning (\Cref{sec:pruning-column}), and
 \texttt{SupportsPushDownAggregates} lets a narrow class of aggregates
 (\texttt{COUNT}, \texttt{MIN}, \texttt{MAX} on a column with the needed
@@ -63,6 +96,19 @@ and it is also why an Iceberg table with well-maintained metadata tends to
 get better join-strategy decisions at planning time than a Hive table
 relying on a stale, manually triggered \texttt{ANALYZE TABLE}.
 
+\texttt{EXPLAIN COST} on the specimen's join surfaces exactly this number:
+against \texttt{dim\_product} filtered by nothing, it might report
+\texttt{sizeInBytes=8.4MB, rowCount=1.2E4} --- comfortably under
+\conf{spark.sql.autoBroadcastJoinThreshold}'s 10~MB, which is what actually
+lets \Cref{ch:joins}'s broadcast decision fire once statistics exist at
+all. Against \texttt{orders} filtered by the specimen's own
+\texttt{order\_ts} range, the reported \texttt{sizeInBytes} reflects only
+the seven partitions \texttt{PartitionFilters} already resolved to, not the
+whole table --- \texttt{SupportsReportStatistics} answers \emph{after}
+partition pruning has narrowed the manifest list, not before, so a
+tightly-pruned scan of a huge table can legitimately report itself as
+small.
+
 \section{Custom Catalyst rules and SQL extensions}
 \label{sec:dsv2-extensions}
 
@@ -73,11 +119,24 @@ physical planning, alongside Spark's own rules from
 \Cref{sec:catalyst-rules} --- as well as entirely new SQL syntax the parser
 would not otherwise recognize. Iceberg's own
 \texttt{IcebergSparkSessionExtensions} is exactly this mechanism: it is how
-\texttt{CALL} statements (\texttt{CALL catalog.system.rewrite\_data\_files(...)},
-\Cref{ch:iceberg-write}) and Iceberg-specific SQL like
+\texttt{CALL} statements and Iceberg-specific SQL like
 \texttt{ALTER TABLE ... ADD PARTITION FIELD} become valid syntax at all ---
 none of it is native Spark SQL; it is grafted on through the same public
-extension point available to any table source.
+extension point available to any table source. The compaction call this
+book has referenced without showing, for the small-files pressure both
+\Cref{sec:ice-file-size} and \Cref{sec:stream-iceberg-write} describe, is
+one such statement:
+
+\begin{lstlisting}[language=SQL,caption={Compacting the small files a streaming write left behind},captionpos=b]
+CALL lakehouse.system.rewrite_data_files(
+  table => 'analytics.orders',
+  strategy => 'binpack'
+);
+\end{lstlisting}
+
+With no session extension registered, Spark's parser has never heard of
+\texttt{CALL} at all and rejects this before it reaches any table --- the
+concrete, checkable version of "none of it is native Spark SQL."
 
 \section{Plugins}
 \label{sec:dsv2-plugins}

@@ -158,6 +158,7 @@ large tables --- usually a missing or non-equi join key.
 Unless it is a deliberate cross join, the \texttt{ON} clause is missing.
 
 \section{Aggregation operators}
+\label{sec:c-agg}
 
 Aggregation is two-phase: a partial aggregate on each partition (map-side
 combine), a shuffle, then a final aggregate.

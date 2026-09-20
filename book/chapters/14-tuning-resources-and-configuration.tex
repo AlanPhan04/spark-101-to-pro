@@ -25,10 +25,16 @@ JVM, which sets how many task-sized shares the unified memory pool from
 concurrent task's share of execution memory is smaller, which means a join
 or aggregation that was comfortable at four cores can start spilling at
 eight with no other change. Five cores is the commonly cited ceiling on
-this stack's Kubernetes deployment, not because of memory but because HDFS-
-and GCS-client-style connection pools degrade under too many concurrent
-requests from one JVM; there is no memory-model reason to stop earlier than
-that if the workload does not touch such a client heavily.
+this stack's Kubernetes deployment, not because of memory but because the
+GCS connector's own per-JVM connection pool degrades under too many
+concurrent requests from one process --- the same throughput ceiling
+originally observed against HDFS clients, and one that applies here for the
+identical reason: one executor JVM, one shared client, one pool, regardless
+of which object store sits behind it. There is no memory-model reason to
+stop earlier than five if the workload reads little from GCS directly (all
+its input already cached, say); the ceiling is specifically about
+concurrent storage-client requests, not about anything this section's
+memory arithmetic bounds.
 
 \textbf{Executor memory} is sized backward from the largest single operation
 you expect a task to run --- a sort-merge join's sort buffer, a hash
@@ -43,10 +49,34 @@ spill metrics exist to catch.
 greater of 10\% of executor memory or 384~MB) covers everything outside the
 JVM heap that the container still needs: off-heap Tungsten memory if enabled,
 JVM metaspace and thread stacks, and --- specific to this stack ---
-PySpark's separate Python process when UDFs are in use. A container OOM
-kill with no corresponding Java heap error (\Cref{sec:failure-signatures}) is
-almost always this number set too low for what is actually running outside
-the heap, not the heap itself.
+PySpark's separate Python process when UDFs are in use. The formula is a
+floor, not a measurement: 384~MB covers the JVM's own fixed costs (metaspace,
+thread stacks) on a small executor where 10\% would be too little, and 10\%
+scales that floor up for a large executor where metaspace stays roughly
+fixed but off-heap Tungsten buffers and any PySpark worker grow with it.
+Neither number is derived from anything about \emph{your} workload, which is
+exactly why a container OOM kill with no corresponding Java heap error
+(\Cref{sec:failure-signatures}) is almost always this default proving too
+small for what is actually running outside the heap --- raise it directly
+rather than trusting the formula once PySpark UDFs or off-heap execution
+memory are in use.
+
+\paragraph{A worked shape for the specimen.} \Cref{sec:shape-jobs}'s stage~2
+runs the specimen's sort-merge join and hash aggregate across 200 shuffle
+partitions; at the reference cluster's 4 cores per executor
+(\Cref{app:refenv}), each core is one task slot, so up to 4 of those 200
+partitions execute concurrently per executor. If the join's build-side
+partition (post-shuffle, decoded) runs 300~MB at its largest --- the viral
+product's oversized partition from \Cref{sec:shape-ui} --- each concurrent
+task needs that much execution memory, and \Cref{sec:mem-model}'s unified
+pool splits evenly across the 4 concurrent tasks: $4 \times 300\text{MB} =
+1.2\text{GB}$ of execution memory alone. At \conf{spark.memory.fraction}'s
+default 0.6 unified share, that implies roughly $1.2\text{GB} / 0.6 \approx
+2\text{GB}$ of heap just to keep that one partition from spilling, before
+adding headroom for the rest of a normal working set --- a defensible
+starting point of \conf{spark.executor.memory=4g}, with
+\conf{spark.executor.memoryOverhead} left at its 10\% default (409.6~MB)
+since no PySpark UDF or off-heap pool is in play here.
 
 \begin{tip}
 On Kubernetes, the pod's memory limit is executor memory plus overhead plus
@@ -83,13 +113,14 @@ removal is unconstrained by this concern.
 
 \conf{spark.default.parallelism} governs RDD operations with no other hint
 (defaulting to total core count across executors); for DataFrame/SQL
-workloads, \conf{spark.sql.shuffle.partitions}
-(\Cref{sec:shuffle-sizing}) is the number that actually matters on this
-stack, and AQE's coalescing (\Cref{sec:aqe-coalesce}) is what keeps a
-generously high setting from wasting scheduling overhead. The practical
-default worth remembering: with AQE on (the default since Spark 3.2), set
-shuffle partitions high and let coalescing bring it down, rather than tuning
-the raw count per job.
+workloads, \conf{spark.sql.shuffle.partitions} (\Cref{sec:shuffle-sizing},
+\Cref{sec:aqe-coalesce}) is the number that actually matters on this stack.
+The one addition worth making here rather than in either earlier chapter:
+this default and AQE's coalescing are a \emph{resource-sizing} lever as much
+as a shuffle one --- the same 200-versus-2000-partitions choice that trades
+task-scheduling overhead for spill risk also decides how many of the
+executor shape's task slots a given stage can actually fill, so size
+partitions and executors together, not as two independent decisions.
 
 \section{The external and push-based shuffle service}
 \label{sec:shuffle-external}
@@ -100,20 +131,23 @@ which is exactly the dependency dynamic allocation has to work around above,
 and exactly what turns a voluntary executor removal into a
 \texttt{FetchFailedException} if the removal races a still-pending fetch.
 \conf{spark.shuffle.service.enabled} moves block serving out of the executor
-JVM and into a separate long-lived process per node (on Kubernetes, a
-DaemonSet), so shuffle data remains servable after the executor that wrote
-it is gone --- dynamic allocation can then scale down aggressively with no
-data-loss risk, because the data was never tied to the executor's own
-lifecycle.
+JVM and into a separate long-lived process, so shuffle data remains
+servable after the executor that wrote it is gone --- dynamic allocation
+can then scale down aggressively with no data-loss risk, because the data
+was never tied to the executor's own lifecycle. Push-based shuffle
+(\Cref{sec:shuffle-push}) builds on the same external service to also cut
+fetch-side amplification.
 
-Push-based shuffle (\conf{spark.shuffle.push.enabled}, on top of the
-external service) goes one step further on the write side: instead of every
-reduce task pulling its blocks from wherever each map task happened to
-write them, map output is proactively pushed to and merged at a smaller set
-of locations, turning many small random reads into fewer large sequential
-ones on the fetch side --- the same amplification-avoidance idea as sizing
-shuffle partitions well (\Cref{sec:shuffle-sizing}), applied to the network
-and disk I/O pattern instead of the partition count.
+\begin{warning}
+On YARN, the external shuffle service is a NodeManager auxiliary service
+available on every node by default. On Kubernetes it is not: it has to be
+deployed and run explicitly, as a DaemonSet with one pod per node, before
+\conf{spark.shuffle.service.enabled} does anything --- setting the config
+alone with no DaemonSet running leaves executors unable to reach a shuffle
+service at all, which surfaces as fetch failures indistinguishable from the
+problem the config was meant to prevent. Confirm the DaemonSet is actually
+running on the cluster before relying on this setting.
+\end{warning}
 
 \section{Configuration precedence and profiles}
 \label{sec:tuning-precedence}
@@ -134,18 +168,29 @@ files.
 
 Kyuubi (this stack's gateway) runs one Spark application per Kyuubi
 \emph{engine} rather than one per user's individual query, and its
-\emph{share level} setting decides how those engines are pooled:
-\texttt{CONNECTION} gives every JDBC connection its own engine (maximum
-isolation, maximum startup latency per query); \texttt{USER} shares one
-engine across all of a user's connections (a warm, persistent Spark session
-per user); \texttt{SERVER} shares a single engine across every user on the
-Kyuubi instance (cheapest, but one user's job competing for the same
-executors as everyone else's). An \emph{engine pool} pre-warms several
-engines so a new session does not pay Spark's own startup cost on first
-connect. All of this sits above the resource-sizing questions from this
-chapter's earlier sections, not in place of them --- each pooled engine is
-still an ordinary Spark application whose executors are sized exactly as
-described above.
+\emph{share level} setting decides how those engines are pooled and how a
+new connection finds its engine. Mechanically, Kyuubi's server process
+keeps a registry of live engines keyed by a scope derived from the share
+level --- a connection id for \texttt{CONNECTION}, a username for
+\texttt{USER}, a constant for \texttt{SERVER} --- backed by Zookeeper (or
+etcd) so the registry survives a Kyuubi server restart and multiple Kyuubi
+server instances see the same engines. A new JDBC connection computes its
+key, looks it up in that registry, and either attaches to the engine
+already running under that key or, on a miss, launches a fresh Spark
+application and registers it under that key for the next connection to
+find. \texttt{CONNECTION} gives every JDBC connection its own engine
+(maximum isolation, maximum startup latency per query, since every
+connection is a registry miss); \texttt{USER} shares one engine across all
+of a user's connections (a warm, persistent Spark session per user, a
+registry hit for every connection after the first); \texttt{SERVER} shares
+a single engine across every user on the Kyuubi instance (cheapest, but one
+user's job competing for the same executors as everyone else's). An
+\emph{engine pool} pre-registers several engines under a share level before
+any connection asks for one, so even a first connection under that scope is
+a registry hit rather than a cold start. All of this sits above the
+resource-sizing questions from this chapter's earlier sections, not in
+place of them --- each pooled engine is still an ordinary Spark application
+whose executors are sized exactly as described above.
 
 \section{Summary}
 \label{sec:tuning-summary}

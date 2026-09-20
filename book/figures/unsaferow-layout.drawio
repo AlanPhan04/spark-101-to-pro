@@ -1,0 +1,51 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="unsaferow-layout" id="unsaferow">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="740" pageHeight="330" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="&lt;b&gt;One UnsafeRow buffer for one &lt;i&gt;orders&lt;/i&gt; row --- contiguous bytes, no objects&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#2f3b52;" vertex="1" parent="1">
+          <mxGeometry x="20" y="10" width="700" height="26" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bitset" value="&lt;b&gt;Null bitset&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;1 bit per field&lt;br&gt;(8 bytes)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="20" y="60" width="110" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f1" value="&lt;b&gt;order_ts&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;fixed, 8 bytes&lt;br&gt;inline value&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="130" y="60" width="130" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f2" value="&lt;b&gt;promised_days&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;fixed, 8 bytes&lt;br&gt;inline value&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="260" y="60" width="130" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f3" value="&lt;b&gt;delivery_days&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;fixed, 8 bytes&lt;br&gt;inline value&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="390" y="60" width="130" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="f4" value="&lt;b&gt;product_id&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;variable, 8 bytes&lt;br&gt;(offset, length) pair&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=11;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="520" y="60" width="150" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="brace" value="&lt;span style=&quot;font-size:9px&quot;&gt;fixed-length region --- one 8-byte slot per field, same layout for every row of this schema&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="20" y="142" width="650" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="varregion" value="&lt;b&gt;Variable-length region&lt;/b&gt; (same buffer, past the last fixed slot)&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;bytes: &amp;quot;P-88213&amp;quot;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;dashed=1;fontSize=11;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="300" y="230" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="arrow1" style="edges=1;html=1;endArrow=block;elbow=vertical;rounded=0;strokeColor=#c77f3b;strokeWidth=1.5;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="f4" target="varregion">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="offlabel" value="&lt;span style=&quot;font-size:9px&quot;&gt;offset + length point here&lt;/span&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=9;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="560" y="175" width="180" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
