@@ -11,25 +11,130 @@ straggler.
 \end{chapterintro}
 
 \section{The shuffle manager and shuffle writers}
-\tbd
+\label{sec:sched-shuffle-manager}
+
+Every shuffle on a modern Spark version goes through \texttt{SortShuffleManager}
+--- the separate hash-based shuffle manager from early Spark versions was
+removed once sort-based shuffle's one-file-plus-index-per-task layout
+(\Cref{sec:shuffle-write}) proved strictly better at scale. What varies is
+which \emph{writer} a given shuffle uses underneath that one manager, chosen
+automatically from the shuffle's own properties:
+
+\begin{description}
+  \item[\texttt{BypassMergeSortShuffleWriter}] fires when the shuffle has no
+        map-side aggregation and the partition count is below
+        \conf{spark.shuffle.sort.bypassMergeThreshold} (200 by default) ---
+        cheap enough, at that few partitions, to just write one file per
+        partition directly and concatenate them, skipping the sort step
+        entirely.
+  \item[\texttt{UnsafeShuffleWriter}] (the "serialized" path) fires when the
+        serializer supports relocating serialized values without
+        deserializing them (Kryo does, under most configurations) and there
+        is no map-side aggregation --- it sorts the same compact
+        \emph{(partition-id, pointer)} arrays \Cref{sec:tungsten-cache-aware}
+        described, spilling and merging already-serialized bytes with no
+        object ever reconstructed mid-sort.
+  \item[\texttt{SortShuffleWriter}] is the general fallback --- a real
+        record-by-record sort by partition (and key, if the shuffle
+        aggregates) --- used whenever the other two writers' preconditions
+        do not hold, at correspondingly higher cost.
+\end{description}
+
+The upshot: a shuffle you did not particularly optimize is not necessarily
+running the expensive general path --- Spark already picks the cheapest
+writer whose preconditions hold for that specific shuffle.
 
 \section{The map output tracker}
-\tbd
+\label{sec:sched-map-output-tracker}
+
+A reduce task needs to know which executors hold which map task's output
+before it can fetch anything --- that registry is the \emph{map output
+tracker}. The driver's copy, \texttt{MapOutputTrackerMaster}, is the single
+authoritative record, updated every time a map task finishes (with its
+output location) and every time an executor is lost (with that executor's
+outputs invalidated, which is precisely the trigger behind
+\Cref{sec:failure-signatures}'s stage-resubmission behavior). Executors hold
+a read-only, periodically-refreshed cache of the same information,
+\texttt{MapOutputTrackerWorker}, so that a reduce task can resolve fetch
+locations locally most of the time without an RPC to the driver for every
+single task.
 
 \section{The DAG scheduler and the task scheduler}
-\tbd
+\label{sec:sched-dag-task}
+
+Two schedulers do two different jobs, one layered on top of the other. The
+\textbf{DAG scheduler} operates on RDD lineage: it walks the dependency
+graph backward from an action, cutting a new stage boundary at every wide
+dependency (\Cref{sec:shape-deps}), and submits stages to run only
+once their upstream stages have finished --- this is the component that
+turns one query into the job/stage structure \Cref{ch:shape} first
+introduced, and the one that decides, on a \texttt{FetchFailedException},
+exactly which upstream stage needs to re-run. The \textbf{task scheduler}
+(\texttt{TaskSchedulerImpl}) operates one level down, inside an already-submitted
+stage: given a set of runnable tasks and the current executors, it decides
+\emph{which} task runs on \emph{which} executor, honoring the locality
+preferences below and retrying a task, up to
+\conf{spark.task.maxFailures}, on the executor it failed on before giving
+up on that executor for that task.
 
 \section{RPC and block transfer}
-\tbd
+\label{sec:sched-rpc-transfer}
+
+Coordination messages (task assignment, status updates, the map output
+tracker's queries) travel over Spark's internal RPC layer, built on Netty;
+the actual shuffle bytes travel over a separate path, the
+\texttt{NettyBlockTransferService}, which is what a reduce task's fetch
+request and an executor's block-serving response both ultimately go
+through --- the same service the external shuffle service
+(\Cref{sec:shuffle-external}) reimplements as a standalone process, so that
+block-serving keeps working with no executor JVM behind it at all.
 
 \section{Locality and speculation}
-\tbd
+\label{sec:sched-locality-speculation}
+
+Placing a task on the executor that already holds its input data avoids a
+network read entirely; the task scheduler ranks candidate executors by
+locality level --- \texttt{PROCESS\_LOCAL} (same JVM), \texttt{NODE\_LOCAL}
+(same node, different executor), \texttt{RACK\_LOCAL}, then \texttt{ANY} ---
+and will wait briefly (\conf{spark.locality.wait}, 3s by default) for a
+better-locality slot to free up before falling back to a worse one. On this
+stack's typical setup (compute and storage separated, GCS rather than
+co-located HDFS), locality beyond \texttt{ANY} rarely applies to the initial
+read regardless of this waiting, since there is no node the data is
+particularly local to; it still matters for shuffle reads, where a task
+scheduled on the same node as (some of) its shuffle input avoids that
+portion of the network transfer.
+
+Speculation (\Cref{sec:failure-signatures}) is the task scheduler's own
+mechanism for the case locality cannot fix: once a task has run past
+\conf{spark.speculation.multiplier} times the median duration for its stage,
+the scheduler launches a second, speculative copy on a different executor
+and accepts whichever attempt's result lands first, discarding the other ---
+a scheduling-level decision independent of the DAG scheduler's stage-level
+view, since a straggler is a single task problem, not a stage problem.
 
 \section{Summary}
-\tbd
+\label{sec:sched-summary}
+
+One shuffle manager, three writers chosen by preconditions rather than
+configuration you set directly: bypass for few partitions, serialized-sort
+when the serializer allows it, plain sort otherwise. The map output tracker
+is the registry that makes fetching possible and that a lost executor
+invalidates, triggering the DAG scheduler's stage resubmission. The DAG
+scheduler owns stage-level lineage and boundaries; the task scheduler owns
+task placement within a stage, locality, and per-task retry, with
+speculation as its answer to a straggler that locality alone cannot explain.
+Both RPC coordination and the shuffle bytes themselves travel over the same
+underlying Netty-based transport, just on logically separate paths.
 
 \exercisehead
 \begin{exercises}
 \item Trace one wide query from \texttt{collect()} to task completion, naming
       each scheduler component it passes through.
+\item Given a shuffle with 50 partitions and no aggregation, predict which
+      shuffle writer handles it, then confirm from
+      \conf{spark.shuffle.sort.bypassMergeThreshold}.
+\item Kill an executor mid-stage and, from the event log, find the map
+      output tracker invalidation and the DAG scheduler's resubmitted
+      stage attempt.
 \end{exercises}

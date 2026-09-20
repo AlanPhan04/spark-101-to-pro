@@ -11,25 +11,109 @@ statistics, and how to add your own Catalyst rules and SQL extensions.
 \end{chapterintro}
 
 \section{The DataSource V2 read and write API}
-\tbd
+\label{sec:dsv2-api}
+
+DataSource V2 (DSv2) is the interface contract between Catalyst and an
+external table source: a \texttt{TableProvider} resolves a table name to a
+\texttt{Table}, which reports its schema and capabilities and, for a read,
+hands back a \texttt{ScanBuilder} the planner negotiates with
+(\Cref{sec:dsv2-pushdown}) before it ever produces a physical scan. This is
+the same interface every Iceberg catalog type from \Cref{ch:catalogs}
+implements underneath, and it is also what lets a single Spark session read
+an Iceberg table, a JDBC table, and a plain Parquet directory through one
+consistent planner path --- DSv2 does not know or care that Iceberg has a
+metadata tree at all; from the planner's point of view, Iceberg is simply an
+implementation of this contract that happens to be unusually good at
+answering its questions cheaply.
 
 \section{Pushdown negotiation}
-\tbd
+\label{sec:dsv2-pushdown}
+
+Pushdown under DSv2 is a negotiation, not a guarantee: the planner offers a
+source a set of filters, columns, and (since Spark 3.2, for a narrow set of
+cases) aggregates, and the source reports back which of them it can
+actually apply itself. \texttt{SupportsPushDownFilters} lets Iceberg claim a
+filter and mark it as either fully handled (Spark drops it from the plan
+entirely) or only partially handled (Spark still applies it after the scan,
+as a safety net) --- exactly the distinction behind
+\Cref{sec:c-pushdown}'s pushdown-killer catalogue: a filter that defeats
+Iceberg's manifest-and-statistics pruning is not rejected outright, it is
+simply reported back as unhandled, and Spark's own \texttt{Filter} node
+downstream is what actually enforces it, correctly but without any pruning
+benefit. \texttt{SupportsPushDownRequiredColumns} is the same negotiation for
+column pruning (\Cref{sec:pruning-column}), and
+\texttt{SupportsPushDownAggregates} lets a narrow class of aggregates
+(\texttt{COUNT}, \texttt{MIN}, \texttt{MAX} on a column with the needed
+statistics already in the manifest) be answered from metadata alone, with no
+data file ever opened.
 
 \section{How Iceberg reports splits and statistics}
-\tbd
+\label{sec:dsv2-splits-stats}
+
+A DSv2 source does not hand the planner data directly --- it hands back a
+set of \texttt{InputPartition}s (Iceberg's version of the split planning
+from \Cref{sec:ice-read-splits}) and a \texttt{PartitionReaderFactory} that
+knows how to read each one, letting the planner parallelize across them
+exactly like any other scan. Separately, \texttt{SupportsReportStatistics}
+lets Iceberg tell the planner an estimated row count and byte size for a
+scan \emph{before} it runs, computed from the manifest-list summaries
+(\Cref{sec:ice-spec-v2}) rather than an actual read --- this is the estimate
+\Cref{sec:joins-selection}'s planning-time broadcast decision is built on,
+and it is also why an Iceberg table with well-maintained metadata tends to
+get better join-strategy decisions at planning time than a Hive table
+relying on a stale, manually triggered \texttt{ANALYZE TABLE}.
 
 \section{Custom Catalyst rules and SQL extensions}
-\tbd
+\label{sec:dsv2-extensions}
+
+Nothing about this negotiation requires modifying Spark itself. A
+\texttt{SparkSessionExtensions} entry point lets an external jar register
+additional Catalyst rules --- injected into the analyzer, the optimizer, or
+physical planning, alongside Spark's own rules from
+\Cref{sec:catalyst-rules} --- as well as entirely new SQL syntax the parser
+would not otherwise recognize. Iceberg's own
+\texttt{IcebergSparkSessionExtensions} is exactly this mechanism: it is how
+\texttt{CALL} statements (\texttt{CALL catalog.system.rewrite\_data\_files(...)},
+\Cref{ch:iceberg-write}) and Iceberg-specific SQL like
+\texttt{ALTER TABLE ... ADD PARTITION FIELD} become valid syntax at all ---
+none of it is native Spark SQL; it is grafted on through the same public
+extension point available to any table source.
 
 \section{Plugins}
-\tbd
+\label{sec:dsv2-plugins}
+
+Registering a catalog (\conf{spark.sql.catalog.<name>}, \Cref{sec:cat-spark-config})
+and a session extension (\conf{spark.sql.extensions}) are both just
+configuration keys naming a class on the classpath --- the whole mechanism
+by which Iceberg support is "installed" into a Spark session is adding its
+jar to the classpath and setting these two keys, with no Spark source
+change required. Any table format or connector built to the same DSv2 and
+extensions contracts plugs in exactly the same way, which is the practical
+reason a table format can evolve on its own release cadence independent of
+Spark's.
 
 \section{Summary}
-\tbd
+\label{sec:dsv2-summary}
+
+Iceberg is an ordinary DSv2 implementation from Spark's point of view: it
+resolves through a catalog, negotiates filter/column/aggregate pushdown by
+reporting back what it can handle rather than being told what to do, reports
+splits and statistics computed from its own manifest metadata rather than a
+real scan, and adds its \texttt{CALL} syntax and maintenance procedures
+through the public session-extensions mechanism. None of this required a
+Spark source change, and every mechanism in this section --- catalog
+registration, pushdown negotiation, statistics reporting, SQL extension --- is
+available to any other table format or connector built to the same
+contract.
 
 \exercisehead
 \begin{exercises}
 \item Write a query whose filter is pushed into Iceberg and one whose filter is
       not. Explain the difference from the DSv2 pushdown rules.
+\item Run \texttt{EXPLAIN} on a \texttt{SELECT COUNT(*)} against an Iceberg
+      table with no filter. Confirm from the plan whether it was answered
+      from statistics alone.
+\item List the classes named by \conf{spark.sql.catalog.lakehouse} and
+      \conf{spark.sql.extensions} in a running session and identify which
+      DSv2 interface each implements.
 \end{exercises}
