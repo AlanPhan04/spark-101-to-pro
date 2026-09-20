@@ -11,14 +11,68 @@ stragglers --- and what each looks like before you reach for a fix.
 \end{chapterintro}
 
 \section{The Spark UI as a diagnostic}
-\tbd
+\label{sec:debug-ui}
+
+The UI is organized as a funnel, and reading it in the wrong order is the
+most common way to waste time on a slow job. The \textbf{SQL} tab is the
+right starting point for a SQL/DataFrame job: it shows the physical plan
+with live metrics on every node --- rows produced, time spent, bytes
+shuffled --- so you can see \emph{which operator} is expensive before
+worrying about which stage or task. The \textbf{Stages} tab is next: each
+stage's task-duration distribution (min/median/max, visualized as a
+histogram) is where skew becomes visible as a wide gap between median and
+max, and \Cref{sec:aqe-skew}'s straggler pattern is exactly what a stage
+page with one outlier bar looks like. The \textbf{Executors} tab aggregates
+across the whole application --- GC time, shuffle read/write totals, task
+counts per executor --- and is where an imbalance across executors (rather
+than across tasks within one stage) shows up. Only once the SQL tab has
+named the operator and the Stages tab has named the stage does drilling
+into individual task metrics (\Cref{sec:reading-metrics}) become the right
+next step, rather than the first one.
 
 \section{Event logs and the history server}
-\tbd
+\label{sec:debug-history}
+
+Everything the live UI renders is first written to an \emph{event log} ---
+a JSON-lines file of every scheduler event (job/stage/task start and end,
+executor added/removed, SQL execution metrics) --- and the Spark History
+Server reconstructs the same UI from that file after the application has
+exited. This matters for exactly the jobs you most need to debug: a job that
+failed or was killed no longer has a live UI to inspect, but its event log
+(if \conf{spark.eventLog.enabled} was on, which it should be by default on
+this stack) survives it. On Kubernetes specifically, the event log is the
+only diagnostic that outlives the executor pods themselves, which are
+usually garbage-collected by the cluster shortly after the application ends.
 
 \section{Reading task, shuffle, spill, and GC metrics}
 \label{sec:reading-metrics}
-\tbd
+
+A single task's detail page is the finest-grained evidence the UI offers,
+and four numbers do most of the diagnostic work:
+
+\begin{description}
+  \item[Task duration vs.\ scheduler delay] separates genuine compute time
+        from a task that merely waited for a slot --- a long duration with
+        near-zero scheduler delay is real work; a short duration with a long
+        wait is a parallelism problem, not a per-task one.
+  \item[Shuffle read/write size] compared across tasks \emph{in the same
+        stage} is the most direct skew signal: one task reading many times
+        the median bytes is the same imbalance
+        \Cref{sec:aqe-skew} detects and fixes automatically for a join, made
+        visible for any stage regardless of whether AQE's skew handling
+        applies to it.
+  \item[Spill (memory and disk)] appears when a task's execution memory
+        share (\Cref{sec:mem-model}) was not enough for its sort or hash
+        operation, forcing a spill to disk mid-task; non-zero spill on a
+        stage that previously had none, after a data-volume increase, is
+        the direct evidence a memory-based fix
+        (\Cref{sec:executor-sizing}) targets.
+  \item[GC time as a fraction of task time] above roughly 10\% signals a
+        heap doing more collection than the work is worth
+        (\Cref{sec:mem-gc}); this is the number \Cref{sec:caching-storage-levels}'s
+        \texttt{\_SER}-level advice and any heap-vs-off-heap decision should
+        be checked against.
+\end{description}
 
 \section{Common failure signatures}
 \label{sec:failure-signatures}
@@ -28,7 +82,51 @@ number of recognizable signatures, each with its own evidence in the UI and its
 own fix.
 
 \paragraph{OOM and container kills.}
-\tbd
+
+Three distinct failures share the word "OOM," and the fix depends entirely
+on which one occurred. A \textbf{driver OOM} throws
+\texttt{java.lang.OutOfMemoryError} in the driver's own log, and its usual
+cause on this stack is an action that pulls too much data back to one JVM
+--- \texttt{collect()} on a large DataFrame, or a broadcast join whose
+broadcast side turned out larger than estimated (\Cref{sec:joins-selection}).
+An \textbf{executor OOM} throws the same exception but on an executor, from a
+task's own operation outrunning its execution-memory share
+(\Cref{sec:mem-model}) with no room left to spill further --- visible as the
+exception in that executor's log, attached to a specific task. A
+\textbf{container OOM kill} shows neither exception: the cluster manager
+(Kubernetes) kills the whole pod because its total memory usage --- heap
+plus everything \Cref{sec:executor-sizing} put under "overhead" --- exceeded
+the pod's limit, and the pod simply disappears with an \texttt{OOMKilled}
+status visible in \texttt{kubectl describe pod}, not in any Spark log at
+all, because the JVM never got the chance to log anything.
+
+\begin{tip}
+No exception in any Spark log is itself the diagnostic signal for a
+container kill. If a task's executor simply vanishes with no
+\texttt{OutOfMemoryError} anywhere, check the pod's exit reason before
+assuming a fetch failure or a node eviction --- raising
+\conf{spark.executor.memoryOverhead} is the fix for this signature
+specifically, not for a heap-level executor OOM.
+\end{tip}
+
+\paragraph{Stragglers.}
+
+A straggler is one task in a stage running far longer than the rest with no
+corresponding data-size difference to explain it --- distinct from the skew
+signature in \Cref{sec:reading-metrics}, where the slow task really is
+processing more bytes. A straggler with ordinary-sized input usually traces
+to the node it landed on: contended CPU from a noisy neighbor, a slow disk,
+or a transient network issue with GCS specific to that node, none of which
+show up in the shuffle-size or spill metrics because the task's own data
+volume was never the problem. \emph{Speculative execution}
+(\conf{spark.speculation}, off by default) is the direct mitigation: past a
+threshold multiple of the median task duration in a stage
+(\conf{spark.speculation.multiplier}, 1.5 by default), Spark launches a
+duplicate copy of the slow task on a different executor and keeps whichever
+copy finishes first, discarding the other. It trades some duplicated
+compute for tail latency, and is worth enabling exactly when stragglers are
+confirmed to be node-related rather than data-related --- turning it on to
+paper over genuine skew just runs the same oversized task twice.
 
 \paragraph{Fetch failures and stage retries.}
 
@@ -72,16 +170,65 @@ landing back on a node that is already causing them.
 \tbd
 
 \section{async-profiler and flame graphs}
-\tbd
+\label{sec:debug-profiler}
+
+The UI's metrics answer \emph{which stage and which task}; they do not
+answer \emph{which line of code, or which JIT-compiled method, is actually
+burning CPU} inside a task that is neither spilling nor GC-bound but is
+simply slow. \texttt{async-profiler}, attached to an executor JVM, samples
+its call stacks at a fixed interval with negligible overhead (it uses
+perf-event sampling rather than the more invasive instrumentation older
+Java profilers relied on) and renders the result as a \emph{flame graph}: one
+horizontal bar per stack frame, width proportional to time spent, stacked by
+call depth. A wide bar low in the stack under a Spark-internal frame usually
+means the bottleneck is in a UDF or an expensive expression the generated
+code calls into, not in Spark's own execution machinery
+(\Cref{ch:tungsten}) --- the distinction that decides whether the fix is
+rewriting a UDF or tuning Spark configuration.
 
 \section{Debugging query plans}
-\tbd
+\label{sec:debug-plans}
+
+A plan that does not do what you expect is diagnosed the same way
+\Cref{ch:catalyst} taught you to read one, just applied adversarially: compare
+the \emph{analyzed} plan against what you intended to express (a wrong join
+condition or an unexpected implicit cast usually shows up here, before any
+optimization has had a chance to help or hurt); check the \emph{optimized}
+plan for whether pushdown and pruning rules actually fired
+(\Cref{sec:c-pushdown}'s killer catalogue is the first thing to check when
+they did not); and compare the \emph{physical} plan's join and exchange
+nodes against what \Cref{ch:joins} and \Cref{ch:shuffle} predict from the
+table sizes and partitioning involved. \texttt{EXPLAIN FORMATTED}'s numbered
+node list plus per-node detail block is almost always more useful for this
+than the tree-only default mode, because it lets you cross-reference a
+specific node's detail (its exact \texttt{PartitionFilters}, its exact join
+build side) rather than inferring it from the tree shape alone.
 
 \section{Summary}
-\tbd
+\label{sec:debug-summary}
+
+Diagnose top-down: the SQL tab names the expensive operator, the Stages tab
+names the stage and shows skew as a task-duration outlier, and only then do
+individual task metrics --- shuffle size, spill, GC time --- confirm the
+specific mechanism. Event logs and the history server are what make this
+possible after a job has already exited, which is exactly when you need it
+most. The three OOM signatures --- driver, executor, container --- point at
+different fixes and are distinguished by where (or whether) an exception
+appears at all; a straggler with no data-size explanation is a node problem
+that speculative execution mitigates, not a skew problem that
+repartitioning fixes. When metrics alone do not localize a CPU-bound
+slowdown, a flame graph does; when a plan does not match what you expected,
+re-read it stage by stage --- analyzed, optimized, physical --- the same way
+\Cref{ch:catalyst} taught, just with suspicion.
 
 \exercisehead
 \begin{exercises}
 \item Given three anonymized stage summaries, diagnose each as skew,
       under-partitioned, or GC-bound, and name the evidence.
+\item Trigger each of the three OOM signatures deliberately (a driver
+      \texttt{collect()}, an undersized executor heap, an undersized
+      container overhead) and confirm each leaves a different trace.
+\item Take a job with a confirmed straggler and enable
+      \conf{spark.speculation}. Confirm from the Stages tab that a
+      duplicate task attempt was launched and which copy won.
 \end{exercises}

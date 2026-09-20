@@ -13,29 +13,163 @@ values, see \texttt{spark\_memory\_tuning.md} in the repository root.
 
 \section{Executor sizing from the mechanism}
 \label{sec:executor-sizing}
-\tbd
+
+Sizing an executor is choosing three numbers --- \conf{spark.executor.cores},
+\conf{spark.executor.memory}, \conf{spark.executor.memoryOverhead} --- and
+each has a mechanism from an earlier chapter that bounds it, not a rule of
+thumb.
+
+\textbf{Cores per executor} sets how many tasks run concurrently inside one
+JVM, which sets how many task-sized shares the unified memory pool from
+\Cref{sec:mem-model} gets divided into --- more cores per executor means each
+concurrent task's share of execution memory is smaller, which means a join
+or aggregation that was comfortable at four cores can start spilling at
+eight with no other change. Five cores is the commonly cited ceiling on
+this stack's Kubernetes deployment, not because of memory but because HDFS-
+and GCS-client-style connection pools degrade under too many concurrent
+requests from one JVM; there is no memory-model reason to stop earlier than
+that if the workload does not touch such a client heavily.
+
+\textbf{Executor memory} is sized backward from the largest single operation
+you expect a task to run --- a sort-merge join's sort buffer, a hash
+aggregation's hash table --- divided by the fraction of unified memory one
+task actually gets (execution memory divided evenly among concurrently
+running tasks, \Cref{sec:mem-model}), then inflated to account for
+\conf{spark.memory.fraction}'s default 60\% split between unified and
+reserved-plus-user memory. Guessing low here is what \Cref{sec:reading-metrics}'s
+spill metrics exist to catch.
+
+\textbf{Memory overhead} (\conf{spark.executor.memoryOverhead}, default the
+greater of 10\% of executor memory or 384~MB) covers everything outside the
+JVM heap that the container still needs: off-heap Tungsten memory if enabled,
+JVM metaspace and thread stacks, and --- specific to this stack ---
+PySpark's separate Python process when UDFs are in use. A container OOM
+kill with no corresponding Java heap error (\Cref{sec:failure-signatures}) is
+almost always this number set too low for what is actually running outside
+the heap, not the heap itself.
+
+\begin{tip}
+On Kubernetes, the pod's memory limit is executor memory plus overhead plus
+(if set) off-heap size --- exceeding it kills the pod outright with no JVM
+exception to read, which is why \Cref{sec:mem-model}'s "container
+limit" bracket exists as a distinct concept from the heap it contains.
+\end{tip}
 
 \section{Dynamic allocation}
 \label{sec:dynamic-allocation}
-\tbd
+
+A fixed executor count is either wasted (idle executors between jobs in a
+long-lived session) or insufficient (a burst of work with no room to grow).
+\conf{spark.dynamicAllocation.enabled} lets Spark request and release
+executors against the cluster manager as work arrives and drains: it adds
+executors when the scheduler's pending-task backlog persists past
+\conf{spark.dynamicAllocation.schedulerBacklogTimeout} (1s default), and
+removes an executor once it has been idle past
+\conf{spark.dynamicAllocation.executorIdleTimeout} (60s default), bounded by
+\conf{spark.dynamicAllocation.minExecutors} and \texttt{.maxExecutors}.
+
+The one condition that makes this safe is exactly the failure mode
+\Cref{sec:failure-signatures} described: an executor holding shuffle files
+that a later stage still needs cannot simply be released. Without an
+external shuffle service, Spark tracks this via
+\conf{spark.dynamicAllocation.shuffleTracking.enabled} (on by default since
+Spark 3.0), which keeps an executor from being removed while its shuffle
+output is still referenced; with an external service
+(\Cref{sec:shuffle-external}), the files outlive the executor entirely and
+removal is unconstrained by this concern.
 
 \section{Parallelism defaults}
-\tbd
+\label{sec:tuning-parallelism}
+
+\conf{spark.default.parallelism} governs RDD operations with no other hint
+(defaulting to total core count across executors); for DataFrame/SQL
+workloads, \conf{spark.sql.shuffle.partitions}
+(\Cref{sec:shuffle-sizing}) is the number that actually matters on this
+stack, and AQE's coalescing (\Cref{sec:aqe-coalesce}) is what keeps a
+generously high setting from wasting scheduling overhead. The practical
+default worth remembering: with AQE on (the default since Spark 3.2), set
+shuffle partitions high and let coalescing bring it down, rather than tuning
+the raw count per job.
 
 \section{The external and push-based shuffle service}
-\tbd
+\label{sec:shuffle-external}
+
+Without an external shuffle service, a reduce task fetches shuffle blocks
+directly from the executor that wrote them (\Cref{sec:shuffle-write}) ---
+which is exactly the dependency dynamic allocation has to work around above,
+and exactly what turns a voluntary executor removal into a
+\texttt{FetchFailedException} if the removal races a still-pending fetch.
+\conf{spark.shuffle.service.enabled} moves block serving out of the executor
+JVM and into a separate long-lived process per node (on Kubernetes, a
+DaemonSet), so shuffle data remains servable after the executor that wrote
+it is gone --- dynamic allocation can then scale down aggressively with no
+data-loss risk, because the data was never tied to the executor's own
+lifecycle.
+
+Push-based shuffle (\conf{spark.shuffle.push.enabled}, on top of the
+external service) goes one step further on the write side: instead of every
+reduce task pulling its blocks from wherever each map task happened to
+write them, map output is proactively pushed to and merged at a smaller set
+of locations, turning many small random reads into fewer large sequential
+ones on the fetch side --- the same amplification-avoidance idea as sizing
+shuffle partitions well (\Cref{sec:shuffle-sizing}), applied to the network
+and disk I/O pattern instead of the partition count.
 
 \section{Configuration precedence and profiles}
-\tbd
+\label{sec:tuning-precedence}
+
+A given key can be set in more than one place, and Spark resolves conflicts
+in a fixed order, highest priority first: values set programmatically on a
+\texttt{SparkConf} in application code; \texttt{--conf} flags (or
+\texttt{--executor-memory}-style shortcuts) passed to \texttt{spark-submit};
+values in \texttt{spark-defaults.conf} on the client; and finally each
+setting's built-in default. A value that looks ignored is almost always
+being overridden from a higher-priority layer than the one you edited ---
+checking \texttt{spark.conf.get(key)} inside a running session, which reports
+the value actually in effect, settles this faster than re-reading config
+files.
 
 \section{Kyuubi and multi-tenancy}
-\tbd
+\label{sec:tuning-kyuubi}
+
+Kyuubi (this stack's gateway) runs one Spark application per Kyuubi
+\emph{engine} rather than one per user's individual query, and its
+\emph{share level} setting decides how those engines are pooled:
+\texttt{CONNECTION} gives every JDBC connection its own engine (maximum
+isolation, maximum startup latency per query); \texttt{USER} shares one
+engine across all of a user's connections (a warm, persistent Spark session
+per user); \texttt{SERVER} shares a single engine across every user on the
+Kyuubi instance (cheapest, but one user's job competing for the same
+executors as everyone else's). An \emph{engine pool} pre-warms several
+engines so a new session does not pay Spark's own startup cost on first
+connect. All of this sits above the resource-sizing questions from this
+chapter's earlier sections, not in place of them --- each pooled engine is
+still an ordinary Spark application whose executors are sized exactly as
+described above.
 
 \section{Summary}
-\tbd
+\label{sec:tuning-summary}
+
+Executor cores, memory, and overhead each trace back to a mechanism from
+earlier chapters --- concurrent tasks dividing the unified memory pool,
+the largest operation's actual memory need, and everything living outside
+the JVM heap, respectively --- rather than a rule of thumb. Dynamic
+allocation is safe to scale aggressively once shuffle data no longer lives
+and dies with the executor that produced it, which the external (and,
+further, push-based) shuffle service guarantees. Configuration resolves in a
+fixed precedence order regardless of how many places a key is set, and
+Kyuubi's engine share level is a pooling decision layered on top of, not
+instead of, ordinary executor sizing.
 
 \exercisehead
 \begin{exercises}
 \item Take a job that spills. Propose two different fixes --- more memory versus
       fewer cores --- and predict which the mechanism favours, and why.
+\item Given a 32~GB, 8-core node, propose an executor shape (cores, memory,
+      overhead) and justify the core count from the connection-pool
+      consideration in \Cref{sec:executor-sizing}.
+\item Enable dynamic allocation without the external shuffle service on a
+      job with a long-running final stage. Predict, then observe, what
+      happens when an idle executor holding needed shuffle data is
+      considered for removal.
 \end{exercises}

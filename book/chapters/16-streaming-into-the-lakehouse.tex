@@ -12,31 +12,146 @@ table.
 \end{chapterintro}
 
 \section{The micro-batch model and the unbounded table}
-\tbd
+\label{sec:stream-microbatch}
+
+Structured Streaming treats a stream as a table that keeps growing, and a
+streaming query as an ordinary DataFrame query re-run incrementally against
+the new rows since the last run. Each run is a \emph{micro-batch}: the
+driver's \texttt{StreamExecution} asks the source for the range of new
+offsets available, plans and executes an ordinary batch job over exactly
+that range --- the same Catalyst pipeline, the same job/stage/task
+machinery from \Cref{ch:shape} --- and, on success, records the offsets it
+just processed to a \emph{checkpoint} location before asking for the next
+range. Nothing about execution is special to streaming; what is special is
+that this loop runs forever and that recovery after a failure means
+replaying from the last checkpointed offset rather than restarting the
+whole computation from the beginning.
 
 \section{Sources and sinks}
-\tbd
+\label{sec:stream-sources-sinks}
+
+A source only needs to support one contract: given a starting offset, return
+the new records since it, and report the latest offset available. Kafka is
+the common source on this kind of stack, with a Kafka partition's offset
+serving directly as the streaming offset; a sink is symmetric, needing to
+either support exactly-once writes idempotently keyed by batch ID, or
+tolerate the batch being reprocessed after a failure. Writing to an Iceberg
+table as a sink (\Cref{sec:stream-iceberg-write}) satisfies this because a
+commit is already atomic (\Cref{sec:ice-commit-swap}) --- a batch that failed
+after writing files but before committing simply never became visible, and
+retrying it from the same checkpointed offset produces the same rows again
+with no duplicate ever committed.
 
 \section{Event time and watermarking}
-\tbd
+\label{sec:stream-watermark}
+
+Grouping by \emph{event time} (when something happened, carried in the data)
+rather than \emph{processing time} (when Spark saw it) needs a rule for when
+a time-based group is finally complete, since late-arriving data can always
+show up for a window Spark already emitted a result for. A
+\emph{watermark} (\texttt{withWatermark("event\_ts", "10 minutes")})
+declares how late data is tolerated to be: Spark tracks the maximum event
+time seen so far and treats any window ending more than the watermark delay
+before that maximum as closed, discarding (or routing separately) anything
+arriving later for it. The watermark is also the mechanism that bounds state
+size (\Cref{sec:stream-state}) --- without one, a windowed aggregation would
+have to keep every window's partial state forever, since nothing would ever
+tell it a window was safe to forget.
 
 \section{Stateful operations and the state store}
-\tbd
+\label{sec:stream-state}
+
+A windowed aggregation or a streaming join needs to remember partial results
+across micro-batches --- this is the \emph{state store}, checkpointed
+alongside the offsets so it survives a restart. The default in-memory
+provider keeps state as JVM objects subject to the same heap and GC pressure
+as any other data in \Cref{sec:mem-model}; \texttt{RocksDBStateStoreProvider}
+(\conf{spark.sql.streaming.stateStore.providerClass}) instead keeps state in
+an embedded RocksDB instance per task, off the JVM heap, trading some access
+latency for a state size that does not compete with execution memory at all
+--- the practical choice once state size (a wide window, a large number of
+distinct keys) makes the default provider's GC pressure the bottleneck rather
+than the actual streaming computation.
 
 \section{Output modes and triggers}
-\tbd
+\label{sec:stream-modes-triggers}
+
+\emph{Output mode} controls what a micro-batch emits: \texttt{append} emits
+only new rows that are already final (rows in a closed watermark window, or
+a stateless transform); \texttt{update} emits any row whose aggregate result
+changed this batch, including one already emitted before; \texttt{complete}
+re-emits the entire result table every batch, viable only for a small
+aggregate. \emph{Trigger} controls when a micro-batch runs:
+\texttt{ProcessingTime} fires on a fixed interval regardless of how much data
+is waiting; \texttt{Once} (and its successor, \texttt{AvailableNow}) runs
+exactly one batch over everything currently available and stops, which is
+the trigger that turns Structured Streaming into a scheduled incremental
+batch job rather than an always-on process --- a useful way to get exactly-once
+incremental processing without paying for a permanently running cluster.
 
 \section{Exactly-once and the commit}
-\tbd
+\label{sec:stream-exactly-once}
+
+"Exactly-once" describes the combination of two guarantees, neither
+sufficient alone: the checkpoint's offset log records exactly which input
+range a batch covers before that batch's output is committed, so a restart
+after a mid-batch failure replays the same range rather than skipping or
+duplicating input; and the sink must make committing that batch's output
+idempotent, so replaying the same range twice does not produce the output
+twice. Writing to Iceberg gets the second half for free, structurally:
+because a commit is one atomic snapshot append keyed to the batch, a
+retried batch either has not committed yet (retry proceeds normally) or has
+already committed (the retry's commit attempt for already-applied changes
+is what the streaming write path's own idempotency tracking, keyed by
+batch ID, is designed to detect and skip) --- there is no in-between state
+where a duplicate partial write is visible to a reader.
 
 \section{Writing to Iceberg: cadence, small files, maintenance}
-\tbd
+\label{sec:stream-iceberg-write}
+
+Every micro-batch that writes to Iceberg ends in exactly one commit ---
+one new snapshot, one new manifest list, at least one new manifest ---
+regardless of how little data that batch contained. A short trigger
+interval processing a modest input rate is therefore the single fastest way
+to produce the small-files and rapidly-growing-manifest problems
+\Cref{ch:iceberg-write} described in the abstract: a 10-second trigger
+against a source producing a few megabytes per batch commits a new,
+small-file-laden snapshot six times a minute, all day, whether or not the
+table's total data volume ever justifies that many files.
+
+\begin{tip}
+The lever is the trigger interval traded against latency, not the Iceberg
+side of the write. Widening \texttt{ProcessingTime} from 10 seconds to a few
+minutes multiplies the average file size roughly proportionally for the
+same throughput, at the cost of that much more end-to-end latency before a
+row becomes queryable --- decide the interval from the latency budget first,
+then treat \Cref{sec:ice-write-streaming}'s continuous-maintenance schedule
+as the backstop for whatever file size the chosen interval implies, not as a
+substitute for choosing a sane interval.
+\end{tip}
 
 \section{Summary}
-\tbd
+\label{sec:stream-summary}
+
+A streaming query is an ordinary batch query re-run incrementally over new
+offsets each micro-batch, recovering by replaying from a checkpoint rather
+than restarting; nothing about execution itself is special. Watermarking is
+what lets a windowed aggregation ever consider a window closed, and is also
+what bounds state size; RocksDB moves that state off the JVM heap once it
+gets large enough to matter. Exactly-once needs both an offset log that
+knows exactly what a batch covers and a sink that can commit that batch
+idempotently --- Iceberg's atomic, batch-keyed commit supplies the second
+half structurally. And every commit's fixed overhead, multiplied by a short
+trigger interval, is the direct cause of a streaming table's small-files and
+manifest-growth pressure, which is a cadence decision to make deliberately,
+not a defect to discover later.
 
 \exercisehead
 \begin{exercises}
 \item Given a trigger interval and an input rate, estimate files committed per
       hour and the compaction cadence needed to keep the table healthy.
+\item Run a windowed aggregation with and without a watermark; observe state
+      store size growth over time in the UI's Streaming tab.
+\item Kill a streaming query mid-batch and restart it. Confirm from the
+      table's snapshot log that no duplicate commit resulted.
 \end{exercises}
