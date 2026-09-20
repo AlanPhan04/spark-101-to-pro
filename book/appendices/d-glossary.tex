@@ -1,11 +1,93 @@
 \chapter{Glossary}
 \label{app:glossary}
 
-\tbd
+Terms as this book uses them, in the order they are first introduced.
 
-% Term -> definition -> first-use chapter, kept in sync with 05-conventions.md
-% as chapters are drafted. The abbreviations and technologies tables below are
-% the seed; expand into full glossary entries during drafting.
+\begin{description}
+\item[Driver] The process holding the \texttt{SparkSession}, running the
+      application's own code, and coordinating everything else
+      (\Cref{ch:shape}).
+\item[Executor] A JVM process that runs tasks and holds data in memory or on
+      disk for a running application (\Cref{ch:shape}).
+\item[Job] The unit of work triggered by one action; made of one or more
+      stages (\Cref{ch:shape}).
+\item[Stage] A set of tasks that can run without a shuffle between them,
+      bounded by wide-dependency shuffle boundaries (\Cref{ch:shape}).
+\item[Task] The smallest unit of scheduled work: one stage's operators
+      applied to one partition (\Cref{ch:shape}).
+\item[Narrow dependency] A child partition depends on a known, fixed set of
+      parent partitions --- no shuffle needed (\Cref{ch:shape}).
+\item[Wide dependency] A child partition may depend on data from any parent
+      partition --- requires a shuffle (\Cref{ch:shape}).
+\item[Catalyst] Spark SQL's query optimizer: parse, analyze, optimize,
+      plan, generate code (\Cref{ch:catalyst}).
+\item[Whole-stage code generation] Fusing a chain of operators into one
+      generated Java method via produce/consume
+      (\Cref{sec:tungsten-wholestage}).
+\item[Unified memory] The single JVM memory pool execution and storage
+      share and borrow from, with a soft boundary
+      (\Cref{sec:mem-model}).
+\item[Spill] Writing intermediate data (a sort buffer, a hash table) to disk
+      because it does not fit in its memory budget (\Cref{ch:execmem}).
+\item[Shuffle] Redistributing data across partitions between two stages, via
+      a map-side write and a reduce-side fetch (\Cref{ch:shuffle}).
+\item[Broadcast hash join] A join where one side is small enough to be sent
+      whole to every executor, avoiding a shuffle of the large side
+      (\Cref{ch:joins}).
+\item[Sort-merge join] A join where both sides are shuffled and sorted by
+      join key, then merged --- the robust default for two large sides
+      (\Cref{ch:joins}).
+\item[Adaptive Query Execution (AQE)] Re-planning after each shuffle using
+      measured, rather than estimated, partition sizes
+      (\Cref{ch:aqe}).
+\item[Skew] One partition or key holding disproportionately more data than
+      others, creating a straggler task (\Cref{sec:aqe-skew}).
+\item[Partition pruning] Skipping whole partitions (or files) based on a
+      filter resolved before reading data (\Cref{ch:pruning}).
+\item[Dynamic partition pruning (DPP)] Partition pruning using a value
+      discovered at runtime from the other side of a join
+      (\Cref{sec:pruning-dpp}).
+\item[Bucketing] Dividing data within a partition into a fixed number of
+      files by hashing a column, to avoid a shuffle on a repeated join
+      (\Cref{sec:pruning-bucketing}).
+\item[Storage-partitioned join] A join with no shuffle because both sides
+      are already co-located by the same bucket/partition transform
+      (\Cref{sec:joins-spj}).
+\item[Manifest] An immutable file listing a set of data or delete files with
+      their partition values and column statistics (\Cref{ch:iceberg-spec}).
+\item[Manifest list] A per-snapshot file listing the manifests that make up
+      that snapshot, with per-manifest summary statistics
+      (\Cref{ch:iceberg-spec}).
+\item[Snapshot] One committed version of a table's state, with its own
+      sequence number and manifest list (\Cref{sec:ice-snapshots}).
+\item[Sequence number] A monotonically increasing number recording a
+      snapshot's relative age, used to decide which delete files apply to
+      which data files (\Cref{sec:ice-snapshots}).
+\item[Position delete] A delete recorded as an exact (file, row-position)
+      pair --- cheap to apply, requires the writer to know the row's
+      position (\Cref{sec:ice-delete-files}).
+\item[Equality delete] A delete recorded as a column-value match --- cheap
+      to write, progressively more expensive to apply as they accumulate
+      (\Cref{sec:ice-delete-files}).
+\item[Copy-on-write (CoW)] A row-level update strategy that rewrites whole
+      affected data files (\Cref{sec:ice-write-cow-mor}).
+\item[Merge-on-read (MoR)] A row-level update strategy that records a delete
+      file instead of rewriting data (\Cref{sec:ice-write-cow-mor}).
+\item[Hidden partitioning] Iceberg partitioning by a transform of a source
+      column, resolved from a plain filter with no partition column in the
+      query text (\Cref{sec:ice-partitioning}).
+\item[Catalog] The component mapping a table name to its current metadata
+      file location, atomically swappable on commit
+      (\Cref{sec:cat-what}).
+\item[Optimistic concurrency] A commit protocol where writers do the
+      expensive work assuming they will win, retrying only the cheap
+      final compare-and-swap on conflict (\Cref{sec:cat-swap}).
+\item[UnsafeRow] Tungsten's packed, off-heap-capable binary row format
+      (\Cref{sec:tungsten-row}).
+\item[DataSource V2 (DSv2)] The Spark API contract an external table
+      source (Iceberg included) implements to plug into the planner
+      (\Cref{ch:dsv2}).
+\end{description}
 
 \section*{Abbreviations}
 

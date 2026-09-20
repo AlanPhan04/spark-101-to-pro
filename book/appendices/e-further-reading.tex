@@ -1,11 +1,77 @@
 \chapter{Further Reading}
 \label{app:reading}
 
-\tbd
+Full citations are in the bibliography. This appendix groups them, plus a
+few further pointers, by the part of the book they extend.
 
-% Papers, official docs, and the comps, keyed to the chapters they extend.
-% The seeded entries in sections/ref.bib are the starting set: the RDD and
-% Spark SQL papers, the Structured Streaming and Lakehouse papers, the Iceberg
-% spec and docs, Kyuubi docs, and the O'Reilly comps (High Performance Spark,
-% Spark: The Definitive Guide, Learning Spark, Apache Iceberg: The Definitive
-% Guide, Designing Data-Intensive Applications).
+\section*{Foundations (Part I) and the engine's own papers}
+
+The original research papers behind Spark's execution model are short,
+readable, and still the clearest statement of \emph{why} the engine is
+shaped the way \Cref{ch:shape} and \Cref{ch:catalyst} describe it:
+\emph{Resilient Distributed Datasets} \cite{ZahariaEtAl2012} (the RDD
+abstraction and lineage-based fault tolerance underlying every job/stage/task
+concept in this book), \emph{Spark SQL: Relational Data Processing in Spark}
+\cite{ArmbrustEtAl2015} (Catalyst itself), and the retrospective
+\emph{Apache Spark: A Unified Engine for Big Data Processing}
+\cite{ZahariaEtAl2016}. \emph{Spark: The Definitive Guide}
+\cite{ChambersZaharia2018} and \emph{Learning Spark, 2nd ed.}
+\cite{DamjiEtAl2020} cover the same ground at tutorial pace, useful where
+this book moves quickly from mechanism to mechanism.
+
+\section*{Making queries fast (Part II)}
+
+\emph{High Performance Spark, 2nd ed.} \cite{KarauEtAl2026} is the closest
+comp to this book's own emphasis --- shuffle, joins, and partitioning as
+performance levers rather than API surface --- and is the natural next
+stop after \Cref{ch:shuffle}--\Cref{ch:caching}. The official
+\emph{Tuning Spark} guide \cite{SparkTuningGuide} and
+\emph{Spark SQL, DataFrames and Datasets Guide} \cite{SparkSQLGuide}, both
+pinned to this book's reference version (\Cref{app:refenv}), are worth
+checking directly whenever a config default is suspected to have changed
+since.
+
+\section*{The Iceberg lakehouse (Part III)}
+
+The \emph{Lakehouse} paper \cite{ArmbrustEtAl2020} is the argument for why a
+table format over object storage exists at all, ahead of Iceberg
+specifically. For Iceberg itself: the official
+\emph{Apache Iceberg Table Spec} \cite{IcebergSpec} is the primary source
+for everything in \Cref{ch:iceberg-spec} on the metadata tree and delete
+files, and the \emph{Apache Iceberg Documentation} \cite{IcebergDocs} covers
+catalogs, maintenance procedures, and Spark-side configuration in more
+day-to-day detail than this book's mechanism-first treatment.
+\emph{Apache Iceberg: The Definitive Guide} \cite{ShiranEtAl2024} is the
+book-length comp, and the Cazpian engineering blog
+(\url{https://cazpian.ai/blog}) was a useful secondary source while drafting
+this part --- cross-checked against the official spec and docs above
+wherever the two disagreed, most notably on maintenance-operation ordering
+(\Cref{sec:ice-write-expiration}).
+
+\section*{Operating Spark (Part IV)}
+
+The \emph{Structured Streaming} paper \cite{ArmbrustEtAl2018} is the
+primary source behind \Cref{ch:streaming}'s micro-batch and exactly-once
+model. \emph{Apache Kyuubi Documentation} \cite{KyuubiDocs} covers engine
+share levels and pooling (\Cref{sec:tuning-kyuubi}) in more depth than a
+single chapter section can. \emph{Designing Data-Intensive Applications}
+\cite{Kleppmann2017} is not Spark-specific but is the best available
+treatment of the distributed-systems ideas this book leans on throughout ---
+partitioning, replication, consistency, fault tolerance --- for a reader who
+wants the general theory behind a specific mechanism.
+
+\section*{Internals (Part V)}
+
+Most of \Cref{ch:tungsten}--\Cref{ch:dsv2} has no single canonical paper;
+the most reliable way to go deeper is the Spark source itself, read
+alongside \emph{Spark: The Definitive Guide} \cite{ChambersZaharia2018}'s
+higher-level description of the same components and the official
+\emph{Spark SQL, DataFrames and Datasets Guide} \cite{SparkSQLGuide} for
+whichever configuration surface a given internal exposes:
+
+\begin{description}
+\item[Whole-stage codegen] \texttt{sql.execution} package
+      (\Cref{ch:tungsten}).
+\item[The shuffle framework] \texttt{shuffle} package (\Cref{ch:scheduler}).
+\item[DataSource V2] \texttt{sql.connector} package (\Cref{ch:dsv2}).
+\end{description}

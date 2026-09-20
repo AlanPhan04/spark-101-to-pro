@@ -1,13 +1,125 @@
 \chapter{The Reference Environment and the Running Example}
 \label{app:refenv}
 
-\tbd
+Every version-specific claim in this book is written against one stack, one
+cluster shape, and one running example. This appendix fixes all three, plus
+the columnar-format background Part III assumes.
 
-% Content: the exact stack every claim is written against (Spark 3.5.2, Iceberg
-% format v2, Hive Metastore + Iceberg REST catalog, Kyuubi, GCS, GKE, JVM 17,
-% Parquet); the one cluster shape used for all worked examples (executor count,
-% cores, memory); and the running example --- the `trips` Iceberg table (vehicle
-% GPS pings, partitioned by day(event_ts)) plus the star schema (fact_trip,
-% dim_route, dim_vehicle, dim_date) built from it. Schema, row counts, size, and
-% value distributions. Also a short columnar-format primer (row vs columnar,
-% Parquet encoding / compression / footer statistics) that Part III assumes.
+\section{The stack}
+\label{sec:refenv-stack}
+
+\Cref{tab:refenv-stack} is the reference environment. A claim elsewhere in
+the book that depends on version-specific behavior --- an AQE default, a
+config key introduced or renamed in a particular release --- is written
+against exactly this stack; where behavior differs meaningfully on an older
+or newer version, the text says so explicitly rather than leaving it
+implicit.
+
+\begin{table}[htbp]
+\centering
+\caption{The reference stack}
+\label{tab:refenv-stack}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Component} & \textbf{Version / detail} \\
+\midrule
+Apache Spark & 3.5.2 \\
+Table format & Apache Iceberg, format version 2 \\
+Catalog & Hive Metastore (\Cref{sec:cat-hms}) \\
+SQL gateway & Apache Kyuubi (\Cref{sec:tuning-kyuubi}) \\
+Cluster manager & Google Kubernetes Engine (GKE) \\
+Object storage & Google Cloud Storage (GCS) \\
+JVM & OpenJDK 17 \\
+File format & Apache Parquet \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{The cluster shape}
+\label{sec:refenv-cluster}
+
+Worked numbers throughout the book --- executor counts, task-slot arithmetic,
+memory sizing --- assume one concrete shape unless a section says otherwise:
+executors with 4 cores and 16~GB of executor memory each (plus the memory
+overhead \Cref{sec:executor-sizing} derives separately), running as pods on
+GKE with no co-located storage, since GCS is remote object storage rather
+than node-local disk (\Cref{sec:sched-locality-speculation}'s locality
+discussion depends on exactly this separation). A cluster of 10 such
+executors gives 40 task slots --- the number \Cref{sec:shuffle-sizing}'s
+shuffle-partition-count reasoning starts from.
+
+\section{The running example: \texttt{trips}}
+\label{sec:refenv-trips}
+
+The specimen dataset is a city bus system's vehicle position pings. The fact
+table, \texttt{trips}, is an Iceberg table partitioned by
+\texttt{day(event\_ts)} (\Cref{sec:ice-partitioning}), holding a few hundred
+million rows per month, with the columns in \Cref{tab:refenv-trips-schema}.
+
+\begin{table}[htbp]
+\centering
+\caption{\texttt{trips} schema}
+\label{tab:refenv-trips-schema}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Column} & \textbf{Type} & \textbf{Meaning} \\
+\midrule
+\texttt{trip\_id} & \texttt{string} & Unique identifier for one scheduled trip \\
+\texttt{event\_ts} & \texttt{timestamp} & When this position ping was recorded \\
+\texttt{route\_id} & \texttt{string} & Foreign key to \texttt{dim\_route} \\
+\texttt{vehicle\_id} & \texttt{string} & Foreign key to \texttt{dim\_vehicle} \\
+\texttt{arrival\_delay\_s} & \texttt{int} & Seconds late (negative if early) at
+  the next stop \\
+\texttt{distance} & \texttt{double} & Distance covered since the previous
+  ping, in km \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three dimensions complete the star schema: \texttt{dim\_route} (\texttt{route\_id},
+\texttt{route\_name}, and route-level attributes such as the zone it
+serves); \texttt{dim\_vehicle} (\texttt{vehicle\_id}, vehicle type and
+capacity); and \texttt{dim\_date} (\texttt{date}, \texttt{year},
+\texttt{month}, \texttt{day\_of\_week}), used throughout
+\Cref{ch:pruning}'s dynamic-partition-pruning examples to filter
+\texttt{trips} indirectly by calendar attributes that are not columns on the
+fact table itself. \texttt{dim\_route} is small enough to broadcast under
+default settings (\Cref{sec:joins-selection}); \texttt{dim\_date} and
+\texttt{dim\_vehicle} are smaller still.
+
+\section{A columnar-format primer}
+\label{sec:refenv-columnar}
+
+Part III assumes familiarity with two ideas Parquet is built on, summarized
+here for a reader coming from row-oriented formats.
+
+A \textbf{row-oriented} format (CSV, JSON, Avro used row-wise) stores a
+complete row contiguously --- reading one column out of a wide table still
+means reading every other column's bytes for every row along the way. A
+\textbf{columnar} format stores one column's values contiguously across many
+rows instead, so reading a subset of columns reads only their bytes
+(\Cref{sec:pruning-column}'s \texttt{ReadSchema} pruning depends on exactly
+this layout to be worth anything) and values of the same type sit next to
+each other, which compresses far better than mixed-type row bytes and is
+what a vectorized reader (\Cref{sec:ice-read-vectorized}) processes
+efficiently.
+
+Parquet organizes a file as a set of \textbf{row groups} (a horizontal slice
+of rows, typically sized to match the input-partition target from
+\Cref{sec:shape-jobs}), each holding one \textbf{column chunk} per column,
+itself split into \textbf{pages} that are individually encoded and
+compressed. Every row group's footer carries per-column \textbf{statistics}
+--- min, max, null count --- which is exactly what \Cref{sec:c-pushdown}'s
+row-group-level pushdown filters against, and what
+\Cref{sec:ice-read-metrics-modes}'s Iceberg-level metrics modes summarize one
+level up, at the file level, in the manifest.
+
+\begin{note}
+"Compressed" and "encoded" are distinct steps applied in sequence: encoding
+(dictionary encoding, run-length encoding) exploits repeated or low-cardinality
+values before general-purpose compression (Snappy, Zstd, Gzip) runs on the
+result. This is why \Cref{sec:mem-heap}'s decompressed-size warning matters:
+a compression ratio of 3--5$\times$ on typical analytic data means an
+on-disk size is not a reliable proxy for the deserialized, in-memory size
+Spark actually has to hold.
+\end{note}

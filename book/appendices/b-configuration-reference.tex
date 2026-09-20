@@ -1,10 +1,199 @@
 \chapter{Configuration Reference}
 \label{app:config}
 
-\tbd
+Every configuration key the book relies on to explain a mechanism, grouped by
+subsystem. This is a "which knob touches what, and what it costs" reference,
+not a recommended-values table --- read the chapter cited before changing a
+value on a table or job you cannot afford to be wrong about.
 
-% A lookup of every configuration key referenced in the book, grouped by
-% subsystem (memory, shuffle, AQE, joins, Iceberg catalog, Iceberg table
-% properties, streaming), with its default as of the reference environment and
-% the chapter that explains the mechanism it controls. Not a recommended-values
-% table --- a "which knob touches what, and what it costs" table.
+\section{Memory (\Cref{ch:execmem})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.executor.memory} & --- & JVM heap size; the base the unified
+  memory pool is computed from (\Cref{sec:mem-model}). \\
+\conf{spark.executor.memoryOverhead} & max(10\%, 384~MB) & Off-heap JVM
+  needs, container-limit headroom (\Cref{sec:executor-sizing}). \\
+\conf{spark.memory.fraction} & 0.6 & Share of (heap $-$ reserved) given to
+  the unified execution/storage pool. \\
+\conf{spark.memory.storageFraction} & 0.5 & Storage's guaranteed share within
+  the unified pool (\Cref{sec:caching-borrowing}). \\
+\conf{spark.memory.offHeap.enabled} & false & Route unified memory off-heap,
+  outside GC's view (\Cref{sec:tungsten-offheap}). \\
+\conf{spark.serializer} & \texttt{Java\-Serial\-izer} & Set to Spark's
+  Kryo serializer class as the practical choice on this stack
+  (\Cref{sec:mem-serialization}). \\
+\bottomrule
+\end{longtable}
+
+\section{Shuffle (\Cref{ch:shuffle}, \Cref{ch:scheduler})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.sql.shuffle.partitions} & 200 & Shuffle partition count before
+  AQE coalescing (\Cref{sec:shuffle-sizing}). \\
+\conf{spark.shuffle.sort.bypassMergeThreshold} & 200 & Partition-count
+  ceiling for the cheap bypass shuffle writer
+  (\Cref{sec:sched-shuffle-manager}). \\
+\conf{spark.shuffle.io.maxRetries} & 3 & Shuffle-client retries for a
+  transient fetch failure against a still-live executor
+  (\Cref{sec:failure-signatures}). \\
+\conf{spark.shuffle.io.retryWait} & 5s & Delay between those retries. \\
+\conf{spark.stage.maxConsecutiveAttempts} & 4 & Stage resubmission attempts
+  after a lost-executor fetch failure. \\
+\conf{spark.task.maxFailures} & 4 & Per-task retry ceiling before the job
+  fails. \\
+\conf{spark.shuffle.service.enabled} & false & External shuffle service ---
+  decouples shuffle data lifetime from the executor's own
+  (\Cref{sec:shuffle-external}). \\
+\conf{spark.shuffle.push.enabled} & false & Push-based shuffle merging on top
+  of the external service. \\
+\conf{spark.excludeOnFailure.enabled} & false & Stop retries from landing
+  back on a node already causing failures. \\
+\bottomrule
+\end{longtable}
+
+\section{Adaptive Query Execution (\Cref{ch:aqe})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.sql.adaptive.enabled} & true (since 3.2) & Master switch for
+  every mechanism in this section. \\
+\conf{spark.sql.adaptive.advisoryPartitionSizeInBytes} & 128~MB &
+  Coalescing target (\Cref{sec:aqe-coalesce}). \\
+\conf{spark.sql.adaptive.coalescePartitions.minPartitionSize} & 1~MB &
+  Floor that stops over-merging. \\
+\conf{spark.sql.adaptive.coalescePartitions.parallelismFirst} & true &
+  Protects core-count parallelism ahead of the size target
+  (\Cref{sec:aqe-parallelism}). \\
+\conf{spark.sql.adaptive.autoBroadcastJoinThreshold} & same as the
+  planning-time key & Runtime broadcast-conversion threshold, measured
+  against real post-shuffle bytes (\Cref{sec:aqe-thresholds}). \\
+\conf{spark.sql.adaptive.skewJoin.skewedPartitionFactor} & 5.0 & Multiple of
+  the median partition size that counts as skewed
+  (\Cref{sec:aqe-skew}). \\
+\conf{spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes} & 256~MB &
+  Absolute-size floor, required alongside the factor above. \\
+\bottomrule
+\end{longtable}
+
+\section{Joins (\Cref{ch:joins})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.sql.autoBroadcastJoinThreshold} & 10~MB & Planning-time broadcast
+  decision, against an on-disk size estimate (\Cref{sec:aqe-thresholds}). \\
+\conf{spark.sql.join.preferSortMergeJoin} & true & Prefer sort-merge over
+  shuffle-hash when both are viable (\Cref{sec:joins-selection}). \\
+\bottomrule
+\end{longtable}
+
+\section{Partitioning and pruning (\Cref{ch:pruning})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.sql.files.maxPartitionBytes} & 128~MB & Input-partition target
+  for Hive-catalogued file scans (\Cref{sec:shape-jobs}). \\
+\conf{spark.sql.optimizer.dynamicPartitionPruning.enabled} & true & DPP for a
+  star-schema join filtered from the dimension side
+  (\Cref{sec:pruning-dpp}). \\
+\bottomrule
+\end{longtable}
+
+\section{Iceberg catalog and commits (\Cref{ch:catalogs})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\texttt{commit.retry.num-retries} & 4 & Retry attempts before a commit fails
+  under contention (\Cref{sec:cat-retries}). \\
+\texttt{commit.retry.min-wait-ms} & 100 & Initial backoff. \\
+\texttt{commit.retry.max-wait-ms} & 60{,}000 & Backoff ceiling. \\
+\texttt{commit.retry.total-timeout-ms} & 1{,}800{,}000 & Overall retry time
+  budget. \\
+\bottomrule
+\end{longtable}
+
+\section{Iceberg table properties (\Cref{ch:iceberg-layout}, \Cref{ch:iceberg-read}, \Cref{ch:iceberg-write})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\texttt{write.target-file-size-bytes} & 512~MB & Write-time file-size target
+  (\Cref{sec:ice-file-size}). \\
+\texttt{write.distribution-mode} & \texttt{hash} & Shuffle-before-write
+  strategy (\Cref{sec:ice-write-distribution}). \\
+\texttt{write.delete.mode} / \texttt{.update.mode} / \texttt{.merge.mode} ---
+  varies by version & --- & copy-on-write vs.\ merge-on-read per operation
+  type; check the table's actual properties
+  (\Cref{sec:ice-write-cow-mor}). \\
+\texttt{write.metadata.metrics.default} & \texttt{truncate(16)} & Manifest
+  statistics granularity (\Cref{sec:ice-read-metrics-modes}). \\
+\texttt{write.parquet.bloom-filter-enabled.column.<col>} & unset & Enable a
+  bloom filter for point lookups (\Cref{sec:ice-read-bloom}). \\
+\texttt{read.split.target-size} & 128~MB & Iceberg-side input-split target
+  (\Cref{sec:ice-read-splits}). \\
+\texttt{read.split.open-file-cost} & 4~MB & Assumed per-file overhead when
+  packing splits. \\
+\texttt{read.parquet.vectorization.batch-size} & 5{,}000 & Rows per
+  vectorized-read batch (\Cref{sec:ice-read-vectorized}). \\
+\bottomrule
+\end{longtable}
+
+\section{Streaming (\Cref{ch:streaming})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.sql.streaming.stateStore.providerClass} &
+  \conf{HDFSBackedStateStoreProvider} & Switch to
+  \conf{RocksDBStateStoreProvider} to move state off-heap
+  (\Cref{sec:stream-state}). \\
+\bottomrule
+\end{longtable}
+
+\section{Dynamic allocation and scheduling (\Cref{ch:tuning}, \Cref{ch:scheduler})}
+
+\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Controls} \\
+\midrule
+\endhead
+\conf{spark.dynamicAllocation.enabled} & false & Master switch
+  (\Cref{sec:dynamic-allocation}). \\
+\conf{spark.dynamicAllocation.schedulerBacklogTimeout} & 1s & Delay before
+  requesting more executors under a pending-task backlog. \\
+\conf{spark.dynamicAllocation.executorIdleTimeout} & 60s & Idle time before
+  an executor is released. \\
+\conf{spark.dynamicAllocation.shuffleTracking.enabled} & true (since 3.0) &
+  Keeps an executor alive while its shuffle output is still referenced,
+  without needing the external shuffle service. \\
+\conf{spark.speculation} & false & Launch a duplicate copy of a straggling
+  task (\Cref{sec:sched-locality-speculation}). \\
+\conf{spark.speculation.multiplier} & 1.5 & Multiple of median task duration
+  that triggers a speculative copy. \\
+\conf{spark.locality.wait} & 3s & Time to wait for a better-locality slot
+  before falling back. \\
+\bottomrule
+\end{longtable}

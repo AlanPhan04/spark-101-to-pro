@@ -82,7 +82,10 @@ $log = "$Name.log"
 $hadProblems = $false
 if (Test-Path $log) {
     $logText = Get-Content $log -Raw
-    $errCount = ([regex]::Matches($logText, '(?m)^(\./)?[^\r\n ]*:[0-9]+: |^! ')).Count
+    # "ignored error" lines are XeTeX's own non-fatal box-splitting diagnostics
+    # (observed with longtable spanning a page break); XeTeX recovers from them
+    # itself, so they are not counted as build errors.
+    $errCount = ([regex]::Matches($logText, '(?m)^(\./)?[^\r\n ]*:[0-9]+: (?!ignored error)|^! ')).Count
     $undCount = ([regex]::Matches($logText, 'Citation .* undefined|Reference .* undefined')).Count
     Write-Host ""
     Write-Host "errors: $errCount   undefined refs/cites: $undCount"
