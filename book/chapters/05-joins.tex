@@ -86,7 +86,7 @@ size on either side.
 \label{sec:joins-bnlj}
 
 An equi-join needs a hash or a sort; a join whose condition is not an equality
---- \texttt{ON a.price > b.min\_price}, for instance --- needs neither, and
+--- \texttt{ON o.order\_total > c.credit\_limit}, for instance --- needs neither, and
 Spark falls back to comparing every row of one side against every row of the
 other. If one side is small enough to broadcast, this is a
 \texttt{BroadcastNestedLoopJoin}: no shuffle, but $O(N \times M)$ comparisons
@@ -133,8 +133,8 @@ wrong number.
 When the estimate is missing or wrong, a hint overrides it directly:
 
 \begin{lstlisting}[language=SQL,caption={Forcing a broadcast when statistics are missing},captionpos=b]
-SELECT /*+ BROADCAST(r) */ t.route_id, r.route_name
-FROM trips t JOIN dim_route r ON t.route_id = r.route_id;
+SELECT /*+ BROADCAST(p) */ o.product_id, p.category
+FROM orders o JOIN dim_product p ON o.product_id = p.product_id;
 \end{lstlisting}
 
 The hints, in priority order, are \texttt{BROADCAST} (or
@@ -148,12 +148,12 @@ The more durable fix is to give the planner real numbers instead of overriding
 its guess:
 
 \begin{lstlisting}[language=SQL,caption={Giving the CBO real statistics},captionpos=b]
-ANALYZE TABLE db.dim_route COMPUTE STATISTICS FOR ALL COLUMNS;
+ANALYZE TABLE db.dim_product COMPUTE STATISTICS FOR ALL COLUMNS;
 \end{lstlisting}
 
 Iceberg tables carry file-level size and row counts in their metadata for free,
 but not the column-level statistics the cost-based optimizer uses to size a
-join --- which is exactly why the specimen query's small \texttt{dim\_route}
+join --- which is exactly why the specimen query's small \texttt{dim\_product}
 table was shuffled instead of broadcast in \Cref{ch:catalyst}. Running
 \texttt{ANALYZE} once after a table's data changes materially is usually
 cheaper, and safer over time, than hard-coding a hint.
@@ -205,7 +205,7 @@ removes the shuffle from the decision entirely.
 \begin{exercises}
 \item Given four table sizes and the broadcast threshold, predict each join's
       strategy. Then change one config value and predict which join flips.
-\item Run the specimen query, then run \texttt{ANALYZE TABLE dim\_route
+\item Run the specimen query, then run \texttt{ANALYZE TABLE dim\_product
       COMPUTE STATISTICS FOR ALL COLUMNS} and run it again. Did the join
       strategy change? Explain from \Cref{sec:joins-selection}.
 \item Write a join with a non-equi condition on two tables, neither of which is

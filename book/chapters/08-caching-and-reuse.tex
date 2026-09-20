@@ -24,11 +24,11 @@ arrives --- the classic mistake is caching immediately before a single
 back for the cost of caching it.
 
 \begin{lstlisting}[language=SQL,caption={Reused twice: worth caching},captionpos=b]
--- good: filtered_trips is read by two different aggregations
-filtered_trips.cache()
-filtered_trips.count()                 -- materializes the cache
-result1 = filtered_trips.join(dim_route, "route_id")
-result2 = filtered_trips.groupBy("route_id").sum("distance")
+-- good: filtered_orders is read by two different aggregations
+filtered_orders.cache()
+filtered_orders.count()                 -- materializes the cache
+result1 = filtered_orders.join(dim_product, "product_id")
+result2 = filtered_orders.groupBy("product_id").sum("order_total")
 \end{lstlisting}
 
 \section{Lazy \texttt{cache()} versus eager \texttt{CACHE TABLE}}

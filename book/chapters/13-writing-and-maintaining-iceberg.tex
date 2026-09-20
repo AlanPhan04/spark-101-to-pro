@@ -69,19 +69,19 @@ is untouched either way, provided the predicate lets partition pruning rule
 them out first.
 
 \begin{lstlisting}[language=SQL,caption={Partition predicate in the ON clause keeps the scan narrow},captionpos=b]
-MERGE INTO trips t
-USING staged_trips s
-ON t.event_date = s.event_date AND t.trip_id = s.trip_id
+MERGE INTO orders o
+USING staged_orders s
+ON o.order_date = s.order_date AND o.order_id = s.order_id
 WHEN MATCHED THEN UPDATE SET *
 WHEN NOT MATCHED THEN INSERT *;
 \end{lstlisting}
 
-Dropping \texttt{t.event\_date = s.event\_date} from the \texttt{ON} clause
-does not change which rows match --- \texttt{trip\_id} alone is still
+Dropping \texttt{o.order\_date = s.order\_date} from the \texttt{ON} clause
+does not change which rows match --- \texttt{order\_id} alone is still
 sufficient --- but it removes the one predicate the planner could resolve
 against partition values before scanning, so every partition in
-\texttt{trips} is opened to search for a \texttt{trip\_id} match instead of
-only the partitions \texttt{staged\_trips} actually touches. This is
+\texttt{orders} is opened to search for an \texttt{order\_id} match instead of
+only the partitions \texttt{staged\_orders} actually touches. This is
 \Cref{ch:pruning}'s pruning story again, specific to the write path: a
 \texttt{MERGE} without a partition predicate is not wrong, it is just a full
 scan wearing a row-level operation's syntax.

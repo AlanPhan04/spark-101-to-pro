@@ -142,7 +142,7 @@ spark.sql.catalog.lakehouse.warehouse=gs://my-bucket/warehouse
 \end{lstlisting}
 
 Every table reference is then three-part,
-\texttt{lakehouse.analytics.trips}, resolved through that specific catalog ---
+\texttt{lakehouse.analytics.orders}, resolved through that specific catalog ---
 which matters the moment more than one catalog is registered (a Hive-backed
 one for the existing warehouse, a REST-backed one for a newer set of tables):
 the catalog name in the identifier, not any global default, decides which

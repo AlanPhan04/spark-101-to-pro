@@ -87,7 +87,7 @@ stage~0 of the specimen to a reduce task in stage~2. On the write side, every
 map task:
 
 \begin{enumerate}
-  \item computes \texttt{partition\_id = hash(route\_id) mod 200} for each of
+  \item computes \texttt{partition\_id = hash(product\_id) mod 200} for each of
         its output rows;
   \item sorts its rows by that partition id (Spark has used only this
         \emph{sort-based} shuffle writer since 1.6 --- there is no separate
@@ -300,8 +300,8 @@ costs a range-partitioning exchange even though nothing downstream can rely on
 its effect.
 
 \paragraph{Repeated aggregation on the same key.} Two separate
-\texttt{GROUP BY route\_id} computations in the same query --- one for the
-on-time rate, one for total trips --- shuffle twice on the same key when a
+\texttt{GROUP BY product\_id} computations in the same query --- one for the
+on-time rate, one for total orders --- shuffle twice on the same key when a
 single \texttt{GROUP BY} with two aggregate functions would shuffle once. Watch
 for \texttt{ReuseExchange} in the plan (\Cref{sec:c-exchange}): the planner
 catches this only when the two exchanges are byte-for-byte the same

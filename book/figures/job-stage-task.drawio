@@ -9,19 +9,19 @@
           <mxGeometry x="20" y="15" width="760" height="30" as="geometry" />
         </mxCell>
 
-        <mxCell id="s0" value="&lt;b&gt;Stage 0&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;scan trips + filter&lt;br&gt;(7 days)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+        <mxCell id="s0" value="&lt;b&gt;Stage 0&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;scan orders + filter&lt;br&gt;(7 days)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
           <mxGeometry x="30" y="70" width="200" height="80" as="geometry" />
         </mxCell>
 
-        <mxCell id="s1" value="&lt;b&gt;Stage 1&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;scan dim_route&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+        <mxCell id="s1" value="&lt;b&gt;Stage 1&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;scan dim_product&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
           <mxGeometry x="30" y="210" width="200" height="80" as="geometry" />
         </mxCell>
 
-        <mxCell id="wall" value="&lt;b&gt;shuffle boundary&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;partition by&lt;br&gt;route_id&lt;br&gt;&lt;br&gt;write local files&lt;br&gt;&amp;#8595;&lt;br&gt;fetch over network&lt;br&gt;&amp;#8595;&lt;br&gt;merge&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;dashed=1;fontSize=11;fontColor=#7d2f38;" vertex="1" parent="1">
+        <mxCell id="wall" value="&lt;b&gt;shuffle boundary&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;partition by&lt;br&gt;product_id&lt;br&gt;&lt;br&gt;write local files&lt;br&gt;&amp;#8595;&lt;br&gt;fetch over network&lt;br&gt;&amp;#8595;&lt;br&gt;merge&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;dashed=1;fontSize=11;fontColor=#7d2f38;" vertex="1" parent="1">
           <mxGeometry x="300" y="70" width="140" height="220" as="geometry" />
         </mxCell>
 
-        <mxCell id="s2" value="&lt;b&gt;Stage 2&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;sort-merge join&lt;br&gt;+ aggregate per route&lt;br&gt;&lt;br&gt;200 tasks (default)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=11;fontColor=#2f5320;" vertex="1" parent="1">
+        <mxCell id="s2" value="&lt;b&gt;Stage 2&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;sort-merge join&lt;br&gt;+ aggregate per category&lt;br&gt;&lt;br&gt;200 tasks (default)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=11;fontColor=#2f5320;" vertex="1" parent="1">
           <mxGeometry x="510" y="120" width="230" height="120" as="geometry" />
         </mxCell>
 

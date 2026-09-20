@@ -54,11 +54,11 @@ Where data enters the plan.
 \end{table}
 
 \begin{lstlisting}[language=text,numbers=none,caption={A scan node's fields},captionpos=b]
-BatchScan trips
-  PartitionFilters: [event_ts >= 2026-03-01, event_ts < 2026-03-08]
-  PushedFilters:    [IsNotNull(route_id)]
-  DataFilters:      [IsNotNull(route_id)]
-  ReadSchema:       struct<route_id,arrival_delay_s,event_ts>
+BatchScan orders
+  PartitionFilters: [order_ts >= 2026-03-01, order_ts < 2026-03-08]
+  PushedFilters:    [IsNotNull(product_id)]
+  DataFilters:      [IsNotNull(product_id)]
+  ReadSchema:       struct<product_id,promised_days,delivery_days,order_ts>
   Batched:          true
 \end{lstlisting}
 
@@ -103,7 +103,7 @@ Single & \texttt{SinglePartition} & global aggregate with no group key, \texttt{
 \end{table}
 
 \begin{lstlisting}[language=text,numbers=none,caption={A shuffle exchange},captionpos=b]
-Exchange hashpartitioning(route_id, 200), ENSURE_REQUIREMENTS, [plan_id=42]
+Exchange hashpartitioning(product_id, 200), ENSURE_REQUIREMENTS, [plan_id=42]
 \end{lstlisting}
 
 \texttt{ENSURE\_REQUIREMENTS} means the planner's \texttt{EnsureRequirements} rule
@@ -118,7 +118,7 @@ of a \texttt{BroadcastHashJoin} or \texttt{BroadcastNestedLoopJoin}.
 \section{Sort operators}
 
 \begin{lstlisting}[language=text,numbers=none]
-Sort [route_id ASC NULLS FIRST], false, 0
+Sort [product_id ASC NULLS FIRST], false, 0
 \end{lstlisting}
 
 The boolean is \texttt{true} for a global sort (a single ordered output across all
@@ -150,8 +150,8 @@ the sort is the bottleneck; enabled by
 \conf{spark.sql.join.preferSortMergeJoin}\,=\,\texttt{false} or a
 \texttt{SHUFFLE\_HASH} hint.
 
-\paragraph{BroadcastNestedLoopJoin.} A non-equi join condition (\texttt{price >
-min\_price}). $O(N \times M)$. Fine when one side is tiny; a warning sign on two
+\paragraph{BroadcastNestedLoopJoin.} A non-equi join condition (\texttt{order\_total >
+credit\_limit}). $O(N \times M)$. Fine when one side is tiny; a warning sign on two
 large tables --- usually a missing or non-equi join key.
 
 \paragraph{CartesianProduct.} Every row of one side with every row of the other.
@@ -163,9 +163,9 @@ Aggregation is two-phase: a partial aggregate on each partition (map-side
 combine), a shuffle, then a final aggregate.
 
 \begin{lstlisting}[language=text,numbers=none,caption={Two-phase aggregation},captionpos=b]
-*(3) HashAggregate(keys=[route_id], functions=[avg(on_time)])
-+- Exchange hashpartitioning(route_id, 200), ENSURE_REQUIREMENTS
-   +- *(2) HashAggregate(keys=[route_id], functions=[partial_avg(on_time)])
+*(3) HashAggregate(keys=[product_id], functions=[avg(on_time)])
++- Exchange hashpartitioning(product_id, 200), ENSURE_REQUIREMENTS
+   +- *(2) HashAggregate(keys=[product_id], functions=[partial_avg(on_time)])
       +- ...
 \end{lstlisting}
 

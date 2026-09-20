@@ -14,10 +14,12 @@ Every behavioural claim is written against the stack in `00-brief.md`. Rules:
 
 ## Running example
 
-One dataset, reused everywhere: **`trips`** — vehicle GPS pings landing in an
-Iceberg table, partitioned by `day(event_ts)`, plus a small star schema
-(`fact_trip`, `dim_route`, `dim_vehicle`, `dim_date`) built from it. Introduced
-in App. A and Ch. 1; every later chapter queries these tables, not a new toy.
+One dataset, reused everywhere: **`orders`** — an online marketplace's order
+history landing in an Iceberg table, partitioned by `day(order_ts)`, plus a
+small star schema (`orders`, `dim_product`, `dim_customer`, `dim_date`) built
+from it. Introduced in App. A and Ch. 1; every later chapter queries these
+tables, not a new toy. (Replaced the original `trips`/bus-route specimen for
+being less immediately intuitive; see the git history for the migration.)
 
 ## Code, command, and query listings
 

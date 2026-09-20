@@ -84,17 +84,17 @@ say in advance how many stages it will have and where they will stall.
 \section{Unresolved to resolved: the catalog}
 \label{sec:catalyst-analysis}
 
-The parser only checks grammar. \texttt{SELECT r.route\_name FROM trips t JOIN
-dim\_route r \dots} parses whether or not those tables exist; the result is a
+The parser only checks grammar. \texttt{SELECT p.category FROM orders o JOIN
+dim\_product p \dots} parses whether or not those tables exist; the result is a
 tree whose relation and attribute nodes are still marked \emph{unresolved} ---
-\texttt{trips} and \texttt{r.route\_name} are held as names, not yet bound to
+\texttt{orders} and \texttt{p.category} are held as names, not yet bound to
 anything.
 
 The \emph{analyzer} resolves them. It asks the \textbf{catalog} what
-\texttt{trips} and \texttt{dim\_route} are, gets back their schemas, and replaces
-each unresolved node with a concrete one: \texttt{route\_name} becomes a
-\texttt{string} column belonging to \texttt{dim\_route}, \texttt{arrival\_delay\_s}
-becomes an \texttt{int} on \texttt{trips}, the \texttt{JOIN} condition is
+\texttt{orders} and \texttt{dim\_product} are, gets back their schemas, and
+replaces each unresolved node with a concrete one: \texttt{category} becomes a
+\texttt{string} column belonging to \texttt{dim\_product}, \texttt{delivery\_days}
+becomes an \texttt{int} on \texttt{orders}, the \texttt{JOIN} condition is
 type-checked, and \texttt{AVG(\dots)} is bound to the aggregate function. If a
 name does not resolve, this is where the query fails --- before any work is
 scheduled.
@@ -120,17 +120,17 @@ the speed-up, and all of them do the same thing: move work earlier, or delete it
 
 \paragraph{Predicate pushdown.} A filter is pushed as close to the scan as the
 semantics allow, so fewer rows enter the rest of the plan. In the specimen the
-\texttt{event\_ts} range moves into the \texttt{trips} scan, where it becomes a
+\texttt{order\_ts} range moves into the \texttt{orders} scan, where it becomes a
 \emph{partition filter} (Iceberg skips whole days) and a \emph{pushed filter}
 (Parquet skips row groups). \Cref{ch:pruning} is about keeping this rule
 working; a function or a \texttt{CAST} on the filtered column defeats it.
 
 \paragraph{Column pruning.} The scan reads only the columns the query
-references. The specimen touches \texttt{route\_id}, \texttt{arrival\_delay\_s},
-and \texttt{event\_ts} from \texttt{trips} and \texttt{route\_id},
-\texttt{route\_name} from \texttt{dim\_route} --- so a fifty-column
-\texttt{trips} table is read five columns wide. A \texttt{SELECT *} anywhere in a
-subquery turns this off.
+references. The specimen touches \texttt{product\_id}, \texttt{delivery\_days},
+\texttt{promised\_days}, and \texttt{order\_ts} from \texttt{orders} and
+\texttt{product\_id}, \texttt{category} from \texttt{dim\_product} --- so a
+fifty-column \texttt{orders} table is read four columns wide. A
+\texttt{SELECT *} anywhere in a subquery turns this off.
 
 \paragraph{Constant folding and simplification.} Expressions with no runtime
 input are evaluated once at planning time; the \texttt{TIMESTAMP '2026-03-01
@@ -180,10 +180,10 @@ This is why the \emph{number of Exchange nodes in the physical plan} is the
 single best predictor of a query's cost, and why \Cref{ch:shape} told you to
 count them in the UI.
 
-For the specimen, with no broadcastable statistics on \texttt{dim\_route}, the
-planner produces: two scans, each followed by an \texttt{Exchange hashpartitioning(route\_id, 200)},
+For the specimen, with no broadcastable statistics on \texttt{dim\_product}, the
+planner produces: two scans, each followed by an \texttt{Exchange hashpartitioning(product\_id, 200)},
 a \texttt{SortMergeJoin}, a partial and final \texttt{HashAggregate} (which need
-no new exchange, because the join already partitioned by \texttt{route\_id}), and
+no new exchange, because the join already partitioned by \texttt{product\_id}), and
 a final small sort. Three stages, exactly as \Cref{fig:job-stage-task} showed.
 
 \section{Whole-stage code generation}
@@ -267,18 +267,18 @@ the leaves are scans, the root is the final operator.
    +- *(2) HashAggregate (10)         -- partial aggregate
       +- *(2) SortMergeJoin Inner (9) -- both sides shuffled; not broadcast
          :- *(1) Sort (5)             -- local sort, one per SMJ input
-         :  +- Exchange hashpartitioning(route_id, 200) (4)   -- shuffle #1
+         :  +- Exchange hashpartitioning(product_id, 200) (4)   -- shuffle #1
          :     +- *(1) Filter (3)
          :        +- *(1) ColumnarToRow (2)
-         :           +- BatchScan trips (1)   -- FileScan for a Hive table
+         :           +- BatchScan orders (1)   -- FileScan for a Hive table
          +- *(1) Sort (8)
-            +- Exchange hashpartitioning(route_id, 200) (7)   -- shuffle #2
-               +- BatchScan dim_route (6)
+            +- Exchange hashpartitioning(product_id, 200) (7)   -- shuffle #2
+               +- BatchScan dim_product (6)
 
-(1) BatchScan trips
-    PartitionFilters: [event_ts >= 2026-03-01, event_ts < 2026-03-08]
-    PushedFilters:    [IsNotNull(route_id)]       -- row groups skipped
-    ReadSchema:       struct<route_id,arrival_delay_s,event_ts>
+(1) BatchScan orders
+    PartitionFilters: [order_ts >= 2026-03-01, order_ts < 2026-03-08]
+    PushedFilters:    [IsNotNull(product_id)]       -- row groups skipped
+    ReadSchema:       struct<product_id,promised_days,delivery_days,order_ts>
 \end{lstlisting}
 
 The nodes you will meet most --- a full catalogue is \Cref{app:plans}:
@@ -343,10 +343,10 @@ cost-based decisions (join strategy and order) unreliable until you
 \begin{exercises}
 \item Run \texttt{EXPLAIN FORMATTED} on the specimen query. Confirm the two
       Exchange nodes, the \texttt{SortMergeJoin}, and a non-empty
-      \texttt{PartitionFilters} on the \texttt{trips} scan.
+      \texttt{PartitionFilters} on the \texttt{orders} scan.
 \item Write the same result three ways: with an explicit subquery, with a CTE,
       and as one flat statement. Compare the \emph{optimized} logical plans.
       Which differ, and which are identical?
-\item Add \texttt{WHERE CAST(t.route\_id AS STRING) = '47'} to the query and
+\item Add \texttt{WHERE CAST(o.product\_id AS STRING) = '47'} to the query and
       re-run \texttt{EXPLAIN FORMATTED}. What happened to \texttt{PushedFilters}?
 \end{exercises}

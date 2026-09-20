@@ -39,12 +39,12 @@ Static pruning needs a literal known before the query runs. A star-schema join
 literal for the planner to use:
 
 \begin{lstlisting}[language=SQL,caption={A filter on the dimension, not the fact table},captionpos=b]
-SELECT * FROM trips t
-JOIN dim_date d ON t.event_date = d.date
+SELECT * FROM orders o
+JOIN dim_date d ON o.order_date = d.date
 WHERE d.year = 2026;
 \end{lstlisting}
 
-Without help, Spark scans every partition of \texttt{trips} across all years,
+Without help, Spark scans every partition of \texttt{orders} across all years,
 then joins, then discards everything outside 2026 --- all the pruning happens
 \emph{after} the expensive read. \emph{Dynamic partition pruning} (DPP, on by
 default via
@@ -53,7 +53,7 @@ runs the small side first, collects the matching \texttt{date} values, and
 injects them into the fact scan as if the query had been written
 
 \begin{lstlisting}[language=SQL,numbers=none]
-WHERE t.event_date IN (SELECT date FROM dim_date WHERE year = 2026)
+WHERE o.order_date IN (SELECT date FROM dim_date WHERE year = 2026)
 \end{lstlisting}
 
 so the same partition-level skipping from \Cref{sec:pruning-static} applies to

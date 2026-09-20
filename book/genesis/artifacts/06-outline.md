@@ -13,7 +13,7 @@ Arc: build the machinery that moves data and learn to see it in a plan and the U
 - **Objective:** hold a correct picture of what runs where when a query executes,
   and run + observe a first query on the reference stack.
 - **Prereq:** none (App. A for setup).
-- **Payoff:** the reader runs a query against `trips`, opens the UI, and points
+- **Payoff:** the reader runs a query against `orders`, opens the UI, and points
   at the driver, the executors, the one job, its stages, and its tasks.
 - **Sections:** a query, end to end · driver, executors, cluster manager · deploy
   modes and Spark on Kubernetes · jobs, stages, tasks · narrow vs wide
@@ -304,7 +304,7 @@ Arc: one level deeper on the same machinery.
 ## Back matter
 
 - **App. A — The Reference Environment and the Running Example.** The stack, the
-  cluster shape, and the `trips` dataset + star schema every chapter uses.
+  cluster shape, and the `orders` dataset + star schema every chapter uses.
 - **App. B — Configuration Reference.** Keys used in the book, by subsystem, with
   default and the chapter that explains each.
 - **App. C — Reading Query Plans.** A cheat-sheet: every physical operator, what

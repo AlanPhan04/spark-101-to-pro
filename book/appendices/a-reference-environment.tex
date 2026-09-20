@@ -48,44 +48,53 @@ discussion depends on exactly this separation). A cluster of 10 such
 executors gives 40 task slots --- the number \Cref{sec:shuffle-sizing}'s
 shuffle-partition-count reasoning starts from.
 
-\section{The running example: \texttt{trips}}
-\label{sec:refenv-trips}
+\section{The running example: \texttt{orders}}
+\label{sec:refenv-orders}
 
-The specimen dataset is a city bus system's vehicle position pings. The fact
-table, \texttt{trips}, is an Iceberg table partitioned by
-\texttt{day(event\_ts)} (\Cref{sec:ice-partitioning}), holding a few hundred
-million rows per month, with the columns in \Cref{tab:refenv-trips-schema}.
+The specimen dataset is an online marketplace's order history. The fact
+table, \texttt{orders}, is an Iceberg table partitioned by
+\texttt{day(order\_ts)} (\Cref{sec:ice-partitioning}), holding a few hundred
+million rows per month, with the columns in \Cref{tab:refenv-orders-schema}.
 
 \begin{table}[htbp]
 \centering
-\caption{\texttt{trips} schema}
-\label{tab:refenv-trips-schema}
+\caption{\texttt{orders} schema}
+\label{tab:refenv-orders-schema}
 \begin{tabular}{@{}lll@{}}
 \toprule
 \textbf{Column} & \textbf{Type} & \textbf{Meaning} \\
 \midrule
-\texttt{trip\_id} & \texttt{string} & Unique identifier for one scheduled trip \\
-\texttt{event\_ts} & \texttt{timestamp} & When this position ping was recorded \\
-\texttt{route\_id} & \texttt{string} & Foreign key to \texttt{dim\_route} \\
-\texttt{vehicle\_id} & \texttt{string} & Foreign key to \texttt{dim\_vehicle} \\
-\texttt{arrival\_delay\_s} & \texttt{int} & Seconds late (negative if early) at
-  the next stop \\
-\texttt{distance} & \texttt{double} & Distance covered since the previous
-  ping, in km \\
+\texttt{order\_id} & \texttt{string} & Unique identifier for one order \\
+\texttt{order\_ts} & \texttt{timestamp} & When the order was placed \\
+\texttt{product\_id} & \texttt{string} & Foreign key to \texttt{dim\_product} \\
+\texttt{customer\_id} & \texttt{string} & Foreign key to \texttt{dim\_customer} \\
+\texttt{promised\_days} & \texttt{int} & Delivery days promised at checkout \\
+\texttt{delivery\_days} & \texttt{int} & Actual days to delivery \\
+\texttt{order\_total} & \texttt{double} & Order value, in dollars \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Three dimensions complete the star schema: \texttt{dim\_route} (\texttt{route\_id},
-\texttt{route\_name}, and route-level attributes such as the zone it
-serves); \texttt{dim\_vehicle} (\texttt{vehicle\_id}, vehicle type and
-capacity); and \texttt{dim\_date} (\texttt{date}, \texttt{year},
-\texttt{month}, \texttt{day\_of\_week}), used throughout
+Three dimensions complete the star schema: \texttt{dim\_product}
+(\texttt{product\_id}, \texttt{category}, \texttt{list\_price}, and other
+catalog attributes); \texttt{dim\_customer} (\texttt{customer\_id}, signup
+date, loyalty segment); and \texttt{dim\_date} (\texttt{date},
+\texttt{year}, \texttt{month}, \texttt{day\_of\_week}), used throughout
 \Cref{ch:pruning}'s dynamic-partition-pruning examples to filter
-\texttt{trips} indirectly by calendar attributes that are not columns on the
-fact table itself. \texttt{dim\_route} is small enough to broadcast under
-default settings (\Cref{sec:joins-selection}); \texttt{dim\_date} and
-\texttt{dim\_vehicle} are smaller still.
+\texttt{orders} indirectly by calendar attributes that are not columns on
+the fact table itself. \texttt{dim\_product} is small enough to broadcast
+under default settings (\Cref{sec:joins-selection}); \texttt{dim\_date} is
+smaller still. \texttt{dim\_customer} is larger --- large enough that it is
+\emph{not} broadcast by default, the deliberate contrast
+\Cref{sec:joins-selection} uses to show a sort-merge join actually chosen
+rather than assumed.
+
+\begin{note}
+One product, a heavily-discounted, briefly viral item, accounts for a
+disproportionate share of a given week's orders. This single hot key is the
+running skew example \Cref{sec:shape-ui} first spots and
+\Cref{sec:aqe-skew} later fixes.
+\end{note}
 
 \section{A columnar-format primer}
 \label{sec:refenv-columnar}

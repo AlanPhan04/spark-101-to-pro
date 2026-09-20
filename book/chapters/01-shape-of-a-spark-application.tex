@@ -2,8 +2,9 @@
 \label{ch:shape}
 
 \begin{chapterintro}
-A query you would actually write --- a week of \texttt{trips} joined to a route
-dimension, aggregated to an on-time rate --- runs in four minutes. This chapter
+A query you would actually write --- a week of \texttt{orders} joined to a
+product dimension, aggregated to an on-time delivery rate --- runs in four
+minutes. This chapter
 does not make it faster. It uses it as a specimen: you run it, open the Spark UI,
 and learn to name every moving part --- the driver, the executors, the one job,
 its stages, the shuffle between them, and the one task doing more than the rest.
@@ -13,20 +14,21 @@ By the end you can read a running job instead of watching a progress bar.
 \section{A query, end to end}
 \label{sec:shape-query}
 
-Here is the specimen. It asks, for each bus route, what fraction of trips in the
-first week of March arrived on time. It runs against the \texttt{trips} table and
-the \texttt{dim\_route} dimension introduced in \Cref{app:refenv}; \texttt{trips}
-is an Iceberg table partitioned by \texttt{day(event\_ts)}, holding a few hundred
-million rows for the month.
+Here is the specimen. It asks, for each product category, what fraction of
+orders in the first week of March were delivered within their promised
+window. It runs against the \texttt{orders} table and the
+\texttt{dim\_product} dimension introduced in \Cref{app:refenv};
+\texttt{orders} is an Iceberg table partitioned by \texttt{day(order\_ts)},
+holding a few hundred million rows for the month.
 
 \begin{lstlisting}[language=SQL,caption={The specimen query},captionpos=b,label=lst:shape-query]
-SELECT r.route_name,
-       AVG(CASE WHEN t.arrival_delay_s <= 120 THEN 1.0 ELSE 0.0 END) AS on_time_rate
-FROM trips t
-JOIN dim_route r ON t.route_id = r.route_id
-WHERE t.event_ts >= TIMESTAMP '2026-03-01 00:00:00'
-  AND t.event_ts <  TIMESTAMP '2026-03-08 00:00:00'
-GROUP BY r.route_name
+SELECT p.category,
+       AVG(CASE WHEN o.delivery_days <= o.promised_days THEN 1.0 ELSE 0.0 END) AS on_time_rate
+FROM orders o
+JOIN dim_product p ON o.product_id = p.product_id
+WHERE o.order_ts >= TIMESTAMP '2026-03-01 00:00:00'
+  AND o.order_ts <  TIMESTAMP '2026-03-08 00:00:00'
+GROUP BY p.category
 ORDER BY on_time_rate;
 \end{lstlisting}
 
@@ -132,7 +134,7 @@ the query from \Cref{lst:shape-query}, step by step
         gateway --- sends the query \emph{text} to the driver. Nothing is parsed
         on your side.
   \item \textbf{Compile (driver).} The driver parses the text, resolves
-        \texttt{trips} and \texttt{dim\_route} against the catalog, runs the
+        \texttt{orders} and \texttt{dim\_product} against the catalog, runs the
         optimizer, and produces a physical plan (\Cref{ch:catalyst}). Its DAG
         scheduler then cuts that plan into three stages at the shuffle and builds
         a set of tasks for each --- one task per input partition.
@@ -143,24 +145,24 @@ the query from \Cref{lst:shape-query}, step by step
   \item \textbf{Run the map stages (executors).} The driver sends stage~0 and
         stage~1 tasks to free task slots, each task carrying its plan fragment
         and the id of the one partition it must process. Stage~0's roughly 180
-        tasks each read one file split of the March \texttt{trips} partitions
-        from GCS, apply the \texttt{event\_ts} filter, and write small files to
-        the executor's \emph{local} disk, bucketed by \texttt{route\_id}.
-        Stage~1 does the same for \texttt{dim\_route}. The two stages run
+        tasks each read one file split of the March \texttt{orders} partitions
+        from GCS, apply the \texttt{order\_ts} filter, and write small files to
+        the executor's \emph{local} disk, bucketed by \texttt{product\_id}.
+        Stage~1 does the same for \texttt{dim\_product}. The two stages run
         concurrently, and every task reports its metrics to the driver as it
         finishes.
   \item \textbf{Shuffle.} Once both map stages are done the driver launches
         stage~2 --- 200 tasks, one per value of
         \conf{spark.sql.shuffle.partitions}. Each stage-2 task connects to
         \emph{every} executor that ran a map task and fetches the shuffle files
-        for its slice of \texttt{route\_id}. This all-to-all transfer over the
+        for its slice of \texttt{product\_id}. This all-to-all transfer over the
         network is the shuffle, and it is why the map side (stages~0--1) and the
         reduce side (stage~2) are separate stages.
   \item \textbf{Run the reduce stage (executors).} Each stage-2 task now holds
-        every row for its routes, from both tables. It sorts and merges them,
-        performs the join, and aggregates the on-time rate per route.
-  \item \textbf{Collect (driver).} The result is one row per route --- a few
-        thousand rows --- so the driver gathers them from the stage-2 tasks. A
+        every row for its products, from both tables. It sorts and merges them,
+        performs the join, and aggregates the on-time rate per category.
+  \item \textbf{Collect (driver).} The result is one row per category --- a
+        handful of rows --- so the driver gathers them from the stage-2 tasks. A
         query returning millions of rows would overwhelm the driver at exactly
         this step (\Cref{ch:execmem}).
   \item \textbf{Return.} The driver sends the result set to the client and marks
@@ -224,31 +226,32 @@ for its duration. The number of tasks in a stage is therefore the number of
 partitions, and it sets how much parallelism the stage can use: 8 tasks on a
 cluster with 200 free slots leaves 192 idle.
 
-\Cref{fig:job-stage-task} shows the specimen's shape. Because \texttt{dim\_route}
-has no statistics that would let the planner broadcast it (an Iceberg table
-usually does not, until you \texttt{ANALYZE} it --- \Cref{ch:joins}), the planner
-chooses a sort-merge join: both inputs are shuffled so that rows with the same
-\texttt{route\_id} land on the same executor. That gives:
+\Cref{fig:job-stage-task} shows the specimen's shape. Because
+\texttt{dim\_product} has no statistics that would let the planner broadcast
+it (an Iceberg table usually does not, until you \texttt{ANALYZE} it ---
+\Cref{ch:joins}), the planner chooses a sort-merge join: both inputs are
+shuffled so that rows with the same \texttt{product\_id} land on the same
+executor. That gives:
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{job-stage-task.pdf}
   \caption{The specimen as one job of three stages. Stage 0 scans and filters
-  \texttt{trips}; stage 1 scans \texttt{dim\_route}; both write shuffle files
-  partitioned by \texttt{route\_id}. Stage 2 reads from both, joins, and
+  \texttt{orders}; stage 1 scans \texttt{dim\_product}; both write shuffle files
+  partitioned by \texttt{product\_id}. Stage 2 reads from both, joins, and
   aggregates. Each stage runs one task per input partition. One task in stage 2
   runs far longer than its peers --- the first sighting of skew.}
   \label{fig:job-stage-task}
 \end{figure}
 
 \begin{itemize}
-  \item \textbf{Stage 0} --- scan the March partitions of \texttt{trips}, apply
-        the timestamp filter, and write shuffle files keyed by \texttt{route\_id}.
+  \item \textbf{Stage 0} --- scan the March partitions of \texttt{orders}, apply
+        the timestamp filter, and write shuffle files keyed by \texttt{product\_id}.
         Roughly 180 tasks, one per input file split.
-  \item \textbf{Stage 1} --- scan \texttt{dim\_route} and write shuffle files
-        keyed by \texttt{route\_id}. A handful of tasks; the table is tiny.
+  \item \textbf{Stage 1} --- scan \texttt{dim\_product} and write shuffle files
+        keyed by \texttt{product\_id}. A handful of tasks; the table is tiny.
   \item \textbf{Stage 2} --- fetch both sides' shuffle files, merge them on
-        \texttt{route\_id}, join, and aggregate per route. 200 tasks, because
+        \texttt{product\_id}, join, and aggregate per category. 200 tasks, because
         \conf{spark.sql.shuffle.partitions} defaults to 200
         (\Cref{ch:shuffle}). The final \texttt{ORDER BY} is small enough to
         finish inside this stage.
@@ -261,8 +264,8 @@ chooses a sort-merge join: both inputs are shuffled so that rows with the same
 \toprule
 \textbf{Stage} & \textbf{Reads} & \textbf{Tasks} & \textbf{Writes / does} \\
 \midrule
-0 & \texttt{trips}, March partitions, filtered & $\sim$180 & shuffle files, keyed by \texttt{route\_id} \\
-1 & \texttt{dim\_route} & a handful & shuffle files, keyed by \texttt{route\_id} \\
+0 & \texttt{orders}, March partitions, filtered & $\sim$180 & shuffle files, keyed by \texttt{product\_id} \\
+1 & \texttt{dim\_product} & a handful & shuffle files, keyed by \texttt{product\_id} \\
 2 & stage 0 + stage 1 shuffle output & 200 & sort-merge join, aggregate, sort \\
 \bottomrule
 \end{tabular}
@@ -298,8 +301,8 @@ a single stage and executes as one pipelined pass per partition.
 A \textbf{wide} dependency is one where an output partition can depend on
 \emph{every} input partition. \texttt{groupBy}, \texttt{join} (unless one side is
 broadcast), \texttt{distinct}, \texttt{repartition}, and window functions are
-wide: to put all rows for \texttt{route\_id = 47} in one place, Spark must look at
-every input partition, because any of them might hold such a row. That
+wide: to put all rows for \texttt{product\_id = 47} in one place, Spark must look
+at every input partition, because any of them might hold such a row. That
 redistribution is the shuffle, and it is the wall between stages.
 
 \begin{table}[H]
@@ -357,9 +360,10 @@ for each level of the model.
 For the specimen, open the Stages tab and look at stage 2's Summary Metrics. The
 median task duration is a few seconds; the maximum is close to a minute. One task
 is doing a large multiple of the work of the typical task. That is \emph{data
-skew}: one \texttt{route\_id} --- a busy trunk route --- holds far more trips than
-the others, so the task that got that route's partition runs alone while the
-rest of the stage has finished. You cannot fix it yet. \Cref{ch:aqe} and
+skew}: one \texttt{product\_id} --- a heavily-discounted item that went briefly
+viral --- holds far more orders than the others, so the task that got that
+product's partition runs alone while the rest of the stage has finished. You
+cannot fix it yet. \Cref{ch:aqe} and
 \Cref{ch:joins} will. But you can now \emph{see} it, and seeing it is the
 prerequisite for everything else.
 
@@ -389,8 +393,8 @@ decided on this plan; \Cref{ch:shuffle} onward is how you change it.
 
 \exercisehead
 \begin{exercises}
-\item Run two queries against \texttt{trips}: \texttt{SELECT count(*) FROM trips}
-      and \texttt{SELECT route\_id, count(*) FROM trips GROUP BY route\_id}.
+\item Run two queries against \texttt{orders}: \texttt{SELECT count(*) FROM orders}
+      and \texttt{SELECT product\_id, count(*) FROM orders GROUP BY product\_id}.
       Open the Stages tab for each. Which produced a second stage, and why?
 \item In the SQL tab for the specimen query, count the \emph{Exchange} nodes.
       Match each one to a stage boundary in \Cref{fig:job-stage-task}.

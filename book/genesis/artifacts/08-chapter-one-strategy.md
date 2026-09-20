@@ -2,8 +2,8 @@
 
 ## The concrete problem it opens on
 
-A query the reader would actually write: a week of `trips` joined to
-`dim_route`, aggregated to on-time rate per route. It runs. It takes four
+A query the reader would actually write: a week of `orders` joined to
+`dim_product`, aggregated to on-time delivery rate per category. It runs. It takes four
 minutes. The reader has no idea why four and not one, or four and not forty.
 
 Chapter 1 does not optimize it. It uses it as the specimen: run it, then open the
