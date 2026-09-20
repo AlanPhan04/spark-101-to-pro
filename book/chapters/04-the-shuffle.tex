@@ -188,6 +188,35 @@ partitions after the shuffle completes and it knows their true size
 (\Cref{ch:aqe}); under-partitioning, which spills, is not something a later
 stage can undo. Set high and let AQE come down, not the other way around.
 
+\paragraph{Partition count versus the cluster's task slots.} The formula above
+sizes a partition in bytes; it says nothing about how many can run at once,
+which is set separately by the cluster's total task slots:
+
+\begin{lstlisting}[language=text,numbers=none]
+total task slots = executor count x spark.executor.cores
+\end{lstlisting}
+
+Partition count against \emph{that} number, not against the shuffle size, is
+what \Cref{sec:shape-jobs} meant by ``8 tasks on a cluster with 200 free slots
+leaves 192 idle'' --- too few partitions wastes capacity you are already paying
+for. The reverse failure is subtler: if partition count is only a little more
+than a multiple of the slot count --- 41 partitions on 40 slots, say --- the
+first wave uses every slot, and the second wave runs on a single core while the
+other 39 sit idle, costing nearly as much wall-clock time as the first wave for
+a fraction of the work. Prefer a partition count that divides the slot count
+cleanly over one that merely clears it.
+
+Executor count is not a fixed input here either. Under dynamic allocation
+(\Cref{sec:dynamic-allocation}), Spark requests more executors when it sees
+more pending tasks than running ones, so a higher partition count can grow the
+cluster rather than the other way around --- the causal arrow runs from
+partitions to executors, not from a fixed executor count down to how many
+partitions to choose. What executor \emph{shape} does constrain is partition
+\emph{size}: execution memory per task is the execution pool divided by
+\conf{spark.executor.cores} (\Cref{sec:mem-model}), so more cores packed into
+the same executor leaves less room per task and calls for smaller partitions to
+avoid spill.
+
 \section{Shuffle compression}
 \label{sec:shuffle-compression}
 
