@@ -27,7 +27,7 @@ expression, or an \texttt{OR} with a non-pushable branch all defeat this the
 same way they defeat row-group pushdown --- the full catalogue of these
 pushdown killers, with the exact fix for each, is
 \Cref{sec:c-pushdown}. The specimen query's own
-\texttt{event\_ts >= TIMESTAMP '\ldots'} filter works precisely because it is a
+\texttt{order\_ts >= TIMESTAMP '\ldots'} filter works precisely because it is a
 plain comparison against a literal, resolved once at plan time, with nothing
 standing between the column and the value.
 

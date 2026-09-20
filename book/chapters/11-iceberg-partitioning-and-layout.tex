@@ -2,8 +2,8 @@
 \label{ch:iceberg-layout}
 
 \begin{chapterintro}
-Iceberg partitioning is hidden: you filter on \texttt{event\_ts} and Iceberg
-derives the predicate on \texttt{day(event\_ts)} for you, so a query never
+Iceberg partitioning is hidden: you filter on \texttt{order\_ts} and Iceberg
+derives the predicate on \texttt{day(order\_ts)} for you, so a query never
 references a partition column directly and pruning does not break when the
 scheme changes. This chapter covers the partition transforms, evolving a spec
 without rewriting history, sort orders and Z-ordering, target file size, and the
@@ -16,14 +16,14 @@ writer have to move.
 
 A classic Hive table's partition column is a real column duplicated into the
 directory path --- a query has to filter on that exact derived value
-(\texttt{WHERE event\_date = '2026-09-20'}) for pruning to fire, and a filter
-on the underlying timestamp (\texttt{WHERE event\_ts >= \ldots}) does not
+(\texttt{WHERE order\_date = '2026-09-20'}) for pruning to fire, and a filter
+on the underlying timestamp (\texttt{WHERE order\_ts >= \ldots}) does not
 automatically resolve to it. Iceberg's partition spec instead names a
-\emph{transform} of a source column --- \texttt{day(event\_ts)},
-\texttt{bucket(16, route\_id)}, \texttt{truncate(4, zone)} --- and stores the
+\emph{transform} of a source column --- \texttt{day(order\_ts)},
+\texttt{bucket(16, customer\_id)}, \texttt{truncate(4, category)} --- and stores the
 computed value in the manifest, not as a queryable column at all. The planner
 derives the partition predicate from a filter on the source column itself, so
-the specimen query's plain \texttt{event\_ts >= TIMESTAMP '\ldots'} filter
+the specimen query's plain \texttt{order\_ts >= TIMESTAMP '\ldots'} filter
 from \Cref{sec:pruning-static} prunes correctly with no partition column ever
 appearing in the query text.
 
@@ -53,7 +53,7 @@ appearing in the query text.
 
 \begin{tip}
 Prefer \texttt{day} over \texttt{identity} on a raw timestamp: an
-\texttt{identity} partition on \texttt{event\_ts} would create one partition
+\texttt{identity} partition on \texttt{order\_ts} would create one partition
 \emph{per distinct timestamp value}, which is not partitioning at all --- it is
 one file per row's worth of metadata. Always partition on a transform coarse
 enough to group many rows per partition.
@@ -71,7 +71,7 @@ describing old files under the old spec, new manifests describe new files
 under the new spec, and a query spans both by evaluating each manifest
 against its own recorded spec.
 
-This is why moving from \texttt{month(event\_ts)} to \texttt{day(event\_ts)}
+This is why moving from \texttt{month(order\_ts)} to \texttt{day(order\_ts)}
 as a table grows is a metadata-only operation, not a maintenance project: new
 data lands under the finer scheme immediately, old data keeps the coarser
 scheme it was written with, and a query filtering by date prunes correctly

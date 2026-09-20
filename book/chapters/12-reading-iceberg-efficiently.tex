@@ -86,7 +86,7 @@ read-time consequence:
 
 \texttt{write.metadata.metrics.column.<col>} overrides the default per
 column, which is the practical lever: set \texttt{full} on the column your
-biggest queries filter by most (the specimen's \texttt{event\_ts}, say) and
+biggest queries filter by most (the specimen's \texttt{order\_ts}, say) and
 leave wide free-text columns at \texttt{counts} so their manifests do not
 balloon for no pruning benefit.
 
@@ -95,7 +95,7 @@ balloon for no pruning benefit.
 
 Min/max statistics prune well for a range predicate but not for a point
 lookup on a high-cardinality column with no ordering to exploit --- a
-\texttt{WHERE trip\_id = '...'} on an unsorted column has a min/max range
+\texttt{WHERE order\_id = '...'} on an unsorted column has a min/max range
 covering nearly every file, so almost nothing gets skipped. A Parquet bloom
 filter, enabled per column with
 \texttt{write.parquet.bloom-filter-enabled.column.<col>=true}, answers a
