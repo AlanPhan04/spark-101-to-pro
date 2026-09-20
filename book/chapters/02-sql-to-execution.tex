@@ -30,6 +30,40 @@ second front end that builds the same tree the SQL parser does.
   \label{fig:catalyst-pipeline}
 \end{figure}
 
+\begin{analogy}
+Recall the kitchen from \Cref{sec:shape-driver}. The order goes through the same
+five stages there as a query does here. A waiter writes the spoken order onto a
+kitchen ticket in shorthand, without checking whether the kitchen actually has
+those ingredients tonight --- that is \emph{parsing}: pure syntax. The expediter
+then checks the ticket against the pantry and the menu, catching an order for a
+dish that is not served or an ingredient that is out --- that is
+\emph{analysis}, against the catalog. The head chef mentally simplifies the
+prep --- ``we're already chopping onions for table 4, chop extra for this
+ticket too'' --- without changing what gets served: that is \emph{logical
+optimization}. Stations and techniques are then assigned --- grill or oven,
+this cook or that one --- based on what is actually fastest tonight: that is
+\emph{physical planning}. And a dish the kitchen has made a thousand times gets
+cooked by hands that no longer think through each step: that is
+\emph{whole-stage code generation} (\Cref{sec:wholestage-codegen}).
+\end{analogy}
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{4.4cm}p{3.6cm}p{6cm}@{}}
+\toprule
+\textbf{In the kitchen} & \textbf{In Catalyst} & \textbf{What changes} \\
+\midrule
+waiter writes the ticket & parse & text $\to$ syntax tree; nothing checked \\
+expediter checks the pantry \& menu & analyze & names resolved against the catalog \\
+chef simplifies the prep & logical optimization & rule-based rewrites (\Cref{sec:catalyst-rules}) \\
+stations \& techniques assigned & physical planning & operators \& shuffle points chosen \\
+practiced hands, no thinking & whole-stage codegen & generated Java, then the JIT \\
+\bottomrule
+\end{tabular}
+\caption{The analogy above, mapped exactly onto the pipeline in \Cref{fig:catalyst-pipeline}.}
+\end{table}
+
 Four representations matter, and you can print all of them (\Cref{sec:catalyst-explain}):
 
 \begin{enumerate}

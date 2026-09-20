@@ -87,6 +87,25 @@ memory it is allowed to use. That process holds three separately configured
 pools, and confusing them is the most common source of both wasted memory and
 unexplained container kills.
 
+\begin{analogy}
+Picture the heap as an apartment building with a fixed number of floors
+(\conf{spark.executor.memory}). One utility closet is permanently locked for
+building systems (\emph{reserved}) --- no tenant ever gets a key. A shared
+common floor (\emph{unified memory}) is reconfigured on demand: some nights it
+hosts a big event that needs the whole floor (\emph{execution}), other nights
+it is rented out as storage lockers (\emph{storage}) --- and management can
+always cancel a storage booking to make room for a scheduled event, but never
+the reverse. The remaining floors are private apartments (\emph{user memory}):
+whatever a tenant does inside their own apartment is invisible to the building
+manager, and if a tenant packs it past capacity, nobody bails them out --- the
+apartment simply collapses (\texttt{OutOfMemoryError}). A separate storage unit
+down the street, rented by some tenants but not others, is the \emph{off-heap}
+pool; and the building's own infrastructure --- elevators, wiring, hallway
+lighting (\emph{overhead}) --- draws power regardless of occupancy. The whole
+lot only fits inside the property line the landlord (the cluster manager)
+enforces: exceed it, and the building is condemned, tenants and all.
+\end{analogy}
+
 \paragraph{The heap.} \conf{spark.executor.memory} sets the maximum size of the
 JVM heap, the region every object the executor allocates comes from. Spark carves
 it into three parts:
@@ -171,6 +190,18 @@ the executor lost and re-runs its work elsewhere (\Cref{sec:failure-signatures})
 Collectors differ mainly in how they trade pause length against throughput and
 CPU cost.
 
+\begin{analogy}
+Picture three ways to clean a large office building overnight. Parallel GC is
+an all-lights-off deep clean: every employee is sent home, the whole crew
+cleans the whole floor at once, and the doors reopen only when they are
+finished --- the fastest total clean, but nobody works while it happens. G1
+cleans one wing at a time while the rest of the building stays open, closing
+only the wing being cleaned right now, briefly and often. ZGC has cleaners who
+tidy around the working employees continuously and almost invisibly, closing
+nothing at all --- at the cost of moving more carefully and needing a bigger
+crew.
+\end{analogy}
+
 \begin{itemize}
   \item \textbf{Parallel GC} uses multiple threads but collects the whole heap in
         one stop-the-world pause. It gives the highest raw throughput when pauses
@@ -187,6 +218,21 @@ CPU cost.
         CPU and memory overhead. It is worth choosing only for executors with
         tens of gigabytes of heap where G1 pauses are still a problem.
 \end{itemize}
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{1.8cm}p{3.4cm}p{3.6cm}p{5cm}@{}}
+\toprule
+\textbf{Collector} & \textbf{Pause} & \textbf{Throughput / CPU} & \textbf{Best for} \\
+\midrule
+Parallel & long, grows with heap & highest throughput, lowest overhead & batch jobs where pauses don't matter \\
+G1 (default) & short, roughly bounded & moderate bookkeeping cost & most Spark executors \\
+ZGC & sub-millisecond & higher constant CPU \& memory & very large heaps where G1 still pauses \\
+\bottomrule
+\end{tabular}
+\caption{The three collectors, at a glance.}
+\end{table}
 
 \begin{figure}[htbp]
   \centering

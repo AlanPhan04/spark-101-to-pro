@@ -97,6 +97,20 @@ memory --- usually from pulling too much data back --- kills the whole
 application at once, with no retry.
 \end{note}
 
+\begin{analogy}
+A busy restaurant kitchen has the same three roles. The \textbf{driver} is the
+head chef at the pass: reading each ticket, deciding how the dish comes
+together, calling out instructions --- and never touching a pan. The
+\textbf{executors} are the line cooks, each at their own station with their own
+pans (task slots), doing the actual cutting and cooking and calling back to the
+pass when a plate is ready. The \textbf{cluster manager} is the staffing agency:
+when the chef needs more hands on a busy night, it sends cooks over, but it
+never runs a station itself. Push it further than that and it breaks --- no
+kitchen survives a chef who cannot cook a single plate --- but the division of
+labour is exactly right: one planner, many workers, and an outside party that
+only ever supplies the workers.
+\end{analogy}
+
 \subsection*{Following the specimen from submission to result}
 \label{sec:shape-flow}
 
@@ -240,6 +254,21 @@ chooses a sort-merge join: both inputs are shuffled so that rows with the same
         finish inside this stage.
 \end{itemize}
 
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{1.6cm}p{5.4cm}p{2cm}p{4.6cm}@{}}
+\toprule
+\textbf{Stage} & \textbf{Reads} & \textbf{Tasks} & \textbf{Writes / does} \\
+\midrule
+0 & \texttt{trips}, March partitions, filtered & $\sim$180 & shuffle files, keyed by \texttt{route\_id} \\
+1 & \texttt{dim\_route} & a handful & shuffle files, keyed by \texttt{route\_id} \\
+2 & stage 0 + stage 1 shuffle output & 200 & sort-merge join, aggregate, sort \\
+\bottomrule
+\end{tabular}
+\caption{The specimen at a glance, matching \Cref{fig:job-stage-task}.}
+\end{table}
+
 The \texttt{ORDER BY} on the aggregated result is cheap --- a few thousand rows
 --- so it does not add a stage here. On a larger result it would.
 
@@ -272,6 +301,27 @@ broadcast), \texttt{distinct}, \texttt{repartition}, and window functions are
 wide: to put all rows for \texttt{route\_id = 47} in one place, Spark must look at
 every input partition, because any of them might hold such a row. That
 redistribution is the shuffle, and it is the wall between stages.
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{6.6cm}p{2cm}p{5cm}@{}}
+\toprule
+\textbf{Operation} & \textbf{Dependency} & \textbf{Why} \\
+\midrule
+\texttt{filter}, \texttt{select}, \texttt{withColumn} & narrow & one input partition maps to one output partition \\
+\texttt{union} & narrow & partitions are concatenated, no keys compared \\
+\texttt{coalesce(n)} (fewer partitions) & narrow & merges adjacent partitions without moving keys \\
+\texttt{groupBy}, \texttt{join} (no broadcast), window functions & wide & equal keys from anywhere must co-locate \\
+\texttt{distinct} & wide & compiles to an aggregation \\
+\texttt{repartition(n)}, \texttt{orderBy} (global) & wide & explicit or ordering-driven redistribution \\
+\bottomrule
+\end{tabular}
+\caption{Narrow versus wide, by operation. \texttt{coalesce} is the one
+surprise: it looks like \texttt{repartition} but avoids a shuffle by only ever
+merging partitions, never splitting or reshuffling keys
+(\Cref{sec:repartition-coalesce}).}
+\end{table}
 
 This is the single most useful idea in the book: \textbf{cost lives at stage
 boundaries}. Narrow work is cheap and scales cleanly. Wide work writes data to

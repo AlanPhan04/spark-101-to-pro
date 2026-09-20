@@ -46,6 +46,24 @@ data skew (\Cref{ch:aqe}); for now, the point is that shuffle-partition count is
 a number \emph{you} choose, not one Spark infers from the data the way it infers
 input-partition count.
 
+\begin{analogy}
+A shuffle is a citywide moving day: many offices, each organized by building,
+have to be reorganized by department into new, single-department buildings.
+Every current building (a map task) has its people first check which new
+building they've been assigned to (compute \texttt{partition\_id}), sort
+themselves into that order, and box up their belongings by destination ---
+each building keeping one manifest of what it packed and where each box is
+going (the one data file plus its index). The moving company's dispatcher (the
+map output tracker) is the only party who ever holds the complete picture of
+which old building currently has which department's boxes. When a new
+department building is ready (a reduce task), it does not go door to door
+itself --- it asks the dispatcher, then sends trucks to every old building that
+packed something for it (the all-to-all fetch), and once everything arrives it
+unpacks and arranges the furniture in the new layout (the merge). If a truck
+can only carry so much in one trip, the extra boxes wait on the sidewalk until
+the next one --- a spill to disk.
+\end{analogy}
+
 \section{The shuffle write path}
 \label{sec:shuffle-write}
 
@@ -170,6 +188,23 @@ hundreds of later queries, so a slower, denser codec such as \texttt{zstd} pays
 for itself (\Cref{ch:iceberg-layout}). Using the same codec for both because
 ``it worked for storage'' is a common way to leave shuffle performance on the
 table.
+
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{1.6cm}p{2.6cm}p{2.6cm}p{2.6cm}p{3.6cm}@{}}
+\toprule
+\textbf{Codec} & \textbf{Ratio} & \textbf{Compress} & \textbf{Decompress} & \textbf{Best for} \\
+\midrule
+lz4 & low--medium & very fast & very fast & shuffle (the default) \\
+snappy & low--medium & very fast & very fast & shuffle, an alternative to lz4 \\
+zstd & high & medium & fast & Parquet storage on Iceberg \\
+gzip & highest & slow & slow & archival only --- avoid for shuffle \\
+\bottomrule
+\end{tabular}
+\caption{Written once, read immediately (shuffle) wants decompression speed;
+written once, read many times (storage) can afford to spend more on ratio.}
+\end{table}
 
 \section{Push-based shuffle}
 \label{sec:shuffle-push}
