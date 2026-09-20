@@ -1,0 +1,47 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="cow-vs-mor" id="cowmor">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="740" pageHeight="420" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="t1" value="&lt;b&gt;Copy-on-write&lt;/b&gt;" style="text;html=1;align=center;fontSize=13;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="20" y="10" width="330" height="26" as="geometry" />
+        </mxCell>
+        <mxCell id="t2" value="&lt;b&gt;Merge-on-read&lt;/b&gt;" style="text;html=1;align=center;fontSize=13;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="390" y="10" width="330" height="26" as="geometry" />
+        </mxCell>
+
+        <mxCell id="a1" value="UPDATE matches 3 rows&lt;br&gt;in data-file-07" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="20" y="50" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="&lt;b&gt;write:&lt;/b&gt;&lt;br&gt;whole new data-file-07'&lt;br&gt;with the 3 rows changed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="20" y="112" width="330" height="76" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="&lt;b&gt;read:&lt;/b&gt;&lt;br&gt;plain data files only&lt;br&gt;no merge cost, ever" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=10;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="20" y="204" width="330" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="b1" value="UPDATE matches 3 rows&lt;br&gt;in data-file-07" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=10;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="390" y="50" width="330" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="b2" value="&lt;b&gt;write:&lt;/b&gt;&lt;br&gt;small delete file (3 rows)&lt;br&gt;+ small file, 3 new rows&lt;br&gt;data-file-07 untouched" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=10;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="390" y="112" width="330" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="b3" value="&lt;b&gt;read:&lt;/b&gt;&lt;br&gt;merges the delete file&lt;br&gt;against data-file-07&lt;br&gt;on every scan, until compacted" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="390" y="218" width="330" height="86" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edges=1;html=1;endArrow=block;strokeColor=#3b6ea5;" edge="1" parent="1" source="a1" target="a2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edges=1;html=1;endArrow=block;strokeColor=#3b6ea5;" edge="1" parent="1" source="a2" target="a3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;" edge="1" parent="1" source="b1" target="b2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;" edge="1" parent="1" source="b2" target="b3"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="note" value="Same UPDATE, opposite cost placement:&lt;br&gt;CoW pays once, at write time.&lt;br&gt;MoR pays a little at write time, and a little more on every read until compacted." style="text;html=1;align=center;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="20" y="316" width="700" height="60" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

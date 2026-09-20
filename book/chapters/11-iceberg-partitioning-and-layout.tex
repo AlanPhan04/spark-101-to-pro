@@ -91,7 +91,19 @@ as a table grows is a metadata-only operation, not a maintenance project: new
 data lands under the finer scheme immediately, old data keeps the coarser
 scheme it was written with, and a query filtering by date prunes correctly
 against both --- coarser pruning on the old partitions, finer pruning on the
-new ones, with no explicit migration step and no downtime.
+new ones, with no explicit migration step and no downtime
+(\Cref{fig:partition-evolution}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{partition-evolution.pdf}
+  \caption{After evolving \texttt{orders} from \texttt{month(order\_ts)} to
+  \texttt{day(order\_ts)}, both specs coexist under the same current
+  snapshot. Old manifests keep describing month-partitioned files; new
+  manifests describe day-partitioned files. One scan reads both, pruning
+  each manifest against its own recorded spec.}
+  \label{fig:partition-evolution}
+\end{figure}
 
 \section{Sort orders and Z-ordering}
 \label{sec:ice-sort-order}

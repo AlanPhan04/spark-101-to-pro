@@ -1,0 +1,42 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="scheduler-components" id="schedcomp">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="700" pageHeight="380" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="dag" value="&lt;b&gt;DAG scheduler&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;RDD lineage -&amp;gt; stages&lt;br&gt;resubmits on fetch failure&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="200" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="task" value="&lt;b&gt;Task scheduler&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;places tasks, locality,&lt;br&gt;per-task retry, speculation&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="126" width="200" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mot" value="&lt;b&gt;Map output tracker&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;Master (driver, authoritative)&lt;br&gt;Worker (executor, cached)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=11;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="380" y="20" width="240" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rpc" value="&lt;b&gt;RPC (Netty)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;small, latency-sensitive&lt;br&gt;control messages&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="380" y="126" width="110" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="block" value="&lt;b&gt;Block transfer&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;large, throughput-&lt;br&gt;sensitive shuffle bytes&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=11;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="510" y="126" width="110" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="hands off a set of&#10;runnable tasks" style="edges=1;html=1;endArrow=block;strokeColor=#3b6ea5;fontSize=8;" edge="1" parent="1" source="dag" target="task"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="reads fetch&#10;locations" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;fontSize=8;" edge="1" parent="1" source="task" target="mot"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="lost executor&#10;invalidates output" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;fontSize=8;dashed=1;" edge="1" parent="1" source="mot" target="dag"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edges=1;html=1;endArrow=block;strokeColor=#6b7280;" edge="1" parent="1" source="task" target="rpc"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="edges=1;html=1;endArrow=block;strokeColor=#b5545e;" edge="1" parent="1" source="rpc" target="block"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="fetch requests /&#10;block-serving" style="edges=1;html=1;endArrow=block;strokeColor=#b5545e;fontSize=8;" edge="1" parent="1" source="mot" target="block"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="note" value="Two separate paths on purpose: a busy shuffle fetch on the Block transfer path never blocks the RPC call the Task scheduler needs to reassign a freed slot." style="text;html=1;align=center;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="40" y="220" width="580" height="40" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

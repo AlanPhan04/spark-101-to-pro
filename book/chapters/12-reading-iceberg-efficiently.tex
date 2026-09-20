@@ -46,6 +46,21 @@ Row-group statistics & Row groups within an opened file, via Parquet's own
 \end{tabular}
 \end{table}
 
+\Cref{fig:pruning-layers-funnel} draws the same four layers as what they
+are: a funnel, narrowing from every file in the table down to the rows a
+query actually reads, each layer paying only for what survived the one
+above it.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{pruning-layers-funnel.pdf}
+  \caption{The four pruning layers, narrowing top to bottom. Each layer
+  only ever has to consider what the layer above it did not already
+  exclude --- a file skipped by the manifest list is never even checked
+  against a bloom filter or row-group statistics.}
+  \label{fig:pruning-layers-funnel}
+\end{figure}
+
 \section{Column statistics and predicate pushdown into Iceberg}
 \label{sec:ice-read-stats}
 

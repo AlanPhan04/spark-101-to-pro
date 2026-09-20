@@ -1,0 +1,43 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="microbatch-commit-loop" id="mbloop">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="380" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="s1" value="&lt;b&gt;1. Ask source&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;for new offsets since&lt;br&gt;the last checkpoint&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="30" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="&lt;b&gt;2. Run one&lt;br&gt;micro-batch&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;ordinary job/stage/&lt;br&gt;task machinery&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="240" y="30" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="&lt;b&gt;3. Commit to&lt;br&gt;orders (Iceberg)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;one snapshot,&lt;br&gt;keyed by batch id&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=11;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="440" y="30" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="s4" value="&lt;b&gt;4. Write offset&lt;br&gt;to checkpoint&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;only after step 3&lt;br&gt;succeeds&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="240" y="230" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edges=1;html=1;endArrow=block;strokeColor=#3b6ea5;" edge="1" parent="1" source="s1" target="s2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edges=1;html=1;endArrow=block;strokeColor=#3b6ea5;" edge="1" parent="1" source="s2" target="s3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edges=1;html=1;endArrow=block;strokeColor=#4f8a3d;exitX=0.5;exitY=1;entryX=1;entryY=0.3;" edge="1" parent="1" source="s3" target="s4"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="edges=1;html=1;endArrow=block;strokeColor=#6b7280;exitX=0;entryX=0;entryY=0.5;exitY=0.5;rounded=1;" edge="1" parent="1" source="s4" target="s1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="30" y="265" />
+              <mxPoint x="30" y="65" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="looplabel" value="repeats forever (ProcessingTime)&lt;br&gt;or once and stops (Once /&lt;br&gt;AvailableNow)" style="text;html=1;align=center;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="20" y="140" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="restartlabel" value="a restart replays from here:&lt;br&gt;same offsets, same rows,&lt;br&gt;no duplicate commit" style="text;html=1;align=center;fontSize=9;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="420" y="140" width="200" height="80" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

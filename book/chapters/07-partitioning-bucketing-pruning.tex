@@ -57,7 +57,18 @@ WHERE o.order_date IN (SELECT date FROM dim_date WHERE year = 2026)
 \end{lstlisting}
 
 so the same partition-level skipping from \Cref{sec:pruning-static} applies to
-a filter that, in the query as written, lived on the other table entirely.
+a filter that, in the query as written, lived on the other table entirely
+(\Cref{fig:dpp-flow}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{dpp-flow.pdf}
+  \caption{Without DPP, pruning happens last: the whole fact table is
+  scanned before the join discards most of it. With DPP, the small
+  dimension side runs first and its matching keys are injected as a filter
+  \emph{before} the fact scan, so pruning happens first instead.}
+  \label{fig:dpp-flow}
+\end{figure}
 
 DPP has two prerequisites, and missing either one silently disables it: the
 fact table must be partitioned by the join column --- there is nothing to skip

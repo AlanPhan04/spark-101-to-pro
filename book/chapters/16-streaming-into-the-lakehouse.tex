@@ -25,7 +25,18 @@ just processed to a \emph{checkpoint} location before asking for the next
 range. Nothing about execution is special to streaming; what is special is
 that this loop runs forever and that recovery after a failure means
 replaying from the last checkpointed offset rather than restarting the
-whole computation from the beginning.
+whole computation from the beginning (\Cref{fig:microbatch-commit-loop}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{microbatch-commit-loop.pdf}
+  \caption{One iteration of the micro-batch loop. The checkpoint offset is
+  only written after the Iceberg commit succeeds, which is what makes a
+  restart safe: replaying from the last checkpointed offset re-runs exactly
+  the range that either never committed or already did, never anything in
+  between.}
+  \label{fig:microbatch-commit-loop}
+\end{figure}
 
 \section{Sources and sinks}
 \label{sec:stream-sources-sinks}

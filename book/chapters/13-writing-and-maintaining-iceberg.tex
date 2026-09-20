@@ -52,6 +52,20 @@ Needs & --- & Regular compaction to bound read cost \\
 \end{tabular}
 \end{table}
 
+\Cref{fig:cow-vs-mor} follows the same \texttt{UPDATE} down both paths to
+make the trade concrete: same three matched rows, opposite placement of
+the cost.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{cow-vs-mor.pdf}
+  \caption{The same \texttt{UPDATE} under copy-on-write and merge-on-read.
+  CoW pays once, at write time, and every later read is plain data with no
+  merge; MoR pays a small write-time cost and pushes the rest onto every
+  read until the next compaction.}
+  \label{fig:cow-vs-mor}
+\end{figure}
+
 \section{\texttt{MERGE}, \texttt{UPDATE}, and \texttt{DELETE}}
 \label{sec:ice-write-merge}
 

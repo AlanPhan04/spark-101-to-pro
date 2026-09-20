@@ -1,0 +1,35 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="pruning-layers-funnel" id="funnel">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="620" pageHeight="460" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="l0" value="&lt;b&gt;All files in the table&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=11;fontColor=#374151;" vertex="1" parent="1">
+          <mxGeometry x="40" y="10" width="540" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l1" value="&lt;b&gt;Manifest list&lt;/b&gt; --- skip whole manifests by partition summary" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="80" y="86" width="460" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l2" value="&lt;b&gt;Manifest entries&lt;/b&gt; --- skip files by partition value + column min/max" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontSize=11;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="120" y="162" width="380" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l3" value="&lt;b&gt;Bloom filter&lt;/b&gt; (optional)&lt;br&gt;skip row groups for a point lookup" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=11;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="130" y="238" width="360" height="56" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l4" value="&lt;b&gt;Row-group statistics&lt;/b&gt;&lt;br&gt;Parquet's own min/max&lt;br&gt;inside opened files" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=11;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="170" y="324" width="280" height="66" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l5" value="&lt;b&gt;Rows actually read&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=11;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="240" y="412" width="140" height="30" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -35,7 +35,20 @@ this chapter is what that metadata layer is actually made of.
 \label{sec:ice-spec-v2}
 
 Iceberg's metadata is a tree of four kinds of file, each immutable once
-written, each read by the layer above it, top to bottom:
+written, each read by the layer above it, top to bottom
+(\Cref{fig:iceberg-metadata-tree}):
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{iceberg-metadata-tree.pdf}
+  \caption{The metadata tree for one snapshot of \texttt{orders}. The
+  catalog resolves to one table metadata file, which points to one manifest
+  list, which points to the manifests that make up this snapshot, which
+  list the actual data and delete files. Every level is immutable; a new
+  commit writes new files at whichever levels changed and leaves the rest
+  untouched.}
+  \label{fig:iceberg-metadata-tree}
+\end{figure}
 
 \begin{description}
   \item[Table metadata file] (JSON) is the object a catalog entry points to.

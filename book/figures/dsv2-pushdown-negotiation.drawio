@@ -1,0 +1,53 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="dsv2-pushdown-negotiation" id="dsv2neg">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="700" pageHeight="430" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="planner" value="&lt;b&gt;Planner&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=12;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="150" height="46" as="geometry" />
+        </mxCell>
+        <mxCell id="source" value="&lt;b&gt;Iceberg ScanBuilder&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=12;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="480" y="20" width="180" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m1" value="offers: order_ts &amp;gt;= '2026-03-01'" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b6ea5;fontSize=9;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="200" y="90" width="270" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" value="reports: fully handled&lt;br&gt;(partition + stats pruning)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c77f3b;fontSize=9;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="200" y="140" width="270" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="m3" value="drops the filter from the plan&lt;br&gt;no Filter node needed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=10;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="300" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="m4" value="offers:&lt;br&gt;CAST(order_ts AS STRING)&lt;br&gt;&amp;gt;= '2026-03-01'" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#3b6ea5;fontSize=9;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="130" y="270" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="m5" value="reports: unhandled&lt;br&gt;(CAST defeats resolution)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="410" y="270" width="260" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edges=1;html=1;endArrow=block;strokeColor=#3b6ea5;" edge="1" parent="1" source="planner" target="source">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="220" y="75" as="sourcePoint" />
+            <mxPoint x="470" y="75" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;" edge="1" parent="1" source="source" target="planner">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="470" y="130" as="sourcePoint" />
+            <mxPoint x="220" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" style="edges=1;html=1;endArrow=block;strokeColor=#4f8a3d;exitX=0.3;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="m2" target="m3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="m6" value="Spark keeps a Filter node&lt;br&gt;above the scan --- correct,&lt;br&gt;but no pruning benefit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="410" y="344" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edges=1;html=1;endArrow=block;strokeColor=#b5545e;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="m5" target="m6"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

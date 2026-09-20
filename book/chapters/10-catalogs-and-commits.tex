@@ -133,7 +133,19 @@ different \texttt{parent\_id} --- \texttt{v43} (the \texttt{replace} from
 compaction) and \texttt{v44} (the \texttt{append} from the retried
 \texttt{INSERT}, now parented on \texttt{v43} rather than the \texttt{v42}
 it originally read). Neither job's caller ever saw an error; the retry
-happened entirely inside the client library.
+happened entirely inside the client library, as \Cref{fig:catalog-commit-race}
+lays out step by step.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{catalog-commit-race.pdf}
+  \caption{Two writers racing for the same base version. The compaction
+  job's swap lands first and succeeds; the INSERT session's swap against
+  the same stale base is rejected, so it re-reads the new current version,
+  rebuilds its manifest on top of it, and retries --- succeeding one
+  version later, with no error surfaced to either caller.}
+  \label{fig:catalog-commit-race}
+\end{figure}
 
 \begin{table}[htbp]
 \centering

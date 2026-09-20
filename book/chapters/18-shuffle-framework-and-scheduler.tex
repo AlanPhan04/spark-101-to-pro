@@ -118,6 +118,21 @@ what makes the external shuffle service possible at all: it only has to
 reimplement the \texttt{NettyBlockTransferService} half as a standalone
 process (\Cref{sec:shuffle-external}), with no need to also speak the
 scheduler's RPC protocol, because block serving never depended on it.
+\Cref{fig:scheduler-components} puts all five pieces from this chapter in
+one picture, with the RPC/block-transfer split drawn as the two separate
+paths it actually is.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{scheduler-components.pdf}
+  \caption{The scheduler's five components. The DAG scheduler hands the
+  task scheduler a set of runnable tasks and is only reinvoked when the map
+  output tracker reports a lost executor's output as gone; the task
+  scheduler reads fetch locations from the tracker and issues its own
+  small control messages over RPC, kept separate from the large shuffle
+  bytes on the block-transfer path.}
+  \label{fig:scheduler-components}
+\end{figure}
 
 \section{Locality and speculation}
 \label{sec:sched-locality-speculation}

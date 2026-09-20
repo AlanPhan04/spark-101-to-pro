@@ -1,0 +1,42 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="partition-evolution" id="partevo">
+    <mxGraphModel dx="900" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="740" pageHeight="320" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="snap" value="&lt;b&gt;Current snapshot&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=12;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="290" y="10" width="160" height="46" as="geometry" />
+        </mxCell>
+
+        <mxCell id="oldbox" value="&lt;b&gt;Old manifests&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;spec: month(order_ts)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontSize=11;fontColor=#7a4a17;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="100" width="280" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="old1" value="Jan 2026 (1 file/month)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c77f3b;fontSize=9;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="80" y="140" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="old2" value="Feb 2026 (1 file/month)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c77f3b;fontSize=9;fontColor=#7a4a17;" vertex="1" parent="1">
+          <mxGeometry x="80" y="180" width="240" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="newbox" value="&lt;b&gt;New manifests&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;spec: day(order_ts)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=11;fontColor=#2f5320;verticalAlign=top;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="400" y="100" width="280" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="new1" value="2026-03-01 (1 file/day)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="420" y="140" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="new2" value="2026-03-02 (1 file/day)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="420" y="180" width="240" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;exitX=0.3;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="snap" target="oldbox"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edges=1;html=1;endArrow=block;strokeColor=#4f8a3d;exitX=0.7;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="snap" target="newbox"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="note" value="A query filtering by date evaluates each manifest against its OWN recorded spec --- coarser skipping on the left, finer on the right, in the same scan." style="text;html=1;align=center;fontSize=10;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="60" y="264" width="620" height="40" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

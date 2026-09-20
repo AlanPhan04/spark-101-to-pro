@@ -71,7 +71,20 @@ predicate one \texttt{SupportsPushDownFilters} cannot resolve against
 either partition values or column statistics, so it reports the filter back
 as unhandled, and a standalone \texttt{Filter} node reappears above the
 scan, evaluating the same logical condition row-by-row after every row has
-already been read.
+already been read. \Cref{fig:dsv2-pushdown-negotiation} lines the two cases
+up side by side.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{dsv2-pushdown-negotiation.pdf}
+  \caption{The same negotiation, two outcomes. A plain comparison resolves
+  against partition values and column statistics, so Iceberg reports it
+  fully handled and Spark drops the filter from the plan. A \texttt{CAST}
+  on the same column cannot be resolved the same way, so Iceberg reports it
+  unhandled and Spark keeps a \texttt{Filter} node to enforce it --- still
+  correct, just with no pruning benefit.}
+  \label{fig:dsv2-pushdown-negotiation}
+\end{figure}
 
 \texttt{SupportsPushDownRequiredColumns} is the same negotiation for
 column pruning (\Cref{sec:pruning-column}), and
