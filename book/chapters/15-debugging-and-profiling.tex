@@ -22,6 +22,53 @@ stragglers --- and what each looks like before you reach for a fix.
 
 \section{Common failure signatures}
 \label{sec:failure-signatures}
+
+A job rarely fails as one incomprehensible error. It fails as one of a small
+number of recognizable signatures, each with its own evidence in the UI and its
+own fix.
+
+\paragraph{OOM and container kills.}
+\tbd
+
+\paragraph{Fetch failures and stage retries.}
+
+Shuffle files are not deleted as soon as they are read --- Spark keeps them in
+case a later stage needs the same shuffle again, and cleans them up in the
+background as the driver's JVM garbage-collects the objects that reference them
+(the \emph{ContextCleaner}). In practice the deciding moment is simpler: that
+storage is local to the executor that wrote it (\Cref{sec:shuffle-write}), and
+on the reference stack it is an \texttt{emptyDir} tied to the executor's pod, so
+losing the pod --- an OOM kill, a node drain, dynamic allocation scaling down
+--- deletes its shuffle files immediately, with no way to recover them from that
+executor again.
+
+A reduce task that tries to fetch from such an executor gets a
+\texttt{FetchFailedException}, visible in the driver log and the stage's tasks
+tab. This is not a generic task failure: the DAG scheduler recognizes it
+specifically, marks that executor's map output as gone in the map output
+tracker, and resubmits only the map tasks that ran on it --- not the whole
+stage, and not the job --- before retrying the reduce stage. You will see this
+in the UI as a stage that appears to run twice, with a smaller second attempt.
+
+\begin{tip}
+Two different layers retry, and tuning the wrong one does nothing. A fetch that
+fails from a flaky network but a still-live executor is retried by the shuffle
+client itself: \conf{spark.shuffle.io.maxRetries} (3 attempts) and
+\conf{spark.shuffle.io.retryWait} (5s between them). A fetch that fails because
+the executor is genuinely gone is handled by the stage resubmission above,
+bounded by \conf{spark.stage.maxConsecutiveAttempts} (4) and, per task,
+\conf{spark.task.maxFailures} (4) --- raise both on a cluster where executors
+are routinely reclaimed (spot instances, aggressive dynamic allocation) rather
+than let the job fail after only a handful of retries. If the lost executors
+are \emph{voluntary} removals under dynamic allocation
+(\Cref{sec:dynamic-allocation}) rather than crashes,
+\conf{spark.shuffle.service.enabled} avoids the failure entirely by keeping
+shuffle data servable after its executor is gone (\Cref{sec:shuffle-push}).
+Enabling \conf{spark.excludeOnFailure.enabled} keeps subsequent retries from
+landing back on a node that is already causing them.
+\end{tip}
+
+\paragraph{Stragglers.}
 \tbd
 
 \section{async-profiler and flame graphs}
