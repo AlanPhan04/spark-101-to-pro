@@ -156,8 +156,8 @@ well-sized files or many small ones in the first place.
 \begin{exercises}
 \item Given a daily data volume and a query pattern, choose a partition spec.
       Justify it against the target of 128~MB--1~GB per partition per write.
-\item Evolve a table's partition spec from \texttt{month(event\_ts)} to
-      \texttt{day(event\_ts)}. Confirm from the \texttt{partitions} metadata
+\item Evolve a table's partition spec from \texttt{month(order\_ts)} to
+      \texttt{day(order\_ts)}. Confirm from the \texttt{partitions} metadata
       table that old and new data report different specs.
 \item Write the same DataFrame with \texttt{write.distribution-mode} set to
       \texttt{none} and then \texttt{hash}. Compare the file count per
