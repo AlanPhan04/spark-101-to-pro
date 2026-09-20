@@ -4,36 +4,162 @@
 \begin{chapterintro}
 Caching keeps a result Spark would otherwise recompute --- but the wrong cache
 wastes storage memory and starves execution, and a cache used once is pure
-overhead. Spark also reuses work you did not ask it to: an identical exchange or
-subquery computed once and read twice. This chapter covers when caching pays,
-which storage level to pick against the GC budget from \Cref{ch:execmem}, and how
-to see reuse in a plan. It is also where execution and storage memory finally
-meet at runtime.
+overhead. Spark also reuses work you did not ask it to: an identical exchange
+or subquery computed once and read twice. This chapter covers when caching
+pays, which storage level to pick against the GC budget from
+\Cref{ch:execmem}, and how to see reuse in a plan. It is also where execution
+and storage memory finally meet at runtime.
 \end{chapterintro}
 
 \section{When caching pays}
-\tbd
+\label{sec:caching-when}
+
+A cached DataFrame pays for itself only when two things are both true: it is
+read more than once, and it fits comfortably inside the executor's storage
+memory (\Cref{sec:mem-model}) without pushing out other useful cached data.
+Caching something read exactly once adds the cost of writing it into storage
+memory (and, if it does not fit, spilling it to disk) for a saving that never
+arrives --- the classic mistake is caching immediately before a single
+\texttt{write()}, which reads the cached data exactly once and gets nothing
+back for the cost of caching it.
+
+\begin{lstlisting}[language=SQL,caption={Reused twice: worth caching},captionpos=b]
+-- good: filtered_trips is read by two different aggregations
+filtered_trips.cache()
+filtered_trips.count()                 -- materializes the cache
+result1 = filtered_trips.join(dim_route, "route_id")
+result2 = filtered_trips.groupBy("route_id").sum("distance")
+\end{lstlisting}
 
 \section{Lazy \texttt{cache()} versus eager \texttt{CACHE TABLE}}
-\tbd
+\label{sec:caching-lazy}
+
+\texttt{df.cache()} does not cache anything by itself --- it only marks the
+DataFrame for caching the next time an action runs it, consistent with
+transformations being lazy everywhere else (\Cref{sec:shape-jobs}). Without a
+materializing action, the first real use of the DataFrame both computes it
+\emph{and} populates the cache as a side effect, which works but hands you no
+control over exactly when the cost is paid; calling a cheap action like
+\texttt{count()} right after \texttt{cache()} is the common way to materialize
+it deliberately, on your own terms.
+
+\begin{note}
+SQL's \texttt{CACHE TABLE} is the one place this default flips: it is
+\emph{eager}, executing immediately rather than waiting for an action. Use
+\texttt{CACHE LAZY TABLE} for the same lazy behavior \texttt{df.cache()} gives
+you.
+\end{note}
 
 \section{Storage levels and the GC trade-off}
-\tbd
+\label{sec:caching-storage-levels}
+
+The default storage level, \texttt{MEMORY\_AND\_DISK}, keeps cached blocks as
+deserialized JVM objects in storage memory and spills to disk only when it
+does not fit. Those objects carry the same per-object overhead
+\Cref{sec:mem-heap} described for any row, and a large, long-lived cache is
+exactly the workload that pushes a garbage collector toward its expensive,
+full-heap path (\Cref{sec:mem-gc}). Two other levels exist specifically to
+trade that away:
+
+\begin{itemize}
+  \item \texttt{MEMORY\_AND\_DISK\_SER} keeps the cache serialized ---
+        Kryo-encoded bytes (\Cref{sec:mem-serialization}) in one contiguous
+        block rather than millions of small objects. It uses roughly
+        2--3$\times$ less memory and is nearly invisible to the garbage
+        collector, at the cost of deserializing on every read.
+  \item \texttt{OFF\_HEAP} (with
+        \conf{spark.memory.offHeap.enabled}) puts the cache entirely outside
+        the JVM heap, the same off-heap pool from \Cref{sec:mem-model} ---
+        zero GC overhead for that data, at the cost of the off-heap capacity
+        it consumes.
+\end{itemize}
+
+\texttt{DISK\_ONLY} is rarely the right answer: reading a cache from disk is
+close enough to re-reading the source that the cache buys little.
+
+\begin{tip}
+Switch away from the deserialized default when GC time is 5--10\% or more of
+task time for a job that caches heavily (\Cref{sec:reading-metrics}). Below
+that, the deserialization cost of a \texttt{\_SER} level is not worth paying.
+\end{tip}
 
 \section{How execution and storage memory borrow at runtime}
-\tbd
+\label{sec:caching-borrowing}
+
+\Cref{sec:mem-model} described unified memory's split between execution and
+storage as a soft boundary set by \conf{spark.memory.storageFraction}; here is
+what that means while a job actually runs. Either side may use the other's
+\emph{idle} space: a job with nothing cached lets execution use the whole
+unified pool for shuffles and joins, and a job running no wide operators lets
+storage use all of it for cached blocks. The boundary only matters once both
+sides want space at the same time, and the two directions are not symmetric:
+
+\begin{itemize}
+  \item if execution needs memory that storage is currently borrowing,
+        Spark evicts cached blocks (LRU) to reclaim it, down to storage's own
+        guaranteed half;
+  \item if storage needs memory that execution is currently borrowing,
+        Spark cannot evict a running task's hash table or sort buffer to make
+        room --- storage simply does not get that space back until the task
+        finishes.
+\end{itemize}
+
+Execution always wins a live contest, because failing to complete a running
+operator is worse than evicting a cache entry and recomputing it later. This
+is also why a cache that is evicted mid-job is not a bug: it is unified memory
+doing exactly what it is for.
 
 \section{Exchange and subquery reuse}
-\tbd
+\label{sec:caching-reuse}
+
+Caching is a decision you make; Spark also reuses identical work on its own
+when the physical plan contains the same subtree twice. If two operators need
+data shuffled the same way --- same partitioning, same partition count --- the
+planner reuses one exchange for both instead of running it twice
+(\texttt{ReuseExchange}, \Cref{sec:c-exchange}); an identical scalar subquery
+appearing more than once in a query is deduplicated the same way
+(\texttt{ReuseSubquery}). Both are visible directly in the physical plan and
+require no caching from you --- and both are fragile in exactly the way
+\Cref{sec:shuffle-unnecessary} warned about: a partition count or column order
+that differs by even a little between the two occurrences is enough to defeat
+the match.
 
 \section{Unpersist and cache thrashing}
-\tbd
+\label{sec:caching-unpersist}
+
+A cached DataFrame you no longer need should be explicitly released with
+\texttt{unpersist()}. Left alone, storage memory fills with DataFrames nobody
+reads anymore, and Spark's LRU eviction starts discarding whichever cached
+block was used least recently to make room for new ones --- which, under
+enough pressure, can end up evicting the cache you actually still need before
+its next read, forcing a recompute you cached specifically to avoid. This
+\emph{cache thrashing} is a caching bug that looks like a memory bug: the fix
+is fewer, more deliberate caches, not more memory.
 
 \section{Summary}
-\tbd
+\label{sec:caching-summary}
+
+Cache what is read more than once and fits the storage budget; a cache read
+once is waste. \texttt{cache()} only marks a DataFrame lazily, so materialize
+it on your own schedule with a cheap action; \texttt{CACHE TABLE} in SQL is
+eager by contrast. The deserialized default trades memory for GC pressure;
+\texttt{\_SER} and \texttt{OFF\_HEAP} trade back at the cost of CPU or
+off-heap capacity. Execution and storage share unified memory and may borrow
+each other's idle space, but only execution can evict a borrower to reclaim
+it --- storage waits. Spark reuses an identical exchange or subquery on its
+own, fragile to any difference between the two occurrences; and a cache you
+forget to release does not just waste memory, it can evict the cache you
+still need.
 
 \exercisehead
 \begin{exercises}
-\item Build a query that reads one CTE twice. Show the plan reusing the exchange,
-      then change the query so the reuse breaks and measure the difference.
+\item Build a query that reads one CTE twice. Show the plan reusing the
+      exchange, then change the query so the reuse breaks and measure the
+      difference.
+\item Cache a DataFrame with \texttt{MEMORY\_AND\_DISK}, then with
+      \texttt{MEMORY\_AND\_DISK\_SER}. Compare GC time in the Executors tab for
+      a job that scans it repeatedly.
+\item Cache three DataFrames larger than storage memory can hold at once, read
+      each once, then re-read the first. Confirm from the Storage tab that it
+      was evicted and recomputed.
 \end{exercises}

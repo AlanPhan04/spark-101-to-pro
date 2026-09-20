@@ -4,34 +4,151 @@
 \begin{chapterintro}
 The cheapest data to move is data you never read. Partition pruning skips whole
 directories; dynamic partition pruning does it using values discovered from the
-other side of a join; bucketing lays data out so a join needs no shuffle at all.
-Each of these is easy to defeat --- a function on the partition column, a
+other side of a join; bucketing lays data out so a join needs no shuffle at
+all. Each of these is easy to defeat --- a function on the partition column, a
 \texttt{CAST}, a stray \texttt{SELECT *} --- and the plan tells you when you
 have. This chapter covers each mechanism and how to confirm it is working.
 \end{chapterintro}
 
 \section{Partition pruning and the pushdown killers}
-\tbd
+\label{sec:pruning-static}
+
+A table physically partitioned by a column --- for a Hive-catalogued table,
+one subdirectory per distinct value; for Iceberg, the hidden partitioning
+covered in \Cref{ch:iceberg-layout} --- lets the planner skip whole partitions
+before any file inside them is opened, whenever a filter can be resolved
+against the partition value alone. This shows up in \texttt{EXPLAIN} as a
+non-empty \texttt{PartitionFilters} on the scan (\Cref{sec:c-scan}); an empty
+one on a partitioned table means the filter did not resolve that way.
+
+The most common reason it does not resolve is the filter itself. A function
+applied to the partition column, a \texttt{CAST}, a non-deterministic
+expression, or an \texttt{OR} with a non-pushable branch all defeat this the
+same way they defeat row-group pushdown --- the full catalogue of these
+pushdown killers, with the exact fix for each, is
+\Cref{sec:c-pushdown}. The specimen query's own
+\texttt{event\_ts >= TIMESTAMP '\ldots'} filter works precisely because it is a
+plain comparison against a literal, resolved once at plan time, with nothing
+standing between the column and the value.
 
 \section{Dynamic partition pruning}
-\tbd
+\label{sec:pruning-dpp}
+
+Static pruning needs a literal known before the query runs. A star-schema join
+--- fact table filtered indirectly, through a small dimension --- has no
+literal for the planner to use:
+
+\begin{lstlisting}[language=SQL,caption={A filter on the dimension, not the fact table},captionpos=b]
+SELECT * FROM trips t
+JOIN dim_date d ON t.event_date = d.date
+WHERE d.year = 2026;
+\end{lstlisting}
+
+Without help, Spark scans every partition of \texttt{trips} across all years,
+then joins, then discards everything outside 2026 --- all the pruning happens
+\emph{after} the expensive read. \emph{Dynamic partition pruning} (DPP, on by
+default via
+\conf{spark.sql.optimizer.dynamicPartitionPruning.enabled}) rewrites this: it
+runs the small side first, collects the matching \texttt{date} values, and
+injects them into the fact scan as if the query had been written
+
+\begin{lstlisting}[language=SQL,numbers=none]
+WHERE t.event_date IN (SELECT date FROM dim_date WHERE year = 2026)
+\end{lstlisting}
+
+so the same partition-level skipping from \Cref{sec:pruning-static} applies to
+a filter that, in the query as written, lived on the other table entirely.
+
+DPP has two prerequisites, and missing either one silently disables it: the
+fact table must be partitioned by the join column --- there is nothing to skip
+by directory otherwise --- and the dimension side must be cheap enough to
+execute first (broadcastable, in practice), because DPP works by running it
+early and reusing its result, not by guessing.
 
 \section{Bucketing to avoid a shuffle}
-\tbd
+\label{sec:pruning-bucketing}
+
+Partitioning divides a table by directory; \emph{bucketing} divides it further,
+within a partition, by hashing a column into a fixed number of files. Two
+tables bucketed on the same column with the same bucket count are already
+co-located file-to-file on that column, which is exactly the precondition
+\Cref{sec:joins-spj} used for a storage-partitioned join: the shuffle that a
+normal join would pay for is instead paid once, at write time, and every join
+on that key afterward pays nothing.
+
+Classic Spark bucketing (\texttt{df.write.bucketBy(n, col)}, for a
+Hive-catalogued table) established the idea but is brittle in practice: the
+two tables must match bucket count exactly, and the bucketing is a Spark-only
+convention invisible to any other engine reading the same files. Iceberg's
+\texttt{bucket(n, col)} partition transform (\Cref{sec:ice-partitioning}) is
+the modern equivalent on this stack --- recorded in the table's own metadata
+rather than inferred from file naming, so any engine reading the table sees
+and can exploit the same layout.
 
 \section{\texttt{repartition} versus \texttt{coalesce}}
 \label{sec:repartition-coalesce}
-\tbd
+
+Both change how many partitions a DataFrame has; they get there by opposite
+mechanisms, and \Cref{tab:shape-narrow-wide} already told you which is which.
+\texttt{repartition(n)} is wide: it shuffles, so it can raise \emph{or} lower
+the partition count and it redistributes rows evenly across the new count
+regardless of how they were distributed before. \texttt{coalesce(n)} is
+narrow: it only lowers the count, and it does so by merging existing
+partitions together with no shuffle --- which also means it cannot fix uneven
+input. Coalescing four huge partitions and four empty ones down to four still
+leaves you with four huge partitions; only a shuffle can redistribute the rows
+themselves.
+
+\conf{coalesce(n, shuffle=true)} exists specifically to opt back into a
+shuffle when a plain coalesce would preserve skew that already exists in the
+input --- at that point it costs what \texttt{repartition} costs, and the
+narrow-versus-wide distinction has been given up on purpose.
 
 \section{Column pruning and \texttt{ReadSchema}}
-\tbd
+\label{sec:pruning-column}
+
+Column pruning --- reading only the columns a query touches --- is one of the
+optimizer's heuristic rules (\Cref{sec:catalyst-rules}) and shows up as the
+scan's \texttt{ReadSchema} (\Cref{sec:c-scan}); a \texttt{ReadSchema} wider
+than the query needs almost always traces back to a \texttt{SELECT *} in a
+view, a CTE, or a UDF's input that the optimizer cannot see through.
+
+It goes one level deeper for a nested (struct) column than the top-level case
+suggests. Parquet and Iceberg both store nested fields independently enough
+that a query touching only \texttt{event.location.city} out of a wide
+\texttt{event STRUCT<\ldots>} column can prune to that one leaf field, without
+reading its siblings --- visible in \texttt{ReadSchema} as the struct type
+narrowed to just the accessed fields, not dropped as a whole column. Whether
+this fires depends on the query actually projecting the leaf field explicitly;
+passing the whole struct into a UDF or a later transformation reintroduces the
+full column, the same way a \texttt{SELECT *} does.
 
 \section{Summary}
-\tbd
+\label{sec:pruning-summary}
+
+Static partition pruning skips whole directories from a literal filter;
+dynamic partition pruning gets the same skipping for a filter that only exists
+on the other side of a join, by running that side first and reusing its
+result --- provided the fact table is partitioned by the join key and the
+other side is cheap to run early. Bucketing extends pruning-by-layout into
+join cost: two tables bucketed identically need no shuffle to join, which
+Iceberg's \texttt{bucket} transform makes a durable, engine-visible property of
+the table rather than a Spark-only convention. \texttt{coalesce} merges
+partitions without a shuffle and therefore cannot fix skew that already
+exists; \texttt{repartition} can, at the cost of paying for one. And column
+pruning reaches inside a struct, not just across the top-level schema, as long
+as the query actually projects the leaf field it needs.
 
 \exercisehead
 \begin{exercises}
 \item Write the same filter three ways --- a function on the partition column, a
       \texttt{CAST}, and a plain literal --- and check which keeps
       \texttt{PartitionFilters} populated in the scan node.
+\item Run the star-schema query from \Cref{sec:pruning-dpp} with
+      \conf{spark.sql.optimizer.dynamicPartitionPruning.enabled} set to
+      \texttt{false}, then \texttt{true}. Compare the partitions read on the
+      fact side in each plan.
+\item Take a DataFrame with visibly uneven partition sizes and run
+      \texttt{coalesce(4)} versus \texttt{repartition(4)}. Compare the
+      resulting task-size distribution in the UI.
 \end{exercises}
