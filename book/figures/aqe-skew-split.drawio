@@ -1,0 +1,38 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="aqe-skew-split" id="aqeskew">
+    <mxGraphModel dx="1000" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="820" pageHeight="330" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lpanel" value="&lt;b&gt;Without AQE&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;fillColor=#fdeef0;strokeColor=#b5545e;fontSize=12;fontColor=#7d2f38;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="360" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="l_fact" value="fact partition 2\n10 GB (one key dominates)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;strokeWidth=2;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="45" y="60" width="150" height="60" as="geometry" /></mxCell>
+        <mxCell id="l_dim" value="dim partition 2\n8 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=10;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="215" y="60" width="130" height="60" as="geometry" /></mxCell>
+        <mxCell id="l_task" value="1 task processes all 10 GB\nalone while every other task\nin the stage has finished" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;strokeWidth=2;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="60" y="180" width="260" height="70" as="geometry" /></mxCell>
+        <mxCell id="e_l1" style="endArrow=block;html=1;strokeColor=#b5545e;strokeWidth=1.6;exitX=0.5;exitY=1;entryX=0.3;entryY=0;" edge="1" parent="1" source="l_fact" target="l_task"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_l2" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=1.6;exitX=0.5;exitY=1;entryX=0.7;entryY=0;" edge="1" parent="1" source="l_dim" target="l_task"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="rpanel" value="&lt;b&gt;With AQE skew-join handling&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;fillColor=#eaf4e3;strokeColor=#4f8a3d;fontSize=12;fontColor=#2f5320;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="20" width="380" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="r_f1" value="fact 2a\n2.5 GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e4f1dc;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="440" y="60" width="76" height="40" as="geometry" /></mxCell>
+        <mxCell id="r_f2" value="fact 2b\n2.5 GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e4f1dc;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="525" y="60" width="76" height="40" as="geometry" /></mxCell>
+        <mxCell id="r_f3" value="fact 2c\n2.5 GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e4f1dc;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="610" y="60" width="76" height="40" as="geometry" /></mxCell>
+        <mxCell id="r_f4" value="fact 2d\n2.5 GB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e4f1dc;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="695" y="60" width="76" height="40" as="geometry" /></mxCell>
+        <mxCell id="r_d" value="dim 2, replicated 4x (8 MB each -- cheap to copy)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=9;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="440" y="120" width="331" height="34" as="geometry" /></mxCell>
+        <mxCell id="r_t" value="4 tasks run in parallel, ~2.5 GB each -- same wall-clock as the other partitions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf4e3;strokeColor=#4f8a3d;strokeWidth=2;fontSize=10;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="450" y="200" width="310" height="60" as="geometry" /></mxCell>
+        <mxCell id="e_r1" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r_f1" target="r_d"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_r2" style="endArrow=none;html=1;strokeColor=#4f8a3d;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r_f2" target="r_d"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_r3" style="endArrow=none;html=1;strokeColor=#4f8a3d;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r_f3" target="r_d"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_r4" style="endArrow=none;html=1;strokeColor=#4f8a3d;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r_f4" target="r_d"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e_r5" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=1.6;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="r_d" target="r_t"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

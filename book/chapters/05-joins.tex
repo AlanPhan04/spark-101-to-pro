@@ -3,39 +3,212 @@
 
 \begin{chapterintro}
 Spark has four ways to run a join and picks one from a size estimate. When the
-estimate is right, the choice is right. When the table has no statistics --- the
-common case for Iceberg --- the planner guesses, and a join that should have
-broadcast a 30~MB dimension instead shuffles a billion rows. This chapter covers
-the four strategies, how the planner chooses, and how to override it when you
-know better than the stats do.
+estimate is right, the choice is right. When the table has no statistics ---
+the common case for Iceberg, as the specimen query already showed
+(\Cref{sec:catalyst-analysis}) --- the planner guesses, and a join that should
+have broadcast a 30~MB dimension instead shuffles a billion rows. This chapter
+covers the four strategies, how the planner chooses between them, and how to
+override it when you know better than the statistics do.
 \end{chapterintro}
 
+\Cref{fig:join-strategies} shows the shape each strategy leaves in a plan. The
+rest of this chapter explains why each shape exists and what it costs; the
+identifiers to spot them by are catalogued in \Cref{sec:c-joins}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{join-strategies.pdf}
+  \caption{The four join strategies as plan shapes. Broadcast hash join shuffles
+  nothing on the large side; shuffled hash join shuffles both sides but sorts
+  neither; sort-merge join shuffles and sorts both; broadcast nested loop join
+  broadcasts one side to evaluate a condition that is not an equality.}
+  \label{fig:join-strategies}
+\end{figure}
+
 \section{Broadcast hash join}
-\tbd
+\label{sec:joins-bhj}
+
+If one side of a join is small enough, Spark skips shuffling the large side
+entirely: it collects the small side to the driver, packages it once, and ships
+a full copy to every executor (a \texttt{BroadcastExchange}), where it is built
+into an in-memory hash table keyed on the join column. Each task on the large
+side then probes that local hash table row by row --- no shuffle, no sort, and
+the large side is read exactly once, in place.
+
+This is the cheapest strategy whenever it applies, which is exactly why the
+planner tries it first. Two costs are easy to underestimate. First, the
+\emph{driver} holds the whole broadcast table in memory while assembling it,
+at roughly twice the table's serialized size; a broadcast large enough to hurt
+the driver is a self-inflicted wound distinct from anything happening on the
+executors. Second, the size used to decide broadcastability is the table's
+\emph{on-disk} size, and a compressed columnar file routinely decodes to
+several times that once it is rows in memory (\Cref{sec:mem-heap}) --- so a
+``100~MB'' table can be genuinely 500~MB--1~GB once broadcast and decoded,
+which is why the planning-time threshold is conservative by design. Spark also
+enforces a hard ceiling (roughly 8~GB serialized, and a few hundred million
+rows) past which a table cannot be broadcast at all, regardless of the
+threshold.
 
 \section{Shuffle hash join}
-\tbd
+\label{sec:joins-shj}
+
+When neither side is small enough to broadcast but one side is still
+meaningfully smaller than the other, Spark can shuffle both sides on the join
+key and build an in-memory hash table from the smaller (build) side on each
+executor, then probe it with the larger (probe) side --- without sorting
+either. This is a \texttt{ShuffledHashJoin}: two shuffles, like sort-merge, but
+no \texttt{Sort} nodes, which makes it cheaper than sort-merge whenever the
+build side reliably fits in memory per partition.
+
+That condition is also its weakness: unlike sort-merge, a shuffled hash join
+has no graceful way to spill an oversized build-side partition to disk. If a
+single partition's build side is larger than expected --- most often because of
+skew --- the task fails outright rather than slowing down. Spark's planner is
+correspondingly conservative about choosing it: by default it prefers
+sort-merge whenever both sides have sortable keys
+(\conf{spark.sql.join.preferSortMergeJoin}\,=\,\texttt{true}), and only
+considers a shuffled hash join when that preference is turned off and the
+build side is estimated at at least three times smaller than the probe side.
 
 \section{Sort-merge join}
-\tbd
+\label{sec:joins-smj}
+
+Sort-merge join is the default for two large, roughly comparable inputs, and it
+is what the specimen query uses in \Cref{ch:catalyst}: both sides are shuffled
+on the join key, each partition is then sorted locally, and the join is
+produced by walking both sorted streams together, advancing whichever key is
+behind. It is the most expensive of the equi-join strategies --- two shuffles
+and two sorts --- but it is also the most robust: a sort spills to disk cleanly
+under memory pressure the way a hash table cannot, so it scales to inputs of any
+size on either side.
 
 \section{Broadcast nested loop join}
-\tbd
+\label{sec:joins-bnlj}
+
+An equi-join needs a hash or a sort; a join whose condition is not an equality
+--- \texttt{ON a.price > b.min\_price}, for instance --- needs neither, and
+Spark falls back to comparing every row of one side against every row of the
+other. If one side is small enough to broadcast, this is a
+\texttt{BroadcastNestedLoopJoin}: no shuffle, but $O(N \times M)$ comparisons
+inside each task. If neither side is small enough to broadcast, Spark falls all
+the way back to a \texttt{CartesianProduct} (\Cref{sec:c-joins}), which is
+rarely what you want on two large tables and is usually a sign that a join
+condition is missing.
+
+\begin{note}
+A full outer join cannot use broadcast hash join, even with an explicit hint:
+there is no way to detect an unmatched row on the broadcast side without
+scanning it, which the strategy is built to avoid. A \texttt{FULL OUTER} join
+falls back to sort-merge regardless of size.
+\end{note}
 
 \section{How the planner chooses}
-\tbd
+\label{sec:joins-selection}
+
+For an equi-join, the planner tries strategies in a fixed order, stopping at
+the first one that applies:
+
+\begin{enumerate}
+  \item an explicit join hint, if the query has one (\Cref{sec:joins-forcing});
+  \item \textbf{broadcast hash join}, if either side's estimated size is at or
+        below \conf{spark.sql.autoBroadcastJoinThreshold} (10~MB by default);
+  \item \textbf{sort-merge join}, if \conf{spark.sql.join.preferSortMergeJoin}
+        is \texttt{true} (the default) and the keys are sortable;
+  \item \textbf{shuffled hash join}, if that preference is off and the build
+        side is estimated at least $3\times$ smaller than the probe side and
+        fits per-partition memory;
+  \item \textbf{sort-merge join}, as the fallback for any remaining equi-join
+        with sortable keys.
+\end{enumerate}
+
+Every one of these decisions, except the explicit hint, is made from
+\emph{estimated} sizes --- from the catalog if statistics exist, or from
+on-disk file size if they do not (\Cref{sec:catalyst-analysis}). This is the
+single most common way real joins go wrong: not a bug, but a plan built on a
+wrong number.
 
 \section{Forcing a strategy}
-\tbd
+\label{sec:joins-forcing}
+
+When the estimate is missing or wrong, a hint overrides it directly:
+
+\begin{lstlisting}[language=SQL,caption={Forcing a broadcast when statistics are missing},captionpos=b]
+SELECT /*+ BROADCAST(r) */ t.route_id, r.route_name
+FROM trips t JOIN dim_route r ON t.route_id = r.route_id;
+\end{lstlisting}
+
+The hints, in priority order, are \texttt{BROADCAST} (or
+\texttt{BROADCASTJOIN}/\texttt{MAPJOIN}), \texttt{SHUFFLE\_MERGE} (or
+\texttt{MERGE}) for sort-merge, and \texttt{SHUFFLE\_HASH} for a shuffled hash
+join. A hint is an instruction, not a suggestion: Spark will honor it even when
+its own estimate disagrees, so a stale hint on a table that has since grown
+past a sane broadcast size is a real production hazard, not a theoretical one.
+
+The more durable fix is to give the planner real numbers instead of overriding
+its guess:
+
+\begin{lstlisting}[language=SQL,caption={Giving the CBO real statistics},captionpos=b]
+ANALYZE TABLE db.dim_route COMPUTE STATISTICS FOR ALL COLUMNS;
+\end{lstlisting}
+
+Iceberg tables carry file-level size and row counts in their metadata for free,
+but not the column-level statistics the cost-based optimizer uses to size a
+join --- which is exactly why the specimen query's small \texttt{dim\_route}
+table was shuffled instead of broadcast in \Cref{ch:catalyst}. Running
+\texttt{ANALYZE} once after a table's data changes materially is usually
+cheaper, and safer over time, than hard-coding a hint.
+
+\begin{tip}
+Adaptive Query Execution catches many of these mistakes without any of the
+above: it re-evaluates a join's strategy \emph{after} its inputs have shuffled,
+against their real post-shuffle size, and promotes a sort-merge join to a
+broadcast if the data turns out small enough (\Cref{ch:aqe}). Hints and
+\texttt{ANALYZE} matter most for the joins AQE cannot rescue --- most often
+because the small side is broadcastable only before a shuffle changes its
+size, not after.
+\end{tip}
 
 \section{Storage-partitioned joins for bucketed Iceberg tables}
-\tbd
+\label{sec:joins-spj}
+
+Every strategy above assumes the two sides arrive unaligned and have to be
+shuffled into agreement. If both tables are already \emph{bucketed} on the join
+key with the same bucket count (\Cref{ch:iceberg-layout}), that assumption is
+false: rows that must be compared are already co-located file by file, and
+Spark can join corresponding buckets directly with no exchange on either
+side --- a \emph{storage-partitioned join}. This turns the most expensive part
+of a sort-merge join, the two shuffles, into work done once at write time
+instead of on every query that joins the tables.
+
+The condition is strict: both tables need the identical bucket transform and
+bucket count on the join column, and Spark needs
+\conf{spark.sql.sources.v2.bucketing.enabled} set to consider it at all. It is
+a design decision made when the tables are created, not a query-time tuning
+knob --- worth it specifically for a join pattern repeated often enough that
+paying the shuffle cost once, at write time, beats paying it on every read.
 
 \section{Summary}
-\tbd
+\label{sec:joins-summary}
+
+Four strategies, in the order the planner tries them: broadcast hash join
+(cheapest, but bounded by the small side's real decoded size, not its file
+size), sort-merge join (the robust default for two large sides), shuffled hash
+join (cheaper than sort-merge when it applies, but unable to spill), and
+broadcast nested loop or Cartesian for a non-equi condition. Every automatic
+choice rests on a size estimate, and Iceberg tables commonly lack the
+column statistics that estimate needs --- \texttt{ANALYZE TABLE} and join hints
+exist specifically to correct that, and AQE corrects a real subset of it for
+free at runtime. Bucketing both sides of a frequent join on the same key
+removes the shuffle from the decision entirely.
 
 \exercisehead
 \begin{exercises}
 \item Given four table sizes and the broadcast threshold, predict each join's
       strategy. Then change one config value and predict which join flips.
+\item Run the specimen query, then run \texttt{ANALYZE TABLE dim\_route
+      COMPUTE STATISTICS FOR ALL COLUMNS} and run it again. Did the join
+      strategy change? Explain from \Cref{sec:joins-selection}.
+\item Write a join with a non-equi condition on two tables, neither of which is
+      small. Confirm in \texttt{EXPLAIN FORMATTED} that it becomes a
+      \texttt{CartesianProduct}, and rewrite it to avoid one.
 \end{exercises}

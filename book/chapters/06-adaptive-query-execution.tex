@@ -5,38 +5,165 @@
 The Catalyst optimizer plans before it has seen any data. Adaptive Query
 Execution re-plans after each shuffle, when the real partition sizes are known.
 It coalesces hundreds of tiny partitions into a few good ones, promotes a
-sort-merge join to a broadcast when the shuffled side turns out small, and splits
-a skewed partition so one task stops holding up the stage. This chapter covers
-what AQE re-decides, from what evidence, and which planning-time decisions it can
-still override.
+sort-merge join to a broadcast when the shuffled side turns out small, and
+splits a skewed partition so one task stops holding up the stage. This chapter
+covers what AQE re-decides, from what evidence, and which planning-time
+decisions it can still override.
 \end{chapterintro}
 
 \section{Why runtime beats planning time}
-\tbd
+\label{sec:aqe-why}
+
+Every decision in \Cref{ch:catalyst} and \Cref{ch:joins} --- how many shuffle
+partitions, which join strategy, whether to broadcast --- is made from an
+\emph{estimate}: a file size, a row count, a number the catalog may or may not
+actually have. Adaptive Query Execution is Spark inserting a checkpoint after
+every shuffle to replace a subset of those estimates with measurements. Once a
+shuffle has run, Spark knows the exact byte size of every resulting partition
+--- no estimation error, no missing statistics, no compression-ratio surprise
+(\Cref{sec:mem-heap}) --- and it uses that certainty to revise the plan for the
+stages that have not run yet. AQE has been on by default since Spark 3.2
+(\conf{spark.sql.adaptive.enabled}), and there is little reason to turn it off.
+
+The trade AQE cannot make is the one that would help most: it cannot change a
+stage that has \emph{already} run, and it cannot avoid a shuffle that
+planning-time decided was necessary. It optimizes what happens after the
+measurement, not before it.
 
 \section{Coalescing shuffle partitions}
-\tbd
+\label{sec:aqe-coalesce}
+
+\Cref{sec:shuffle-sizing} recommended setting
+\conf{spark.sql.shuffle.partitions} generously and letting AQE bring it back
+down; this is the mechanism that does it. After a shuffle, AQE looks at the
+actual size of every partition and merges adjacent ones until each is close to
+\conf{spark.sql.adaptive.advisoryPartitionSizeInBytes} (128~MB by default),
+stopping at
+\conf{spark.sql.adaptive.coalescePartitions.minPartitionSize} (1~MB) so it does
+not over-merge. Two thousand shuffle partitions of a few megabytes each become
+a few dozen partitions of 128~MB, with no query change and no re-run.
+
+\begin{tip}
+Merging is one-directional. AQE only ever combines \emph{adjacent} small
+partitions into fewer, larger ones --- it never splits an oversized one this
+way. An oversized partition is handled by a different mechanism entirely
+(\Cref{sec:aqe-skew}), and coalescing does nothing for it.
+\end{tip}
 
 \section{Converting sort-merge to broadcast at runtime}
-\tbd
+\label{sec:aqe-broadcast}
+
+\Cref{sec:joins-selection} chooses broadcast hash join from an estimate; AQE
+gets a second chance after the shuffle. If a sort-merge join's shuffled input
+turns out, once measured, to be small enough, AQE replaces the sort-merge join
+with a broadcast hash join before the join actually runs --- shown in the final
+plan as a \texttt{BroadcastQueryStage} in place of the exchange-and-sort pair
+(\Cref{sec:c-aqe}). This rescues exactly the failure mode
+\Cref{ch:joins} described: an Iceberg table with no column statistics, planned
+as sort-merge because the planner had no better estimate, turns out small after
+its own shuffle, and AQE promotes it without you doing anything.
 
 \section{The two broadcast thresholds}
-\tbd
+\label{sec:aqe-thresholds}
+
+\conf{spark.sql.autoBroadcastJoinThreshold} and
+\conf{spark.sql.adaptive.autoBroadcastJoinThreshold} are two separate
+configuration keys, and confusing them is easy because they default to the
+same value. They are not measuring the same thing. The planning-time threshold
+is compared against a size estimate --- on-disk bytes, before decompression
+(\Cref{sec:mem-heap}) --- so it has to stay conservative to avoid broadcasting
+something that turns out several times larger once decoded. The adaptive
+threshold is compared against the \emph{actual} size of already-shuffled,
+already-decoded Tungsten rows (\Cref{ch:tungsten}): there is no amplification
+left to guard against, because the number is real. That is why it is
+reasonable to tune the two independently rather than assume one governs the
+other.
 
 \section{Skew-join handling: split and replicate}
-\tbd
+\label{sec:aqe-skew}
+
+A shuffle partition can hold many keys unevenly (\Cref{sec:shuffle-partition}),
+and no amount of repartitioning fixes a single key that is simply larger than
+the others. AQE detects this after the shuffle: a partition is skewed if it is
+both larger than \conf{spark.sql.adaptive.skewJoin.skewedPartitionFactor}
+(5$\times$ the median partition size) \emph{and} larger than
+\conf{spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes} (256~MB).
+Requiring both avoids flagging a partition as skewed just because the median
+happened to be tiny.
+
+\Cref{fig:aqe-skew-split} shows the fix. AQE splits the oversized partition
+into several sub-partitions and \emph{replicates} the corresponding partition
+from the other side of the join across all of them --- cheap, because the
+other side is small by comparison. Each sub-partition then runs as its own
+task, in parallel, instead of one task carrying the whole skewed key alone
+while every other task in the stage sits idle.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{aqe-skew-split.pdf}
+  \caption{Without AQE, one oversized partition runs as a single task long
+  after the rest of the stage has finished. AQE splits it into sub-partitions
+  and replicates the small side across them, turning one straggler into
+  several parallel, evenly-sized tasks.}
+  \label{fig:aqe-skew-split}
+\end{figure}
+
+For skew severe enough that the defaults do not catch it, lowering both
+thresholds --- \conf{skewedPartitionFactor} to \texttt{3.0} and
+\conf{skewedPartitionThresholdInBytes} to 128~MB --- catches it earlier, at the
+cost of treating more ordinary variance as skew.
 
 \section{\texttt{parallelismFirst} and partition count}
-\tbd
+\label{sec:aqe-parallelism}
+
+Coalescing toward a target size can go too far on a small cluster. If a
+shuffle produces 20 small partitions on a cluster with 16 cores, merging purely
+by size might collapse them to 2 partitions --- leaving 14 cores idle for that
+stage even though there was enough data to keep all 16 busy.
+\conf{spark.sql.adaptive.coalescePartitions.parallelismFirst} (default
+\texttt{true}) protects against this: AQE first checks how many partitions are
+needed to use every available core (\Cref{sec:shuffle-sizing}'s task-slot
+arithmetic), and only merges down to the size target if that does not fall
+below it. Parallelism is kept even when it means some partitions stay smaller
+than the 128~MB advisory size.
 
 \section{Reading an AQE plan}
-\tbd
+\label{sec:aqe-reading}
+
+The plan \texttt{EXPLAIN} prints before an action runs is not necessarily the
+plan that ran. The one that matters is the SQL tab's plan after execution,
+rooted at \texttt{AdaptiveSparkPlan isFinalPlan=true}; the node types that
+appear only in that final plan --- \texttt{AQEShuffleRead coalesced},
+\texttt{BroadcastQueryStage}, \texttt{isSkew=true} --- are catalogued with
+their exact plan snippets in \Cref{sec:c-aqe}. Reading them is how you confirm
+which of this chapter's optimizations actually fired, rather than assuming
+from the config alone.
 
 \section{Summary}
-\tbd
+\label{sec:aqe-summary}
+
+Planning happens before any data moves; AQE runs after every shuffle, when
+partition sizes are exact rather than estimated, and revises three things: it
+coalesces small partitions toward a target size (never splitting large ones by
+this mechanism), it promotes a sort-merge join to broadcast when the shuffled
+side is small enough by its own, more permissive threshold, and it detects a
+partition that is both far above the median and above an absolute size floor,
+splitting it and replicating the other side rather than leaving one task to
+carry it alone. None of this helps a stage that has already run or a shuffle
+that planning already committed to --- which is why the earlier chapters'
+advice (size shuffle partitions generously, give the planner real statistics,
+bucket a repeated join) still matters; AQE is the safety net under those
+decisions, not a replacement for them.
 
 \exercisehead
 \begin{exercises}
 \item Disable AQE and run a skewed join; record the straggler task. Re-enable it
       and compare the plan and the task-time distribution.
+\item Force a sort-merge join on a table small enough to broadcast after its
+      shuffle (\Cref{sec:joins-forcing}'s \texttt{SHUFFLE\_MERGE} hint still
+      lets AQE act). Confirm in the final plan that AQE converted it to a
+      broadcast anyway.
+\item Given a stage with 20 shuffle partitions on a 16-core cluster, predict
+      how far \conf{coalescePartitions} will merge them with
+      \conf{parallelismFirst} on versus off.
 \end{exercises}

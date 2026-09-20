@@ -55,7 +55,7 @@ def _label_lines(value, base=12):
     """
     if not value:
         return []
-    value = value.replace("&#10;", "<br>")
+    value = value.replace("&#10;", "<br>").replace("\\n", "<br>")
     out = []
     cur = base
     for chunk in re.split(r"<br\s*/?>", value):
