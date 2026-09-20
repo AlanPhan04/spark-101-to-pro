@@ -15,8 +15,8 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 | `explain-anatomy` | 2 | listing | kept as an `lstlisting` in the chapter with prose call-outs, not a rendered figure | 1 | n/a |
 | `executor-memory-model` | 3 | structure | heap (reserved / unified[exec\|storage] / user) + off-heap + overhead; container limit; 8 GB/2 GB numbers | 1 | **done** |
 | `gc-pause-stall` | 3 | sequence | a stop-the-world pause freezing all 4 task slots at once; heartbeat timeout → executor lost | 1 | **done** |
-| `shuffle-write-read-path` | 4 | flow | map task: serialize → sort → spill → map-side file; reduce task: fetch → merge; the disk+network hop | 1 | spec |
-| `partition-sizing` | 4 | plot | shuffle-read size vs partition count vs per-task size; the spill zone and the tiny-task zone | 2 | spec |
+| `shuffle-write-read-path` | 4 | flow | map task steps -> map output tracker -> reduce task steps, over the network | 1 | **done** |
+| `partition-sizing` | 4 | plot | exact hyperbola (MB/task = shuffle bytes / partitions) for a 100 GB shuffle; target band + default-200 point | 1 | **done** |
 | `join-strategies` | 5 | structure | the four strategies side by side: what shuffles, what broadcasts, what sorts | 1 | spec |
 | `broadcast-vs-smj` | 5 | flow | same join, two plans; where the small side goes | 2 | spec |
 | `aqe-coalesce` | 6 | before/after | 2000 tiny post-shuffle partitions → ~50 right-sized, at runtime | 2 | spec |

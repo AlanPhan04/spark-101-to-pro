@@ -41,12 +41,16 @@ chapters:
   - {n: 1, slug: shape-of-a-spark-application, status: drafted}   # full draft, 3 figures
   - {n: 2, slug: sql-to-execution,             status: drafted}   # full draft, 1 figure + explain listing
   - {n: 3, slug: executor-memory-and-cpu,      status: drafted}   # full draft, 2 figures
-  # 4-19: outlined
+  - {n: 4, slug: the-shuffle,                  status: drafted}   # full draft, 2 figures
+  # 5-19: outlined
 
 figures:                            # shared renderer: figures/_drawio.py
   - {slug: application-topology,   chapter: 1, status: rendered}
+  - {slug: query-submission-flow,  chapter: 1, status: rendered}
   - {slug: job-stage-task,         chapter: 1, status: rendered}
   - {slug: narrow-vs-wide,         chapter: 1, status: rendered}
   - {slug: catalyst-pipeline,      chapter: 2, status: rendered}
   - {slug: executor-memory-model,  chapter: 3, status: rendered}
   - {slug: gc-pause-stall,         chapter: 3, status: rendered}
+  - {slug: shuffle-write-read-path, chapter: 4, status: rendered}
+  - {slug: partition-sizing,        chapter: 4, status: rendered}  # plain matplotlib, exact formula (not a drawio box diagram)

@@ -3,39 +3,264 @@
 
 \begin{chapterintro}
 Every \texttt{JOIN}, \texttt{GROUP BY}, \texttt{DISTINCT}, window function, and
-repartition puts a wall between two stages: the shuffle. It writes every
-partition to disk, moves it across the network, and re-reads it. It is where most
-of a query's time goes. This chapter walks the write path and the read path,
-shows how to size shuffle partitions from data volume instead of accepting the
-default 200, and how to find and remove exchanges the query does not need.
+\texttt{repartition} puts a wall between two stages: the shuffle. It writes
+every partition to disk, moves it across the network, and re-reads it. It is
+where most of a query's time goes, and it is the mechanism behind the wide
+dependency from \Cref{sec:shape-deps}. This chapter opens the wall: the write
+path, the read path, how to size shuffle partitions from data volume instead of
+the default 200, and how to find and remove exchanges the query does not need.
 \end{chapterintro}
 
 \section{What a partition is: input partitions versus shuffle partitions}
-\tbd
+\label{sec:shuffle-partition}
+
+Spark never processes a table as one unit; it splits it into
+\textbf{partitions}, and one task handles exactly one partition
+(\Cref{sec:shape-jobs}). Two different mechanisms create them, and mixing them
+up is a common source of confusion when reading a plan.
+
+An \textbf{input partition} is created when a stage reads from storage. Spark
+decides how many by dividing the bytes to read by a target size: roughly
+\conf{spark.sql.files.maxPartitionBytes} (128~MB) for Hive-catalogued files, or
+the split size Iceberg's planner reports from its manifests
+(\conf{read.split.target-size}, also 128~MB by default, \Cref{ch:iceberg-read}).
+One data file is not one partition either way --- small files are combined and
+large ones split so that each input partition is close to the target size.
+
+A \textbf{shuffle partition} is created when a wide operator redistributes data.
+Its count is set directly: by \conf{spark.sql.shuffle.partitions} (default 200)
+for a join or aggregation, or by an explicit \texttt{repartition(n)}. Spark
+decides which shuffle partition a row belongs to with a hash:
+
+\begin{lstlisting}[language=text,numbers=none]
+partition_id = hash(key) mod num_shuffle_partitions
+\end{lstlisting}
+
+The same key always hashes to the same partition, which is exactly what a join
+or a \texttt{GROUP BY} needs --- it is how rows that must be compared end up on
+the same executor. Note what this does \emph{not} guarantee: a shuffle partition
+holds every row for potentially many different keys, and nothing about the hash
+keeps that mixture even. Two keys can collide into the same partition, and one
+key alone can dominate a partition if enough rows share it. That is the seed of
+data skew (\Cref{ch:aqe}); for now, the point is that shuffle-partition count is
+a number \emph{you} choose, not one Spark infers from the data the way it infers
+input-partition count.
 
 \section{The shuffle write path}
-\tbd
+\label{sec:shuffle-write}
+
+\Cref{fig:shuffle-write-read-path} follows one shuffle from a map task in
+stage~0 of the specimen to a reduce task in stage~2. On the write side, every
+map task:
+
+\begin{enumerate}
+  \item computes \texttt{partition\_id = hash(route\_id) mod 200} for each of
+        its output rows;
+  \item sorts its rows by that partition id (Spark has used only this
+        \emph{sort-based} shuffle writer since 1.6 --- there is no separate
+        hash-shuffle path to choose between any more);
+  \item spills the sort to local disk if the shuffle write buffer
+        (bounded by \Cref{sec:mem-model}'s execution memory) fills before the
+        task's data does;
+  \item writes the result as \emph{one} data file plus \emph{one} index file for
+        the whole task, with the index recording where each partition's byte
+        range begins.
+\end{enumerate}
+
+One file per map task, regardless of how many shuffle partitions there are, is
+why raising \conf{spark.sql.shuffle.partitions} does not multiply the number of
+files on disk --- it only changes how the one file's byte ranges are cut up. The
+driver's \emph{map output tracker} records, for every map task, which executor
+holds that file and the offsets for each partition inside it.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{shuffle-write-read-path.pdf}
+  \caption{The shuffle write and read paths. The map task never talks to the
+  reduce task directly: it registers its file's location with the driver's map
+  output tracker, and the reduce task asks the tracker where to fetch from.}
+  \label{fig:shuffle-write-read-path}
+\end{figure}
 
 \section{The shuffle read path}
-\tbd
+\label{sec:shuffle-read}
+
+A reduce task starts by asking the map output tracker for the location of its
+partition's data across \emph{every} map task in the previous stage --- for
+stage~2 of the specimen, that is every one of stage~0's and stage~1's tasks.
+It then fetches those blocks over the network via the block transfer service,
+several fetches in flight at once up to
+\conf{spark.reducer.maxSizeInFlight}, and merges them --- an external
+(disk-backed) merge if the combined size does not fit in the task's share of
+execution memory.
+
+This is the step that makes a shuffle expensive relative to a narrow operation:
+it is genuinely all-to-all. With $M$ map tasks and $R$ reduce tasks, up to
+$M \times R$ blocks are produced and each of the $R$ reduce tasks may fetch from
+each of the $M$ executors that produced them. \Cref{sec:shuffle-push} covers the
+mechanism Spark added specifically to make this fetch pattern cheaper at scale;
+the scheduler machinery behind both sides is \Cref{ch:scheduler}.
 
 \section{Sizing shuffle partitions}
-\tbd
+\label{sec:shuffle-sizing}
+
+Because the write path always produces the same one file per task, the only
+real lever on shuffle cost is \emph{how big each shuffle partition ends up},
+which is set by \conf{spark.sql.shuffle.partitions} against the total volume
+being shuffled:
+
+\begin{lstlisting}[language=text,numbers=none]
+target partitions = total shuffle bytes / target task size  (128-200 MB)
+\end{lstlisting}
+
+The default of 200 is not tuned to your data; it is just a constant. For a
+100~GB shuffle it is badly wrong in one direction, as \Cref{fig:partition-sizing}
+makes exact: 200 partitions puts 512~MB in every task, several times past the
+point where the task's share of execution memory holds it and it spills to
+disk. A query that shuffles only a few gigabytes has the opposite problem --- 200
+partitions of a few megabytes each, so the fixed per-task scheduling overhead
+dominates the actual work.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{partition-sizing.pdf}
+  \caption{For a fixed shuffle size, size per task is exactly (shuffle bytes)
+  / (partition count) --- an exact relationship, not a rule of thumb. For a
+  100~GB shuffle the default 200 partitions puts 512~MB in every task, well
+  past where it spills; 512--800 partitions lands each task in the 128--200~MB
+  band.}
+  \label{fig:partition-sizing}
+\end{figure}
+
+\begin{warning}
+If you set \conf{spark.sql.shuffle.partitions} too low, Spark does
+\emph{not} raise it for you. Partitions simply grow past the point where they
+fit in memory and spill, silently, until the job either finishes slowly or runs
+out of disk. There is no auto-correction on the low side.
+\end{warning}
+
+The practical answer is to set the count generously as a ceiling and let
+Adaptive Query Execution shrink it back down once it has seen the real data
+size, rather than trying to predict the exact right number up front:
+
+\begin{lstlisting}[language=text,numbers=none]
+spark.sql.shuffle.partitions                    = 2000
+spark.sql.adaptive.enabled                      = true
+spark.sql.adaptive.coalescePartitions.enabled   = true
+spark.sql.adaptive.advisoryPartitionSizeInBytes = 134217728   -- 128 MB
+\end{lstlisting}
+
+Over-partitioning is cheap to fix at runtime --- AQE merges small adjacent
+partitions after the shuffle completes and it knows their true size
+(\Cref{ch:aqe}); under-partitioning, which spills, is not something a later
+stage can undo. Set high and let AQE come down, not the other way around.
 
 \section{Shuffle compression}
-\tbd
+\label{sec:shuffle-compression}
+
+Shuffle data is compressed by default (\conf{spark.shuffle.compress}\,=\,\texttt{true})
+using \conf{spark.io.compression.codec}, which defaults to \texttt{lz4}. That
+default is deliberate: shuffle bytes are written once and read back
+almost immediately by the very next stage, so \emph{decompression speed}
+dominates the cost, not compression ratio. \texttt{lz4} and \texttt{snappy} both
+compress and decompress in a small fraction of the time \texttt{zstd} or
+\texttt{gzip} take, at a somewhat worse ratio. That trade-off is the opposite of
+Parquet storage on Iceberg, where a file is written once but may be read by
+hundreds of later queries, so a slower, denser codec such as \texttt{zstd} pays
+for itself (\Cref{ch:iceberg-layout}). Using the same codec for both because
+``it worked for storage'' is a common way to leave shuffle performance on the
+table.
 
 \section{Push-based shuffle}
-\tbd
+\label{sec:shuffle-push}
+
+The read path in \Cref{sec:shuffle-read} has a structural cost at scale: many
+small, random fetches, one per (map task, reduce partition) pair, which stresses
+the block transfer service and, if a map executor is lost, forces its tasks to
+be recomputed before the shuffle can finish. \emph{Push-based shuffle}
+(stable since Spark 3.2) restructures this: after writing its file, each
+mapper also \emph{pushes} its blocks to shuffle services, which merge blocks
+from many mappers that belong to the same reduce partition into a small number
+of larger merged files. A reduce task then does a handful of large sequential
+fetches instead of many small ones.
+
+\begin{note}
+Push-based shuffle needs an external, out-of-executor shuffle service capable
+of receiving and merging pushed blocks, which is a natural fit for YARN's
+long-lived Node Managers. Its support on Kubernetes is narrower and depends on
+running a compatible external shuffle service alongside your executors ---
+confirm it is available on your cluster (\Cref{app:config}) before turning on
+\conf{spark.shuffle.push.enabled}; without it, the setting has nothing to push
+to.
+\end{note}
 
 \section{Finding and removing unnecessary exchanges}
-\tbd
+\label{sec:shuffle-unnecessary}
+
+Every \texttt{Exchange} in a physical plan is a shuffle you are paying for
+(\Cref{sec:c-exchange}), and not every one is necessary. Four patterns account
+for most avoidable ones.
+
+\paragraph{A manual \texttt{repartition()} right before an Iceberg write.} If
+the target table has \conf{write.distribution-mode}\,=\,\texttt{hash}
+(\Cref{ch:iceberg-write}), Iceberg already shuffles the write by partition key.
+Calling \texttt{repartition()} yourself first adds a \emph{second}, usually
+redundant, shuffle. Let the table's distribution mode do it, or set the mode to
+\texttt{none} only when you are certain the data is already correctly
+distributed.
+
+\paragraph{A \texttt{DISTINCT} on data that is already unique.} \texttt{DISTINCT}
+compiles to an aggregation, which shuffles. If the upstream source already
+guarantees uniqueness --- a primary key, or a prior \texttt{GROUP BY} on the same
+columns --- the \texttt{DISTINCT} is pure cost.
+
+\paragraph{An \texttt{ORDER BY} inside a subquery.} Only the outermost
+\texttt{ORDER BY} in a query is guaranteed to survive to the result; SQL does
+not promise row order through an intermediate view or CTE. An inner sort still
+costs a range-partitioning exchange even though nothing downstream can rely on
+its effect.
+
+\paragraph{Repeated aggregation on the same key.} Two separate
+\texttt{GROUP BY route\_id} computations in the same query --- one for the
+on-time rate, one for total trips --- shuffle twice on the same key when a
+single \texttt{GROUP BY} with two aggregate functions would shuffle once. Watch
+for \texttt{ReuseExchange} in the plan (\Cref{sec:c-exchange}): the planner
+catches this only when the two exchanges are byte-for-byte the same
+partitioning, so a small difference (a different partition count, an added
+column) silently defeats it.
+
+\begin{tip}
+Run \texttt{EXPLAIN FORMATTED} and count the \texttt{Exchange} nodes before
+touching anything else. Every one you remove is a shuffle the job no longer
+pays for; every one you cannot explain is worth a second look.
+\end{tip}
 
 \section{Summary}
-\tbd
+\label{sec:shuffle-summary}
+
+A shuffle partition is not the same thing as an input partition: input
+partitions come from splitting storage by size, shuffle partitions come from a
+count you set and a hash that routes rows into it. The write path always
+produces one file per map task, indexed by partition; the read path is
+genuinely all-to-all, which is what makes a shuffle costly. Size
+\conf{spark.sql.shuffle.partitions} from the actual volume being shuffled ---
+128--200~MB per task is the target --- set it generously and let AQE coalesce
+down rather than risk under-partitioning, which spills and does not self-correct.
+\texttt{lz4} trades ratio for decompression speed, which is the right trade for
+data read once, immediately. Push-based shuffle turns many small fetches into
+few large ones where an external shuffle service supports it. And the cheapest
+shuffle is the one you remove: count the \texttt{Exchange} nodes and look for a
+redundant \texttt{repartition}, \texttt{DISTINCT}, inner sort, or duplicated
+aggregation before reaching for any other fix.
 
 \exercisehead
 \begin{exercises}
 \item From a stage's shuffle-read size in the UI, compute a target partition
       count for a 128~MB task size, then verify against the observed task sizes.
+\item Run the specimen query with \conf{spark.sql.shuffle.partitions} set to 4000
+      instead of 200. Confirm in the UI that stage~2 now has 4000 tasks, and that
+      \Cref{fig:partition-sizing}'s formula predicts their size correctly.
+\item Find a query in your own workload with two \texttt{Exchange} nodes that
+      partition on the same column. Check whether \texttt{ReuseExchange} fired;
+      if not, find the difference between the two exchanges that prevented it.
 \end{exercises}

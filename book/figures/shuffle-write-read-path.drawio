@@ -1,0 +1,44 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="shuffle-write-read-path" id="shufflepath">
+    <mxGraphModel dx="1000" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="820" pageHeight="420" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="tracker" value="&lt;b&gt;Driver &amp;#8212; Map Output Tracker&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;which executor, which file, which offsets &amp;#8212; per partition, per map task&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=12;fontColor=#3f335c;" vertex="1" parent="1">
+          <mxGeometry x="270" y="15" width="280" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="mapbox" value="&lt;b&gt;Map task (stage 0)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontSize=13;fontColor=#1f3d5c;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="20" y="105" width="290" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="m1" value="1. compute&#10;partition_id = hash(key) mod N&#10;for every row" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="35" y="140" width="260" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" value="2. sort the task's rows&#10;by partition_id" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;" vertex="1" parent="1">
+          <mxGeometry x="35" y="202" width="260" height="44" as="geometry" /></mxCell>
+        <mxCell id="m3" value="3. spill to disk if the&#10;shuffle write buffer fills" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="35" y="256" width="260" height="44" as="geometry" /></mxCell>
+        <mxCell id="m4" value="4. write ONE data file +&#10;ONE index file for this task" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontSize=10;fontColor=#1f3d5c;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="35" y="310" width="260" height="44" as="geometry" /></mxCell>
+
+        <mxCell id="redbox" value="&lt;b&gt;Reduce task (stage 2)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;fillColor=#eaf4e3;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="510" y="105" width="290" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" value="1. ask the map output&#10;tracker for block locations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=10;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="525" y="140" width="260" height="44" as="geometry" /></mxCell>
+        <mxCell id="r2" value="2. fetch this partition's blocks&#10;from every map task, over the network" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=10;fontColor=#2f5320;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="525" y="194" width="260" height="52" as="geometry" /></mxCell>
+        <mxCell id="r3" value="3. merge the fetched blocks&#10;(external sort if needed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=10;fontColor=#2f5320;" vertex="1" parent="1">
+          <mxGeometry x="525" y="256" width="260" height="44" as="geometry" /></mxCell>
+        <mxCell id="r4" value="4. spill to disk if the&#10;merge buffer fills" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=10;fontColor=#7d2f38;" vertex="1" parent="1">
+          <mxGeometry x="525" y="310" width="260" height="44" as="geometry" /></mxCell>
+
+        <mxCell id="e1" value="registers locations" style="endArrow=block;html=1;dashed=1;strokeColor=#6a5a8a;strokeWidth=1.3;exitX=0.5;exitY=0;entryX=0.3;entryY=1;" edge="1" parent="1" source="m4" target="tracker"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="answers with locations" style="endArrow=block;html=1;dashed=1;strokeColor=#6a5a8a;strokeWidth=1.3;exitX=0.7;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="tracker" target="r1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="shuffle files, over the network" style="endArrow=block;html=1;strokeColor=#b5545e;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="m4" target="r2"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
