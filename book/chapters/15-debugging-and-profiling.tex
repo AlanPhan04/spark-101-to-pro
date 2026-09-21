@@ -46,9 +46,15 @@ next step, rather than the first one.
 
 Everything the live UI renders is first written to an \emph{event log} ---
 a JSON-lines file of every scheduler event (job/stage/task start and end,
-executor added/removed, SQL execution metrics) --- and the Spark History
-Server reconstructs the same UI from that file after the application has
-exited. This matters for exactly the jobs you most need to debug: a job that
+executor added/removed, SQL execution metrics), one line per event, in the
+order they occurred. The Spark History Server does nothing more exotic than
+replay that file from the top: it feeds each line into the same in-memory
+listener objects that build the live UI's job, stage, and task tables while
+an application is actually running, just fed from a file instead of from
+live scheduler events. By the time it reaches the last line, it holds the
+identical in-memory picture the live UI would have shown at the moment the
+application exited --- and renders that as a normal, browsable UI. This
+matters for exactly the jobs you most need to debug: a job that
 failed or was killed no longer has a live UI to inspect, but its event log
 (if \conf{spark.eventLog.enabled} was on, which it should be by default on
 this stack) survives it. On Kubernetes specifically, the event log is the
@@ -59,31 +65,53 @@ usually garbage-collected by the cluster shortly after the application ends.
 \label{sec:reading-metrics}
 
 A single task's detail page is the finest-grained evidence the UI offers,
-and four numbers do most of the diagnostic work:
+and four numbers do most of the diagnostic work. Take the specimen's viral,
+heavily-discounted product from \Cref{sec:refenv-orders}: the join stage over
+\texttt{orders} has 200 tasks, and one of them --- the task holding that
+product's rows --- is the one worth opening.
 
 \begin{description}
   \item[Task duration vs.\ scheduler delay] separates genuine compute time
-        from a task that merely waited for a slot --- a long duration with
-        near-zero scheduler delay is real work; a short duration with a long
-        wait is a parallelism problem, not a per-task one.
+        from a task that merely waited for a slot. The skewed task shows a
+        duration of 4 minutes against a scheduler delay under 100ms: almost
+        all of that time is real work, not queueing --- which rules out "not
+        enough executors were free yet" and points straight at "this task has
+        too much to do." A different task showing a short duration but a long
+        scheduler delay would mean the opposite: a parallelism problem, not a
+        per-task one, and no amount of per-task tuning would fix it.
   \item[Shuffle read/write size] compared across tasks \emph{in the same
-        stage} is the most direct skew signal: one task reading many times
-        the median bytes is the same imbalance
-        \Cref{sec:aqe-skew} detects and fixes automatically for a join, made
-        visible for any stage regardless of whether AQE's skew handling
-        applies to it.
+        stage} is the most direct skew signal: the median task in this stage
+        reads about 40MB shuffled in; the skewed task reads 3.2GB --- eighty
+        times the median, because every row for that one product landed in
+        its partition. This is the same imbalance \Cref{sec:aqe-skew} detects
+        and fixes automatically for a join, made visible here for any stage
+        regardless of whether AQE's skew handling applies to it.
   \item[Spill (memory and disk)] appears when a task's execution memory
         share (\Cref{sec:mem-model}) was not enough for its sort or hash
-        operation, forcing a spill to disk mid-task; non-zero spill on a
-        stage that previously had none, after a data-volume increase, is
-        the direct evidence a memory-based fix
+        operation, forcing a spill to disk mid-task. The skewed task shows
+        1.8GB of disk spill where every other task in the stage shows zero:
+        its 3.2GB of input simply did not fit in the same per-task memory
+        slice that comfortably held every other task's 40MB. Non-zero spill
+        appearing on a stage that previously had none, after a data-volume
+        increase, is the direct evidence a memory-based fix
         (\Cref{sec:executor-sizing}) targets.
   \item[GC time as a fraction of task time] above roughly 10\% signals a
         heap doing more collection than the work is worth
-        (\Cref{sec:mem-gc}); this is the number \Cref{sec:caching-storage-levels}'s
-        \texttt{\_SER}-level advice and any heap-vs-off-heap decision should
-        be checked against.
+        (\Cref{sec:mem-gc}). The skewed task's GC time is 45 seconds out of
+        its 4-minute duration --- about 19\% --- because holding and spilling
+        3.2GB of rows keeps the heap under sustained pressure the other,
+        lightly-loaded tasks never experience; this is the number
+        \Cref{sec:caching-storage-levels}'s \texttt{\_SER}-level advice and
+        any heap-vs-off-heap decision should be checked against.
 \end{description}
+
+Read together, these four numbers tell one consistent story rather than four
+separate ones: a task with far more shuffle input than its neighbors, which
+therefore spills, which therefore drives up GC time, which therefore
+dominates the task's own duration while barely touching its scheduler delay.
+That is what data skew looks like from inside a single task's metrics, and
+it is the same underlying cause \Cref{sec:aqe-skew} names from the stage-wide
+view.
 
 \section{Common failure signatures}
 \label{sec:failure-signatures}
@@ -177,19 +205,25 @@ Enabling \conf{spark.excludeOnFailure.enabled} keeps subsequent retries from
 landing back on a node that is already causing them.
 \end{tip}
 
-\paragraph{Stragglers.}
-\tbd
-
 \section{async-profiler and flame graphs}
 \label{sec:debug-profiler}
 
 The UI's metrics answer \emph{which stage and which task}; they do not
 answer \emph{which line of code, or which JIT-compiled method, is actually
 burning CPU} inside a task that is neither spilling nor GC-bound but is
-simply slow. \texttt{async-profiler}, attached to an executor JVM, samples
-its call stacks at a fixed interval with negligible overhead (it uses
-perf-event sampling rather than the more invasive instrumentation older
-Java profilers relied on) and renders the result as a \emph{flame graph}: one
+simply slow. Older Java profilers worked by \emph{instrumentation}: rewriting every
+method's bytecode to insert a timing call at entry and exit, so the overhead
+scales with how often a method is called --- exactly the methods you most
+want to profile are the ones this slows down the most. \texttt{async-profiler}
+instead uses \emph{sampling}: it interrupts the JVM at a fixed interval (say,
+every 10ms) and simply reads whatever call stack every thread happens to be
+running at that instant, using the OS's own \texttt{perf\_events} rather than
+any JVM-level instrumentation. The cost is fixed per interrupt, independent
+of how hot the code is, which is why it can be left attached to a production
+executor with negligible overhead. Sampled over enough intervals, the
+fraction of samples landing in a given method converges on the fraction of
+wall-clock time it actually consumes --- and that is the whole flame graph:
+one
 horizontal bar per stack frame, width proportional to time spent, stacked by
 call depth. A wide bar low in the stack under a Spark-internal frame usually
 means the bottleneck is in a UDF or an expensive expression the generated

@@ -70,7 +70,12 @@ written, each read by the layer above it, top to bottom
         Manifests are grouped by partition spec and reused across snapshots
         when their files have not changed, which is why an append does not
         rewrite every manifest in the table --- only the ones touched by that
-        commit.
+        commit. Concretely: appending one new day's worth of \texttt{orders}
+        writes exactly one new manifest, listing only that new day's data
+        files; the commit's new manifest list then references that one new
+        manifest plus every manifest from the previous snapshot, unchanged
+        and unrewritten, since none of those older files were touched by
+        this append.
   \item[Data and delete files] (Parquet on this stack) are the files
         themselves; delete files are the subject of
         \Cref{sec:ice-delete-files}.
@@ -96,7 +101,15 @@ inherits the sequence number of the snapshot that added it, and that number is
 what lets a reader decide, cheaply, whether a given delete file is even
 relevant to a given data file: a delete only applies to a data file with an
 \emph{older} sequence number, so a data file written after a delete was
-committed is never touched by it.
+committed is never touched by it. Concretely: data file \texttt{A} is written
+at sequence number 5; a later commit deletes some of its rows, writing a
+delete file at sequence number 8 --- that delete applies to \texttt{A} (5 is
+older than 8) and any reader must apply it when reading \texttt{A}'s rows. A
+still-later commit appends new rows in data file \texttt{B} at sequence
+number 9. Because 9 is \emph{not older} than the delete file's 8, the
+sequence number alone tells a reader that this delete cannot possibly apply
+to \texttt{B} --- no need to even open the delete file and check its
+contents against \texttt{B}'s rows.
 
 The table metadata file's \emph{snapshot log} is the ordered history of every
 snapshot the table has ever had, and it is what powers time travel ---

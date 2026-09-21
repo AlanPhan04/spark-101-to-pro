@@ -40,8 +40,12 @@ actual size of every partition and merges adjacent ones until each is close to
 \conf{spark.sql.adaptive.advisoryPartitionSizeInBytes} (128~MB by default),
 stopping at
 \conf{spark.sql.adaptive.coalescePartitions.minPartitionSize} (1~MB) so it does
-not over-merge. Two thousand shuffle partitions of a few megabytes each become
-a few dozen partitions of 128~MB, with no query change and no re-run.
+not over-merge. Put numbers on it: 2000 shuffle partitions averaging 3~MB each
+is 6~GB of real, measured data; merging adjacent partitions toward the 128~MB
+target collapses those 2000 tiny partitions down to roughly $6000\text{MB} /
+128\text{MB} \approx 47$ output partitions --- the same 6~GB of data, the same
+query, just 47 tasks doing meaningful work in the next stage instead of 2000
+tasks each moving a few megabytes, with no query change and no re-run.
 
 \begin{tip}
 Merging is one-directional. AQE only ever combines \emph{adjacent} small
@@ -79,6 +83,20 @@ left to guard against, because the number is real. That is why it is
 reasonable to tune the two independently rather than assume one governs the
 other.
 
+Side by side: a \texttt{dim\_customer} shuffle output that measures 60~MB of
+actual, already-decoded Tungsten rows clears the adaptive threshold (default
+10~MB is too conservative here --- a shop raising it to, say, 100~MB for
+adaptive promotions only would broadcast this) with no risk, because 60~MB
+\emph{is} what will be shipped, not an estimate that might inflate. Compare
+that to a \texttt{dim\_product} file quoted at 8~MB \emph{on disk} at
+planning time, comfortably under the default 10~MB planning-time threshold
+--- but if that Parquet file decodes to 40~MB once read into row objects, the
+planner never sees the 40~MB number at all, only the 8~MB one; the
+conservative planning-time threshold exists precisely because that gap
+between on-disk and decoded size is invisible before the file is actually
+read, while the adaptive threshold never has to guess, because the shuffle
+has already paid the cost of decoding by the time AQE checks it.
+
 \section{Skew-join handling: split and replicate}
 \label{sec:aqe-skew}
 
@@ -89,7 +107,27 @@ both larger than \conf{spark.sql.adaptive.skewJoin.skewedPartitionFactor}
 (5$\times$ the median partition size) \emph{and} larger than
 \conf{spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes} (256~MB).
 Requiring both avoids flagging a partition as skewed just because the median
-happened to be tiny.
+happened to be tiny. \Cref{tab:aqe-skew-example} makes the two-condition
+check concrete for a stage with a 40~MB median partition size (the specimen's
+join stage on an ordinary week, before the viral product's discount hits):
+
+\begin{table}[htbp]
+\centering\footnotesize
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+\textbf{Partition} & \textbf{Size} & \textbf{vs.\ 5$\times$ median (200~MB)} & \textbf{Flagged skewed?} \\
+\midrule
+ordinary product key & 55~MB & below & no \\
+mildly popular key & 220~MB & above, but below 256~MB floor & no \\
+viral product key & 3.2~GB & above, and above 256~MB floor & \textbf{yes} \\
+\bottomrule
+\end{tabular}
+\caption{Both the relative check ($5\times$ median) and the absolute floor
+(256~MB) must pass before AQE calls a partition skewed. The 220~MB partition
+shows why the floor matters: it clears the relative bar but is still an
+ordinary amount of data to hold in one task, not a genuine straggler.}
+\label{tab:aqe-skew-example}
+\end{table}
 
 \Cref{fig:aqe-skew-split} shows the fix. AQE splits the oversized partition
 into several sub-partitions and \emph{replicates} the corresponding partition

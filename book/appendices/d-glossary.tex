@@ -25,8 +25,9 @@ Terms as this book uses them, in the order they are first introduced.
       generated Java method via produce/consume
       (\Cref{sec:tungsten-wholestage}).
 \item[Unified memory] The single JVM memory pool execution and storage
-      share and borrow from, with a soft boundary
-      (\Cref{sec:mem-model}).
+      share and borrow from, with a boundary either side may cross into the
+      other's currently-idle space, but which only execution can enforce
+      by evicting the borrower back out (\Cref{sec:mem-model}).
 \item[Spill] Writing intermediate data (a sort buffer, a hash table) to disk
       because it does not fit in its memory budget (\Cref{ch:execmem}).
 \item[Shuffle] Redistributing data across partitions between two stages, via
@@ -51,7 +52,8 @@ Terms as this book uses them, in the order they are first introduced.
       files by hashing a column, to avoid a shuffle on a repeated join
       (\Cref{sec:pruning-bucketing}).
 \item[Storage-partitioned join] A join with no shuffle because both sides
-      are already co-located by the same bucket/partition transform
+      are already co-located by the same bucket/partition transform (a
+      partition transform --- see Hidden partitioning, below)
       (\Cref{sec:joins-spj}).
 \item[Manifest] An immutable file listing a set of data or delete files with
       their partition values and column statistics (\Cref{ch:iceberg-spec}).
@@ -67,7 +69,8 @@ Terms as this book uses them, in the order they are first introduced.
       pair --- cheap to apply, requires the writer to know the row's
       position (\Cref{sec:ice-delete-files}).
 \item[Equality delete] A delete recorded as a column-value match --- cheap
-      to write, progressively more expensive to apply as they accumulate
+      to write, progressively more expensive to apply as they accumulate,
+      because every read must check each one against every candidate row
       (\Cref{sec:ice-delete-files}).
 \item[Copy-on-write (CoW)] A row-level update strategy that rewrites whole
       affected data files (\Cref{sec:ice-write-cow-mor}).

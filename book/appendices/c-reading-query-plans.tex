@@ -33,6 +33,47 @@ plus a \texttt{:} spine for the first child of a binary operator (a join). A
 \texttt{*} prefix, written \texttt{*(n)}, marks an operator fused into
 whole-stage-generated Java stage \texttt{n} (\Cref{sec:c-codegen}).
 
+Here is that process actually applied, to the specimen's own
+\texttt{orders}~$\bowtie$~\texttt{dim\_product} plan from
+\Cref{lst:explain-anatomy}:
+
+\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily]
+*(3) Sort (13)
++- *(3) HashAggregate (12)
+   +- *(2) HashAggregate (10)
+      +- *(2) SortMergeJoin Inner (9)
+         :- *(1) Sort (5)
+         :  +- Exchange hashpartitioning(product_id, 200) (4)
+         :     +- *(1) Filter (3)
+         :        +- *(1) ColumnarToRow (2)
+         :           +- BatchScan orders (1)
+         +- *(1) Sort (8)
+            +- Exchange hashpartitioning(product_id, 200) (7)
+               +- BatchScan dim_product (6)
+\end{lstlisting}
+
+Reading it bottom-up, one operator at a time: node~(1) is the first thing
+that runs --- \texttt{BatchScan orders} reads the raw files. Node~(2)
+converts the columnar batches it produces into row form. Node~(3) applies
+the \texttt{order\_ts} range filter, discarding rows outside the query's
+week. That is the entire left-hand side up to node~(4), an
+\texttt{Exchange}: the filtered rows are shuffled by
+\texttt{hash(product\_id)} into 200 partitions, so that every row with a
+given \texttt{product\_id} ends up in the same partition as every other row
+sharing it. Node~(5) locally sorts each of those partitions by
+\texttt{product\_id}. The right-hand branch, nodes~(6)--(8), does the exact
+same three things --- scan, shuffle, sort --- to \texttt{dim\_product},
+independently and in parallel with the left branch. Only once both branches
+have reached a sorted, co-partitioned state does node~(9),
+\texttt{SortMergeJoin}, run: it walks both sorted streams together,
+matching rows with equal \texttt{product\_id}. From there, node~(10) runs a
+partial aggregation per partition (no new exchange needed, since the join
+already grouped matching keys together), node~(12) finishes that
+aggregation, and node~(13) sorts the small, already-aggregated result for
+final output. Every step in this reading is exactly "what does this node
+need before it can run, and has that already happened lower in the tree" ---
+which is the whole discipline bottom-up reading is.
+
 \section{Scan operators}
 \label{sec:c-scan}
 
@@ -154,6 +195,26 @@ the sort is the bottleneck; enabled by
 credit\_limit}). $O(N \times M)$. Fine when one side is tiny; a warning sign on two
 large tables --- usually a missing or non-equi join key.
 
+\begin{lstlisting}[language=text,numbers=none,caption={BroadcastNestedLoopJoin on a non-equi condition},captionpos=b]
+BroadcastNestedLoopJoin BuildRight, Inner, (order_total#22 > credit_limit#41)
+:- *(1) BatchScan orders
++- BroadcastExchange IdentityBroadcastMode
+   +- *(2) Filter (segment#39 = VIP)
+      +- *(2) BatchScan dim_customer
+\end{lstlisting}
+
+There is no \texttt{Exchange hashpartitioning} anywhere in this plan ---
+the giveaway that the join key is not an equality. \texttt{dim\_customer}
+itself is too large to broadcast by default (\Cref{sec:refenv-orders}), but
+here it is filtered down to its small \texttt{VIP} segment first, and it is
+\emph{that} filtered result, small enough to broadcast, that the
+\texttt{BroadcastExchange} ships whole; every task on the \texttt{orders}
+side then compares each of its rows against every row of that broadcast
+copy, checking \texttt{order\_total > credit\_limit} directly. This is only
+affordable because the broadcast side is small; the same plan shape with
+neither side small enough to broadcast falls to \texttt{CartesianProduct}
+instead.
+
 \paragraph{CartesianProduct.} Every row of one side with every row of the other.
 Unless it is a deliberate cross join, the \texttt{ON} clause is missing.
 
@@ -169,6 +230,15 @@ combine), a shuffle, then a final aggregate.
    +- *(2) HashAggregate(keys=[product_id], functions=[partial_avg(on_time)])
       +- ...
 \end{lstlisting}
+
+Reading bottom-up: the lower \texttt{partial\_avg(on\_time)} runs once per
+input partition, producing one partial running-sum-and-count per
+\texttt{product\_id} it saw locally; the \texttt{Exchange} then redistributes
+those small partial results by \texttt{product\_id}, so every partial result
+for the same product lands together; and the top \texttt{avg(on\_time)}
+combines the partials that arrive for each key into the query's final
+per-product average. Nothing about the specimen's real values is shuffled
+directly --- only the already-shrunk partial aggregates are.
 
 \begin{table}[H]
 \centering\footnotesize
@@ -231,6 +301,54 @@ isFinalPlan=true}. \texttt{isFinalPlan=false} is the compile-time plan from
         skew in this join.
 \end{description}
 
+Here is one final plan showing several of these together, for a join between
+\texttt{orders} and the genuinely large \texttt{dim\_customer}
+(\Cref{sec:refenv-orders}) during a week hit by the viral product's skew ---
+both sides too large to broadcast, so this is a real sort-merge join, not one
+AQE later converts:
+
+\begin{lstlisting}[language=text,numbers=none,caption={A final AQE plan: a skew-split join feeding a coalesced aggregation},captionpos=b]
+AdaptiveSparkPlan isFinalPlan=true
++- *(3) HashAggregate(keys=[category], functions=[avg(on_time)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 2
+         +- *(2) SortMergeJoin [product_id], [product_id], Inner, isSkew=true
+            :- AQEShuffleRead (skew=true)
+            :  +- ShuffleQueryStage 0
+            +- AQEShuffleRead (skew=true)
+               +- ShuffleQueryStage 1
+\end{lstlisting}
+
+The root confirms this is the plan as it actually ran, not the compile-time
+guess. Both join inputs (\texttt{ShuffleQueryStage 0} and~\texttt{1}) carry
+\texttt{AQEShuffleRead (skew=true)}: AQE found the viral product's oversized
+partition after the shuffle and split it into several sub-partitions on the
+\texttt{orders} side, and replicated the corresponding \texttt{dim\_customer}
+partition to match, exactly \Cref{sec:aqe-skew} described. The join node's
+own \texttt{isSkew=true} flag confirms this handling applied specifically to
+this join, not just somewhere upstream. Above the join,
+\texttt{AQEShuffleRead coalesced} shows a separate, independent AQE decision:
+the aggregation's own shuffle output, originally many small partitions,
+merged back down toward the 128~MB target before the final
+\texttt{HashAggregate} runs over it --- one query, two unrelated
+runtime-measured corrections, each visible as its own marker in the same
+final plan.
+
+A \texttt{BroadcastQueryStage} node appears in a different scenario: recall
+from \Cref{sec:aqe-broadcast} that the specimen's \texttt{orders} $\bowtie$
+\texttt{dim\_product} join is planned as sort-merge (Iceberg has no
+column-level statistics to broadcast it up front), but \texttt{dim\_product}
+turns out small once its own shuffle is actually measured. In \emph{that}
+final plan, the join operator itself is no longer \texttt{SortMergeJoin} at
+all --- AQE rewrites it to \texttt{BroadcastHashJoin}, with
+\texttt{BroadcastQueryStage} standing in for the exchange-and-sort pair that
+would have run on the now-broadcast side, and \texttt{orders} reads through
+with no shuffle on that side either. A join cannot show both a
+skew-split shuffle read \emph{and} a broadcast promotion on the same side:
+promoting to broadcast removes that side's shuffle entirely, and skew-split
+handling has nothing left to split once there is no post-shuffle partition
+to measure.
+
 \section{Predicate-pushdown killers}
 \label{sec:c-pushdown}
 
@@ -252,3 +370,25 @@ row-by-row after the read (\Cref{ch:pruning}):
 that each partition-column filter is in \texttt{PartitionFilters} and each
 data-column filter is in \texttt{PushedFilters}. If one is missing, it hit a
 killer above.
+
+Take \texttt{WHERE CAST(product\_id AS INT) > 1000} against the specimen's
+\texttt{orders}, where \texttt{product\_id} is a \texttt{string}
+(\Cref{sec:refenv-orders}). The scan node's detail block reads:
+
+\begin{lstlisting}[language=text,numbers=none,caption={A CAST silently killing pushdown},captionpos=b]
+(1) BatchScan orders
+    PushedFilters:    []
+    DataFilters:      [(cast(product_id as int) > 1000)]
+    ReadSchema:       struct<product_id,order_ts,...>
+\end{lstlisting}
+
+\texttt{PushedFilters} is empty --- nothing made it to the storage layer at
+all --- while the exact same condition sits in \texttt{DataFilters}, meaning
+every row of every file is read and decoded before this predicate is
+checked row-by-row in Spark itself. Compare that to the clean version of
+the same intent, \texttt{WHERE product\_id > '1000'} (a plain string
+comparison, no \texttt{CAST}): the scan's \texttt{PushedFilters} would show
+\texttt{[IsNotNull(product\_id), GreaterThan(product\_id,1000)]} instead,
+and \texttt{DataFilters} would be empty --- the same logical filter, but now
+resolved by Iceberg's own statistics before a row is ever decoded. The
+\texttt{CAST} is what moved it from one list to the other.

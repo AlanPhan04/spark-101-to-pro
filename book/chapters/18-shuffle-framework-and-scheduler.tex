@@ -19,7 +19,13 @@ removed once sort-based shuffle's one-file-plus-index-per-task layout
 (\Cref{sec:shuffle-write}) proved strictly better at scale. What varies is
 which \emph{writer} a given shuffle uses underneath that one manager, chosen
 automatically --- not configured --- from the shuffle's own properties, in
-this order:
+this order. One of those properties, referenced repeatedly below, is whether
+the shuffle needs \emph{map-side aggregation}: combining values that share a
+key (a running \texttt{SUM}, say) on the map side, before the shuffle write,
+so only one partially-combined value per key crosses the network instead of
+every raw value --- the same partial-then-final idea \Cref{sec:catalyst-physical}
+traced for \texttt{HashAggregate}. A plain shuffle-then-join has nothing to
+combine, so it never needs this; a \texttt{GROUP BY} always does.
 
 \begin{table}[htbp]
 \centering
@@ -137,12 +143,23 @@ paths it actually is.
 \section{Locality and speculation}
 \label{sec:sched-locality-speculation}
 
-Placing a task on the executor that already holds its input data avoids a
-network read entirely; the task scheduler ranks candidate executors by
-locality level --- \texttt{PROCESS\_LOCAL} (same JVM), \texttt{NODE\_LOCAL}
-(same node, different executor), \texttt{RACK\_LOCAL}, then \texttt{ANY} ---
-and will wait briefly (\conf{spark.locality.wait}, 3s by default) for a
-better-locality slot to free up before falling back to a worse one. The
+The RPC and block-transfer split above is about \emph{how} data moves once
+the scheduler has decided a task needs to fetch it; locality is the
+scheduler's other lever, deciding \emph{where} to place a task in the first
+place so that as little of that movement is needed at all. Placing a task
+on the executor that already holds its input data avoids a network read
+entirely, and the task scheduler ranks candidate executors by four
+locality levels, each one hop further from the data than the last:
+\texttt{PROCESS\_LOCAL} means the data is already in the same JVM, so no
+network or even inter-process copy is needed at all; \texttt{NODE\_LOCAL}
+means a different executor process on the same physical machine, so any
+transfer stays on the machine's own loopback network rather than the
+cluster fabric; \texttt{RACK\_LOCAL} means a different machine but one
+sharing the same network rack, typically a cheaper hop than a cross-rack
+one; and \texttt{ANY} means no locality preference at all, the level every
+task can always fall back to. The scheduler will wait briefly
+(\conf{spark.locality.wait}, 3s by default) for a better-locality slot to
+free up before falling back to a worse one. The
 specimen's stage-0 tasks, reading \texttt{orders} directly from GCS, never
 see anything better than \texttt{ANY}: GCS is remote object storage with no
 notion of "the node this byte range lives on," so there is no better level

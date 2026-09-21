@@ -130,7 +130,14 @@ execution memory.
 This is the step that makes a shuffle expensive relative to a narrow operation:
 it is genuinely all-to-all. With $M$ map tasks and $R$ reduce tasks, up to
 $M \times R$ blocks are produced and each of the $R$ reduce tasks may fetch from
-each of the $M$ executors that produced them. \Cref{sec:shuffle-push} covers the
+each of the $M$ executors that produced them. For the specimen's stage~2, that
+is the roughly 180 map tasks from stage~0's \texttt{orders} scan (\Cref{fig:job-stage-task})
+against 200 reduce tasks: up to $180 \times 200 = 36{,}000$ distinct
+map-output blocks, and in the worst case every one of the 200 reduce tasks
+opens a connection to every one of the executors that ran a stage-0 task ---
+not 200 fetches, but up to 36,000 individual block transfers, which is why
+this step, not the CPU work in either stage, is usually the wall-clock
+bottleneck. \Cref{sec:shuffle-push} covers the
 mechanism Spark added specifically to make this fetch pattern cheaper at scale;
 the scheduler machinery behind both sides is \Cref{ch:scheduler}.
 

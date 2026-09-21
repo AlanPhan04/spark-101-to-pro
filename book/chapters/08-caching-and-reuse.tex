@@ -64,9 +64,18 @@ trade that away:
 \begin{itemize}
   \item \texttt{MEMORY\_AND\_DISK\_SER} keeps the cache serialized ---
         Kryo-encoded bytes (\Cref{sec:mem-serialization}) in one contiguous
-        block rather than millions of small objects. It uses roughly
-        2--3$\times$ less memory and is nearly invisible to the garbage
-        collector, at the cost of deserializing on every read.
+        block rather than millions of small objects. Concretely: one million
+        cached \texttt{orders} rows as deserialized JVM \texttt{Row} objects
+        carry roughly 50~bytes of per-object overhead each
+        (\Cref{sec:mem-heap}) on top of their actual field data, plus the
+        garbage collector has a million separate objects to track and trace
+        on every collection; the same million rows serialized into one
+        contiguous \texttt{\_SER} byte array pay that overhead exactly once
+        for the whole block, and the collector sees a single large byte
+        array rather than a million objects to walk. That is the 2--3$\times$
+        memory reduction and the "nearly invisible to the garbage collector"
+        claim made concrete, at the cost of deserializing rows back out of
+        that byte array on every read.
   \item \texttt{OFF\_HEAP} (with
         \conf{spark.memory.offHeap.enabled}) puts the cache entirely outside
         the JVM heap, the same off-heap pool from \Cref{sec:mem-model} ---
@@ -91,8 +100,25 @@ storage as a soft boundary set by \conf{spark.memory.storageFraction}; here is
 what that means while a job actually runs. Either side may use the other's
 \emph{idle} space: a job with nothing cached lets execution use the whole
 unified pool for shuffles and joins, and a job running no wide operators lets
-storage use all of it for cached blocks. The boundary only matters once both
-sides want space at the same time, and the two directions are not symmetric:
+storage use all of it for cached blocks.
+
+Here is a concrete sequence of events showing why that boundary only matters
+once both sides actually want space at the same time. Storage's own
+guaranteed half of a 4~GB unified pool is 2~GB. A pipeline caches
+\texttt{filtered\_orders}, and that cache grows to 3~GB --- 2~GB in storage's
+own half, plus 1~GB borrowed from execution's currently-idle half, because
+nothing else is running yet. Now a join starts in the same job and its
+sort buffers need 1.5~GB of execution memory. Execution is entitled to
+reclaim its own space, so Spark evicts blocks from the borrowed 1~GB (LRU
+order) to free it for the join, shrinking the cache back down toward
+storage's guaranteed 2~GB; if the join later needs more than its own
+guaranteed half too, it simply spills to disk rather than blocking, the same
+as it would with no cache present at all. Run the same scenario in reverse
+--- the join starts first and grows into storage's idle space, then the
+cache tries to grow --- and storage cannot evict a word of the join's live
+hash table to make room; the cache is capped at whatever storage's
+guaranteed half still has free until the join finishes and releases its
+borrowed space back. The two directions are not symmetric:
 
 \begin{itemize}
   \item if execution needs memory that storage is currently borrowing,
@@ -140,11 +166,24 @@ the match.
 A cached DataFrame you no longer need should be explicitly released with
 \texttt{unpersist()}. Left alone, storage memory fills with DataFrames nobody
 reads anymore, and Spark's LRU eviction starts discarding whichever cached
-block was used least recently to make room for new ones --- which, under
-enough pressure, can end up evicting the cache you actually still need before
-its next read, forcing a recompute you cached specifically to avoid. This
-\emph{cache thrashing} is a caching bug that looks like a memory bug: the fix
-is fewer, more deliberate caches, not more memory.
+\emph{block} was used least recently to make room for new ones --- eviction
+happens at the level of individual blocks (one per partition), not whole
+DataFrames, so a large cached DataFrame is evicted piecemeal as its
+least-recently-touched partitions come due, not all at once.
+
+Concretely: cache A (an early pipeline step) was last read 10 minutes ago;
+cache B (a later, still-active step) was read 1 minute ago. A new cache C
+needs room storage does not have. LRU picks purely on recency of read, with
+no notion of which DataFrame you still "need" --- it evicts blocks from A
+first, since A's blocks are the least recently used, regardless of whether A
+or C is actually more important to the job. Under enough pressure this can
+reach further than intended: if C is read once and then also goes stale, its
+own blocks become the next LRU candidates, and eventually even B's blocks are
+at risk if B is not read again soon enough --- evicting the cache you
+actually still need before its next read, forcing a recompute you cached
+specifically to avoid. This \emph{cache thrashing} is a caching bug that
+looks like a memory bug: the fix is fewer, more deliberate caches (and
+prompt \texttt{unpersist()} on ones you are done with), not more memory.
 
 \section{Summary}
 \label{sec:caching-summary}

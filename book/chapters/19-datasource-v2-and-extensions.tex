@@ -19,15 +19,28 @@ For a read, a \texttt{TableProvider} resolves a table name to a
 \texttt{Table}, which reports its schema and capabilities and hands back a
 \texttt{ScanBuilder} the planner negotiates with (\Cref{sec:dsv2-pushdown})
 before it ever produces a physical scan. For a write, the same
-\texttt{Table} hands back a \texttt{WriteBuilder}, which produces a
-\texttt{BatchWrite} (or, for a streaming sink, a \texttt{StreamingWrite}):
-Spark asks it for one \texttt{DataWriterFactory}, ships that factory to
-every executor, and each task's \texttt{DataWriter} independently writes
-its own partition's rows and returns a small \texttt{WriterCommitMessage}
---- a per-task summary (for Iceberg, the list of files that task wrote) ---
-back to the driver. Only once \emph{every} task's message has arrived does
-the driver call \texttt{BatchWrite.commit()} with the whole collected set,
-which is the DSv2-level hook Iceberg's atomic pointer swap
+\texttt{Table} hands back a \texttt{WriteBuilder}, and from there the write
+path is a fixed sequence of hops from the driver out to the executors and
+back:
+
+\begin{enumerate}
+  \item the \texttt{WriteBuilder} produces a \texttt{BatchWrite} (or, for a
+        streaming sink, a \texttt{StreamingWrite}) --- a driver-side object
+        representing the write as a whole;
+  \item the driver asks that \texttt{BatchWrite} for one
+        \texttt{DataWriterFactory} and ships it to every executor as part of
+        the task's serialized closure;
+  \item each task, running that factory, gets back its own
+        \texttt{DataWriter} and independently writes its partition's rows ---
+        no coordination between tasks at this step, each one just writes;
+  \item each \texttt{DataWriter} finishes by returning a small
+        \texttt{WriterCommitMessage} --- a per-task summary (for Iceberg, the
+        list of files that task wrote) --- back to the driver;
+  \item only once \emph{every} task's message has arrived does the driver
+        call \texttt{BatchWrite.commit()} with the whole collected set.
+\end{enumerate}
+
+That last step is the DSv2-level hook Iceberg's atomic pointer swap
 (\Cref{sec:cat-swap}) runs behind: nothing becomes visible until this one
 call, so a job that fails after some tasks finish writing simply never
 reaches \texttt{commit()}, and no partial write is ever visible to a
@@ -156,13 +169,25 @@ concrete, checkable version of "none of it is native Spark SQL."
 
 Registering a catalog (\conf{spark.sql.catalog.<name>}, \Cref{sec:cat-spark-config})
 and a session extension (\conf{spark.sql.extensions}) are both just
-configuration keys naming a class on the classpath --- the whole mechanism
-by which Iceberg support is "installed" into a Spark session is adding its
-jar to the classpath and setting these two keys, with no Spark source
-change required. Any table format or connector built to the same DSv2 and
-extensions contracts plugs in exactly the same way, which is the practical
-reason a table format can evolve on its own release cadence independent of
-Spark's.
+configuration keys naming a class on the classpath --- concretely, this
+stack's entire Iceberg installation is these two lines, plus putting the
+jar itself on the classpath:
+
+\begin{lstlisting}[language=bash,numbers=none,caption={The whole mechanism by which Iceberg is "installed" into a Spark session},captionpos=b]
+spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog
+spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+\end{lstlisting}
+
+The first key is what turns \texttt{lakehouse.analytics.orders} into a
+resolvable table name at all, by naming the class that implements the
+\texttt{TableCatalog} interface \Cref{sec:cat-what} described; the second is
+what teaches the SQL parser the \texttt{CALL} syntax the previous section
+used, by naming the class that registers Iceberg's extra parser rules and
+Catalyst extensions into the session. No Spark source change, no rebuild ---
+just these two keys and a jar on the classpath. Any table format or
+connector built to the same DSv2 and extensions contracts plugs in exactly
+the same way, which is the practical reason a table format can evolve on its
+own release cadence independent of Spark's.
 
 \section{Summary}
 \label{sec:dsv2-summary}

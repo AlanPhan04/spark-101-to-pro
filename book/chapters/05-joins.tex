@@ -49,6 +49,21 @@ enforces a hard ceiling (roughly 8~GB serialized, and a few hundred million
 rows) past which a table cannot be broadcast at all, regardless of the
 threshold.
 
+Put numbers on it: \texttt{dim\_product} (\Cref{sec:refenv-orders}) is a
+6~MB Parquet file, comfortably under the default 10~MB
+\conf{spark.sql.autoBroadcastJoinThreshold} on its real, on-disk size. Here
+is what "twice the serialized size" means once that file is actually
+broadcast: Parquet's columnar compression packs those 6~MB down from perhaps
+20~MB of raw column values; decoded back into JVM row objects on the driver
+(\Cref{sec:mem-heap}'s per-object overhead applies here too), that 6~MB file
+can easily inflate to 25--35~MB in memory, and the driver holds roughly two
+copies of that while it collects the file's rows and then builds the
+broadcast payload to ship out --- 50--70~MB of driver heap spent
+broadcasting a file whose on-disk size looked negligible. A dimension table
+ten times larger inflates the same way, which is exactly why the
+comfortable-looking 10~MB threshold on disk still leaves real headroom
+before it threatens a driver's heap.
+
 \section{Shuffle hash join}
 \label{sec:joins-shj}
 
@@ -69,6 +84,13 @@ sort-merge whenever both sides have sortable keys
 (\conf{spark.sql.join.preferSortMergeJoin}\,=\,\texttt{true}), and only
 considers a shuffled hash join when that preference is turned off and the
 build side is estimated at at least three times smaller than the probe side.
+Concretely: with the preference off, an estimated 500~MB \texttt{dim\_customer}
+against a 2~GB \texttt{orders} slice qualifies (2~GB is $4\times$ larger), and
+the plan shows \texttt{ShuffledHashJoin} with no \texttt{Sort} node on either
+input; the same 500~MB against only 1~GB of \texttt{orders} does not qualify
+($2\times$, short of the $3\times$ bar), and the planner falls back to
+sort-merge instead, adding a \texttt{Sort} node to each side of the plan that
+was absent in the qualifying case.
 
 \section{Sort-merge join}
 \label{sec:joins-smj}
@@ -127,6 +149,19 @@ on-disk file size if they do not (\Cref{sec:catalyst-analysis}). This is the
 single most common way real joins go wrong: not a bug, but a plan built on a
 wrong number.
 
+Trace one query through the ordered list to see how the choice actually
+falls out. For \texttt{orders JOIN dim\_customer}, with
+\texttt{dim\_customer} estimated at 500~MB and no hint present: step~1 does
+not apply (no hint); step~2 does not apply (500~MB is far past the 10~MB
+threshold); step~3 \emph{does} apply --- \conf{preferSortMergeJoin} is
+\texttt{true} by default and both join keys are plain strings, sortable ---
+so the planner stops right there and emits a sort-merge join. Step~4 (the
+shuffled-hash-join check) is never even evaluated, because the search stops
+at the first rule that matches; a shuffled hash join only becomes reachable
+at all if someone first turns \conf{preferSortMergeJoin} off, which is why
+\Cref{sec:joins-shj} described it as the strategy the planner reaches for
+last, not by default.
+
 \section{Forcing a strategy}
 \label{sec:joins-forcing}
 
@@ -171,8 +206,12 @@ size, not after.
 \section{Storage-partitioned joins for bucketed Iceberg tables}
 \label{sec:joins-spj}
 
-Every strategy above assumes the two sides arrive unaligned and have to be
-shuffled into agreement. If both tables are already \emph{bucketed} on the join
+Every strategy above pays the same structural cost sort-merge join pays most
+visibly: two shuffles, one per side, every single time the query runs, even
+though the join key never changes between runs. The next strategy exists to
+avoid paying that cost at query time at all, by doing the equivalent work
+once, up front, when the tables are written. Every strategy above assumes
+the two sides arrive unaligned and have to be shuffled into agreement. If both tables are already \emph{bucketed} on the join
 key with the same bucket count (\Cref{ch:iceberg-layout}), that assumption is
 false: rows that must be compared are already co-located file by file, and
 Spark can join corresponding buckets directly with no exchange on either

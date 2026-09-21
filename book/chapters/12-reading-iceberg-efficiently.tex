@@ -91,7 +91,16 @@ read-time consequence:
         of a string's min/max. Pruning still works for any predicate that
         differs within the first 16 bytes; two values agreeing on their
         first 16 bytes look identical to the pruning layer even if they
-        differ further in.
+        differ further in. Concretely: \texttt{order-2026-03-05-00000001} and
+        \texttt{order-2026-03-05-00099999} share their first 16 characters
+        (\texttt{order-2026-03-0}) --- so a manifest holding only a file's
+        \emph{first} of those two values as its recorded max still reports
+        a max of \texttt{order-2026-03-0\ldots} for the file, and a filter
+        for the \emph{second}, higher value is not confidently excluded even
+        if the file in fact never contains it: the truncated max simply
+        cannot distinguish the two, so the file is kept as a candidate and
+        opened to check, costing exactly the read the metadata layer exists
+        to avoid.
   \item[\texttt{counts}] keeps null and value counts only, no min/max at
         all --- rules out "is this file all-null" checks but nothing
         value-based.
@@ -144,9 +153,22 @@ manifest entries toward that target, using
 so that many small files are not treated as free to combine --- each one
 still carries roughly 4~MB of assumed per-file overhead in the packing
 decision, whether or not it is actually that large.
-\texttt{read.split.planning-lookback} (10) bounds how many candidate bins the
-packer considers at once, trading perfect packing for bounded planning time
-on a manifest with very many files.
+
+Put numbers on why that floor matters: ten small compacted-away files at
+1~MB of real data each add up to only 10~MB, which naive size-based packing
+would combine with over a hundred such files into a single 128~MB split ---
+except each open file costs something at read time (opening a handle,
+reading its footer, initializing a reader) regardless of how little data it
+holds, and a split with 128 tiny files pays that overhead 128 times over. The
+4~MB floor corrects for this: each of those ten 1~MB files is costed at 4~MB
+for packing purposes, so their true 10~MB counts as 40~MB of "effective"
+size, and only about three such 4~MB-floored files (12~MB effective) fit
+into a target-size bin alongside a couple of normal 40~MB files --- far
+fewer tiny files crammed into one split than their real bytes would suggest,
+which keeps the file-open overhead from dominating the split's actual read
+time. \texttt{read.split.planning-lookback} (10) bounds how many candidate
+bins the packer considers at once, trading perfect packing for bounded
+planning time on a manifest with very many files.
 
 \section{The metadata tables as a diagnostic}
 \label{sec:ice-read-metadata-tables}

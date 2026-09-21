@@ -142,9 +142,11 @@ value on a table or job you cannot afford to be wrong about.
   (\Cref{sec:ice-file-size}). \\
 \texttt{write.distribution-mode} & \texttt{hash} & Shuffle-before-write
   strategy (\Cref{sec:ice-write-distribution}). \\
-\texttt{write.delete.mode} / \texttt{.update.mode} / \texttt{.merge.mode} ---
-  varies by version & --- & copy-on-write vs.\ merge-on-read per operation
-  type; check the table's actual properties
+\texttt{write.delete.mode} \newline \texttt{write.update.mode} \newline
+  \texttt{write.merge.mode} & \texttt{copy-on-write} & Sets copy-on-write
+  vs.\ merge-on-read independently per operation type. Iceberg has changed
+  this default across releases, so confirm with
+  \texttt{SHOW TBLPROPERTIES} rather than assuming
   (\Cref{sec:ice-write-cow-mor}). \\
 \texttt{write.metadata.metrics.default} & \texttt{truncate(16)} & Manifest
   statistics granularity (\Cref{sec:ice-read-metrics-modes}). \\

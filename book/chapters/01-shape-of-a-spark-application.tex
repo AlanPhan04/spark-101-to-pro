@@ -211,7 +211,10 @@ when an \emph{action} asks for a result --- a write, a \texttt{count}, a
 \texttt{collect}, or the implicit collect that returns rows to a SQL client. Each
 action triggers one \textbf{job}.
 
-Within a job, the driver's \emph{DAG scheduler} cuts the plan into
+Within a job, the driver's \emph{DAG scheduler} --- named for the
+\textbf{d}irected \textbf{a}cyclic \textbf{g}raph of stages it builds, since a
+plan's dependencies only ever point forward, never back into a cycle --- cuts
+the plan into
 \textbf{stages}. The cut always falls at a shuffle: a stage is the longest run of
 work that can be pipelined without moving data between executors. Everything up to
 a shuffle goes in one stage; the shuffle ends it; what comes after starts a new

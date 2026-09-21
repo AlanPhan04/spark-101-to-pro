@@ -27,7 +27,12 @@ or aggregation that was comfortable at four cores can start spilling at
 eight with no other change. Five cores is the commonly cited ceiling on
 this stack's Kubernetes deployment, not because of memory but because the
 GCS connector's own per-JVM connection pool degrades under too many
-concurrent requests from one process --- the same throughput ceiling
+concurrent requests from one process: past roughly five to eight
+simultaneous readers sharing that one pool, per-request latency climbs
+faster than the added parallelism gains you back, so an eight-core executor
+can finish a GCS-heavy scan stage \emph{slower} than a five-core one running
+the same stage, purely from connection contention that never shows up as a
+memory or CPU metric. This is the same throughput ceiling
 originally observed against HDFS clients, and one that applies here for the
 identical reason: one executor JVM, one shared client, one pool, regardless
 of which object store sits behind it. There is no memory-model reason to
@@ -153,11 +158,17 @@ running on the cluster before relying on this setting.
 \label{sec:tuning-precedence}
 
 A given key can be set in more than one place, and Spark resolves conflicts
-in a fixed order, highest priority first: values set programmatically on a
-\texttt{SparkConf} in application code; \texttt{--conf} flags (or
-\texttt{--executor-memory}-style shortcuts) passed to \texttt{spark-submit};
-values in \texttt{spark-defaults.conf} on the client; and finally each
-setting's built-in default. A value that looks ignored is almost always
+in a fixed order, highest priority first:
+
+\begin{enumerate}
+  \item values set programmatically on a \texttt{SparkConf} in application code;
+  \item \texttt{--conf} flags (or \texttt{--executor-memory}-style shortcuts)
+        passed to \texttt{spark-submit};
+  \item values in \texttt{spark-defaults.conf} on the client;
+  \item each setting's built-in default.
+\end{enumerate}
+
+A value that looks ignored is almost always
 being overridden from a higher-priority layer than the one you edited ---
 checking \texttt{spark.conf.get(key)} inside a running session, which reports
 the value actually in effect, settles this faster than re-reading config
@@ -171,23 +182,47 @@ Kyuubi (this stack's gateway) runs one Spark application per Kyuubi
 \emph{share level} setting decides how those engines are pooled and how a
 new connection finds its engine. Mechanically, Kyuubi's server process
 keeps a registry of live engines keyed by a scope derived from the share
-level --- a connection id for \texttt{CONNECTION}, a username for
-\texttt{USER}, a constant for \texttt{SERVER} --- backed by Zookeeper (or
-etcd) so the registry survives a Kyuubi server restart and multiple Kyuubi
-server instances see the same engines. A new JDBC connection computes its
-key, looks it up in that registry, and either attaches to the engine
-already running under that key or, on a miss, launches a fresh Spark
-application and registers it under that key for the next connection to
-find. \texttt{CONNECTION} gives every JDBC connection its own engine
-(maximum isolation, maximum startup latency per query, since every
-connection is a registry miss); \texttt{USER} shares one engine across all
-of a user's connections (a warm, persistent Spark session per user, a
-registry hit for every connection after the first); \texttt{SERVER} shares
-a single engine across every user on the Kyuubi instance (cheapest, but one
-user's job competing for the same executors as everyone else's). An
-\emph{engine pool} pre-registers several engines under a share level before
-any connection asks for one, so even a first connection under that scope is
-a registry hit rather than a cold start. All of this sits above the
+level, backed by Zookeeper (or etcd) so the registry survives a Kyuubi
+server restart and multiple Kyuubi server instances see the same engines.
+A new JDBC connection computes its key, looks it up in that registry, and
+either attaches to the engine already running under that key (a registry
+\emph{hit}) or, on a miss, launches a fresh Spark application and registers
+it under that key for the next connection to find. \Cref{tab:kyuubi-share-levels}
+lays out the three share levels this stack chooses between.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\begin{tabular}{@{}p{2.1cm}p{1.8cm}p{4.6cm}p{4.6cm}@{}}
+\toprule
+\textbf{Share level} & \textbf{Registry key} & \textbf{Isolation} & \textbf{Cold-start cost} \\
+\midrule
+\texttt{CONNECTION} & connection id & one engine per JDBC connection & every connection is a registry miss --- maximum startup latency, maximum isolation \\
+\texttt{USER} & username & one warm engine per user, reused across their connections & only that user's first connection is a miss; every later one is a hit \\
+\texttt{SERVER} & a constant & one engine shared by every user on the instance & almost always a hit, but every user's jobs compete for the same executors \\
+\bottomrule
+\end{tabular}
+\caption{Kyuubi's share levels trade isolation for cold-start cost by
+changing what the registry key is derived from.}
+\label{tab:kyuubi-share-levels}
+\end{table}
+
+Trace what this means for one user, alice, under \texttt{USER} sharing.
+Her first JDBC connection of the day computes key \texttt{alice}, finds
+nothing registered under it, and pays the full cost of launching a fresh
+Spark application before her first query can even start planning --- a
+registry miss. She disconnects and reconnects an hour later for a second
+query; this connection computes the same key \texttt{alice}, finds her
+still-running engine from before registered under it, and attaches to it
+directly with no new application launched --- a registry hit, and her query
+starts planning immediately. Had the deployment used \texttt{CONNECTION}
+sharing instead, that second connection would have computed a fresh
+connection id, found nothing under it, and paid the same cold start alice's
+very first connection did --- the isolation \texttt{CONNECTION} buys costs
+exactly this warm-reuse benefit \texttt{USER} sharing gives for free.
+
+An \emph{engine pool} pre-registers several engines under a share level
+before any connection asks for one, so even a first connection under that
+scope is a registry hit rather than a cold start. All of this sits above the
 resource-sizing questions from this chapter's earlier sections, not in
 place of them --- each pooled engine is still an ordinary Spark application
 whose executors are sized exactly as described above.

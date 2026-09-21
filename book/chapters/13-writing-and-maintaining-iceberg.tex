@@ -109,11 +109,24 @@ extra failure mode. A \texttt{MERGE} whose matched rows are concentrated in
 a handful of partitions --- a backfill touching one day's data, say ---
 shuffles unevenly under \texttt{hash} mode exactly the way a skewed join
 does (\Cref{sec:aqe-skew}), except AQE's skew-split machinery is a read-side
-mechanism and does not rebalance a write. A CoW rewrite of a skewed
-partition's files runs as one or a few oversized tasks with the rest of the
-stage idle, the same straggler pattern from \Cref{sec:aqe-skew}'s figure,
-just on the write side where nothing currently detects and splits it
-automatically.
+mechanism and does not rebalance a write.
+
+The specimen's own viral, heavily-discounted product (\Cref{sec:refenv-orders})
+makes this concrete. Say a \texttt{MERGE} runs against one week of
+\texttt{orders} to correct a pricing error, matching on \texttt{product\_id}.
+Under \texttt{hash} distribution, matched rows shuffle by
+\texttt{product\_id} before the rewrite, so every row for the viral product
+--- 40 million of the week's 200 million rows, all sharing one key --- lands
+in a single shuffle partition, while each of the week's few thousand other
+products spreads its handful of rows thinly across the rest. The task that
+draws the viral product's partition rewrites roughly 40 million rows; every
+other task in the same stage rewrites a few hundred thousand at most. That
+one task runs as long as it takes to process 40 million rows while the rest
+of the stage finishes early and sits idle --- the exact straggler shape
+\Cref{sec:aqe-skew}'s figure showed for a skewed join, except here it is a
+CoW rewrite task, and AQE's join-side skew-split machinery does not apply to
+it: nothing currently detects or splits an oversized write task the way AQE
+does for a read.
 
 \section{Compacting data files}
 \label{sec:ice-write-compaction}
@@ -182,9 +195,19 @@ correctness requirement.
 \label{sec:ice-write-streaming}
 
 A streaming job committing every micro-batch (\Cref{ch:streaming}) is the
-worst case for every mechanism in this chapter at once: many small commits
-mean many small files, many small manifests, and a rapidly growing snapshot
-log, all from normal operation rather than a mistake. The practical answer
+worst case for every mechanism in this chapter at once, and each consequence
+compounds a different cost already covered above. Many small commits mean
+many small files, which is \Cref{sec:ice-write-compaction}'s small-files
+problem, but arriving continuously rather than from one bad batch job.
+They also mean many small manifests, which slows manifest-list pruning
+(\Cref{sec:ice-read-manifest-pruning}) on every subsequent read, since more,
+smaller manifests must be opened and checked individually to plan the same
+scan. And every commit adds one more entry to the table metadata file's
+snapshot log (\Cref{sec:ice-snapshots}), so that log --- and the metadata
+JSON a client must parse just to resolve the current snapshot, and the
+search space time-travel queries walk --- keeps growing for as long as the
+stream runs uncompacted, all from normal operation rather than a mistake.
+The practical answer
 is scheduling all three maintenance operations to run continuously and
 automatically against a streaming table --- compaction and manifest
 rewriting on a short cadence matched to the commit interval, snapshot

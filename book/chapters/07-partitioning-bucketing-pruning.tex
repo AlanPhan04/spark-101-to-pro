@@ -73,16 +73,33 @@ a filter that, in the query as written, lived on the other table entirely
 DPP has two prerequisites, and missing either one silently disables it: the
 fact table must be partitioned by the join column --- there is nothing to skip
 by directory otherwise --- and the dimension side must be cheap enough to
-execute first (broadcastable, in practice), because DPP works by running it
-early and reusing its result, not by guessing.
+execute first (broadcastable, in practice). The reason broadcastability
+specifically is what unlocks DPP, not just "small," is the reuse mechanism
+in \Cref{fig:dpp-flow}: Spark runs the dimension side once, builds the
+broadcast hash table for the join out of it as it would anyway, and reuses
+that \emph{same} in-memory result a second time as the list of matching keys
+for the fact-table filter --- one execution, two consumers. If the dimension
+side is not broadcastable, there is no cheap, already-materialized copy of
+it sitting in memory to reuse this way; Spark would have to run the
+dimension side as its own separate query just to get the pruning values,
+which can cost more than the scan it was supposed to save, so the optimizer
+does not attempt it.
 
 \section{Bucketing to avoid a shuffle}
 \label{sec:pruning-bucketing}
 
 Partitioning divides a table by directory; \emph{bucketing} divides it further,
-within a partition, by hashing a column into a fixed number of files. Two
-tables bucketed on the same column with the same bucket count are already
-co-located file-to-file on that column, which is exactly the precondition
+within a partition, by hashing a column into a fixed number of files. Concretely,
+writing with \texttt{bucket(16, customer\_id)} computes
+\texttt{hash(customer\_id) mod 16} for every row and sends it to the file
+for that remainder --- the same \texttt{hash(key) mod N} idea
+\Cref{sec:shuffle-write} used to assign shuffle output partitions, just
+applied at write time to decide which \emph{file} a row lands in instead of
+which in-flight partition. Two tables bucketed on the same column with the
+same bucket count assign every row the same way from the same
+\texttt{customer\_id}, so a row and its join partner always land in the
+file pair with the same bucket number --- which is exactly why they end up
+co-located file-to-file on that column, and exactly the precondition
 \Cref{sec:joins-spj} used for a storage-partitioned join: the shuffle that a
 normal join would pay for is instead paid once, at write time, and every join
 on that key afterward pays nothing.

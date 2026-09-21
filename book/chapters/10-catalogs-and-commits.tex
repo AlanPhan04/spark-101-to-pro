@@ -55,9 +55,12 @@ check HMS does, just enforced by application code and its own backing store
 client, regardless of language or engine, calls this same small HTTP API to
 read or commit a table. The practical difference from HMS shows up at the
 edges: a REST catalog can support features HMS's schema was never built for
-(multi-table transactions, credential vending scoped per table) without every
-client needing new Thrift-parsing logic, at the cost of running and operating
-one more service.
+(multi-table transactions, credential vending scoped per table --- the
+catalog hands each client short-lived, table-specific storage credentials
+for exactly the table it just asked to read or write, instead of every
+client sharing one long-lived, all-tables-accessible static key) without
+every client needing new Thrift-parsing logic, at the cost of running and
+operating one more service.
 
 \begin{note}
 Both catalog types answer the same two questions from

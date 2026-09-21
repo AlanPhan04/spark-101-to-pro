@@ -42,13 +42,14 @@ whole computation from the beginning (\Cref{fig:microbatch-commit-loop}).
 \label{sec:stream-sources-sinks}
 
 A source only needs to support one contract: given a starting offset, return
-the new records since it, and report the latest offset available. Kafka is
-the most common source in the wild, with a Kafka partition's offset serving
-directly as the streaming offset, and is used here as the running example
-for exactly that reason --- nothing in this chapter is Kafka-specific,
-though, and the same offset contract is what lets Spark treat a directory
-of arriving files (the \texttt{file} source, polling GCS for new objects
-under a prefix, using each file's name as its offset) exactly the same way.
+the new records since it, and report the latest offset available. Two
+sources make that abstract contract concrete. Kafka is the most common
+source in the wild, with a Kafka partition's offset serving directly as the
+streaming offset, and is used here as the running example for exactly that
+reason --- nothing in this chapter is Kafka-specific, though, and the same
+offset contract is what lets Spark treat a directory of arriving files (the
+\texttt{file} source, polling GCS for new objects under a prefix, using each
+file's name as its offset) exactly the same way.
 A sink is symmetric, needing to either support exactly-once writes
 idempotently keyed by batch ID, or tolerate the batch being reprocessed
 after a failure. Writing to an Iceberg table as a sink
@@ -101,18 +102,27 @@ alongside the offsets so it survives a restart. The default in-memory
 provider keeps state as JVM objects, off-heap's usual trade from
 \Cref{sec:tungsten-offheap} in reverse: fast access, but subject to the
 same GC pressure as any other heap data once state grows large.
-\texttt{RocksDBStateStoreProvider}
+A one-shot batch aggregate never has this problem: it reads its input once,
+aggregates, and the state disappears when the job ends. A streaming
+aggregation is different precisely because the job never ends --- its
+partial state (one entry per open window, per distinct key) keeps
+accumulating for as long as the query runs, which is why state size, not
+input size, is what eventually threatens the heap in a way no batch operator
+ever has to plan around. \texttt{RocksDBStateStoreProvider}
 (\conf{spark.sql.streaming.stateStore.providerClass}) moves state into an
 embedded RocksDB instance per task instead --- not a plain off-heap byte
-buffer the way Tungsten's pages are, but a full log-structured merge tree:
-writes land in an in-memory buffer that flushes to immutable on-disk
-sorted files, which are periodically compacted in the background to bound
-how many files a read has to check. That structure is what lets RocksDB
-hold far more state than fits comfortably in the JVM heap, at the cost of
-an occasional compaction pause and a disk read for state that is not in
-its block cache --- the practical choice once state size (a wide window, a
-large number of distinct keys) makes the default provider's GC pressure the
-bottleneck rather than the actual streaming computation.
+buffer the way Tungsten's pages are, but a full \emph{log-structured merge
+tree} (LSM tree): a storage structure that never updates a file in place,
+only ever appending. Writes land in a small in-memory buffer first; once
+that buffer fills, it flushes as one new, immutable, sorted file on disk;
+older files are periodically compacted (merged and deduplicated) in the
+background to bound how many separate files a single read has to check
+across. That structure is what lets RocksDB hold far more state than fits
+comfortably in the JVM heap, at the cost of an occasional compaction pause
+and a disk read for state that is not in its block cache --- the practical
+choice once state size (a wide window, a large number of distinct keys)
+makes the default provider's GC pressure the bottleneck rather than the
+actual streaming computation.
 
 \section{Output modes and triggers}
 \label{sec:stream-modes-triggers}
@@ -170,6 +180,23 @@ proceeds normally. Either way there is no in-between state where a
 duplicate partial write is visible to a reader --- the batch id living
 inside the same atomic commit it protects is what makes the check
 race-free.
+
+Trace it with numbers. Batch 42 processes its assigned offset range,
+writes its data files, and the executor JVM is killed mid-commit --- the
+driver never receives an acknowledgment. Structured Streaming restarts the
+query, re-reads the checkpoint, sees batch 42 as the next batch to run, and
+replays the exact same offset range. Before writing anything, the sink
+queries \texttt{lakehouse.analytics.orders.snapshots} for one whose summary
+carries \texttt{spark.batch-id = 42}. Two outcomes are possible, and only
+the metadata decides which: if the killed attempt's commit had actually
+completed its atomic pointer swap (\Cref{sec:ice-commit-swap}) a moment
+before the JVM died, snapshot \texttt{v88} already carries
+\texttt{spark.batch-id = 42} in its summary, the sink recognizes its own
+work, and skips writing batch 42's rows a second time; if the swap never
+happened, no snapshot anywhere carries that id, and the sink commits
+batch 42's data files normally as snapshot \texttt{v88}. A reader querying
+the table mid-retry sees either the pre-batch-42 state or the fully
+committed batch-42 state --- never a partial or duplicated one.
 
 \section{Writing to Iceberg: cadence, small files, maintenance}
 \label{sec:stream-iceberg-write}

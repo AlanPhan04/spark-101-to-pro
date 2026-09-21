@@ -140,6 +140,16 @@ their on-heap pool. It is not taken out of \conf{spark.executor.memory}; it is
 additional memory the process reserves, and it must be counted into the
 container's limit.
 
+Concretely: an executor already running \conf{spark.executor.memory=8g} that
+adds \conf{spark.memory.offHeap.enabled=true} and
+\conf{spark.memory.offHeap.size=4g} does not shrink its 8~GB heap down to make
+room for those 4~GB --- the 4~GB is layered on top, for a combined 12~GB of
+heap plus off-heap unified memory before overhead is even added. The
+container or pod limit has to be resized to cover all 12~GB (plus overhead)
+or the extra off-heap pool simply causes the kind of container kill
+\Cref{sec:failure-signatures} describes, with nothing in the JVM's own heap
+metrics hinting at why.
+
 \paragraph{Overhead.} \conf{spark.executor.memoryOverhead} (default the larger
 of 384~MB and 10\% of the heap) is memory the process needs that is neither heap
 nor off-heap pool: JVM thread stacks, class metadata (Metaspace), buffers for
@@ -170,10 +180,14 @@ un-spillable allocation is the cause.
 \paragraph{Per task, not per executor.} Execution memory is shared equally across
 the tasks an executor runs at once, which is \conf{spark.executor.cores}. A
 larger heap with proportionally more cores gives no single task more room: memory
-per task is the execution pool divided by the core count. The number of cores per
-executor is therefore a memory decision as much as a parallelism one, and an
-executor with too many cores spills on work a narrower one finishes in memory
-(\Cref{sec:executor-sizing}).
+per task is the execution pool divided by the core count. A 4~GB unified pool
+on a 4-core executor gives each of its 4 concurrently-running tasks about
+1~GB to build a hash table or sort buffer in; keep the same 4~GB pool but
+raise the executor to 8 cores, and each task's share drops to about 512~MB
+--- more parallelism, but less room per task, on the very same heap. The
+number of cores per executor is therefore a memory decision as much as a
+parallelism one, and an executor with too many cores spills on work a
+narrower one finishes in memory (\Cref{sec:executor-sizing}).
 
 \section{Garbage collection: Parallel, G1, ZGC}
 \label{sec:mem-gc}

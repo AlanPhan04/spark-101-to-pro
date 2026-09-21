@@ -172,6 +172,24 @@ applying \emph{strategies}:
         range-partitioning \texttt{Exchange} followed by a local \texttt{Sort}.
 \end{itemize}
 
+The two-phase aggregate is worth tracing through with actual row counts,
+because "partial then final" only pays off if the partial step actually
+shrinks the data. Say the specimen's \texttt{orders} scan is split across 200
+partitions, and category \texttt{electronics} has rows scattered across all
+of them. The \emph{partial} \texttt{HashAggregate} runs once per partition,
+independently, before any data moves: partition 17 might hold 40,000
+\texttt{electronics} rows and collapse them to a single
+\texttt{(electronics, count=40000, sum=\ldots)} row; partition 84 does the
+same for its own share. Every partition now emits at most one row per
+category it happened to contain --- typically a few dozen rows instead of
+tens of thousands. The \texttt{Exchange} then shuffles only \emph{those}
+small partial rows by category, and the \emph{final} \texttt{HashAggregate}
+combines the (now few hundred, not tens of millions) partial results into
+one row per category. The shuffle moves kilobytes of pre-aggregated rows
+instead of gigabytes of raw ones --- that reduction is the entire reason the
+planner inserts a partial stage at all rather than shuffling raw rows
+straight to one final aggregate.
+
 The planner also inserts \texttt{Exchange} (shuffle) and \texttt{Sort} nodes
 wherever an operator's required input distribution is not already satisfied ---
 and, crucially, \emph{removes} them where it is. If two joins share a key and the
@@ -226,9 +244,25 @@ where you expect them is usually hitting one:
   \item a compile failure in the generated Java, after which Spark silently falls
         back (\conf{spark.sql.codegen.fallback}) --- the only trace is a
         \texttt{WARN} in the executor log;
-  \item an imperative (non-declarative) aggregate or UDAF, which some complex
-        user-defined aggregates are.
+  \item an imperative (non-declarative) aggregate or UDAF. Spark's built-in
+        aggregates (\texttt{SUM}, \texttt{AVG}, \texttt{COUNT}) are
+        \emph{declarative}: each is expressed as a small set of Catalyst
+        expressions (an update expression, a merge expression) that the
+        codegen framework can inline directly into the generated method, the
+        same as any other expression. A UDAF written against the older
+        imperative \texttt{Aggregator}/\texttt{UserDefinedAggregateFunction}
+        API instead hands Spark opaque Scala/Java method bodies to call ---
+        there is no expression tree to inline, so Spark can only invoke those
+        methods the ordinary virtual-call way, and fusion stops at that node.
 \end{itemize}
+
+A plan missing a star where you expected one confirms which of these fired.
+Compare a healthy plan, \texttt{*(2) HashAggregate(keys=[category], \ldots)},
+against the same query with an imperative UDAF substituted in for the
+\texttt{AVG}: the node becomes plain \texttt{HashAggregate(keys=[category],
+\ldots)} with no leading \texttt{*}, and every operator that would otherwise
+have fused with it in that stage loses its star too, since fusion is
+all-or-nothing for the chain that touches the un-fusable node.
 
 \texttt{EXPLAIN CODEGEN} prints the generated Java for every whole-stage stage,
 which is how you confirm what actually got fused.
@@ -236,6 +270,8 @@ which is how you confirm what actually got fused.
 \section{Reading \texttt{EXPLAIN}}
 \label{sec:catalyst-explain}
 
+Now that you know what the \texttt{*(n)} markers and \texttt{Exchange} nodes
+mean, here is how to read the rest of a plan systematically.
 \texttt{EXPLAIN} prints the plans without running the query. There are six forms,
 selected by a keyword in SQL or a \texttt{mode} argument to
 \texttt{df.explain(\ldots)}.
@@ -284,7 +320,9 @@ the leaves are scans, the root is the final operator.
 The nodes you will meet most --- a full catalogue is \Cref{app:plans}:
 
 \paragraph{Scan, at every leaf.} \texttt{BatchScan} for an Iceberg or other
-DataSource~V2 table; \texttt{FileScan parquet} for a Hive-catalogued table;
+DataSource~V2 table (Spark's newer, pluggable table-source API, covered in
+\Cref{ch:dsv2} --- Iceberg tables always go through it); \texttt{FileScan
+parquet} for a Hive-catalogued table;
 \texttt{InMemoryTableScan} for cached data. Its fields are where pruning is
 confirmed or denied: \texttt{PartitionFilters} (whole partitions skipped ---
 directories on object storage), \texttt{PushedFilters} (row groups skipped inside

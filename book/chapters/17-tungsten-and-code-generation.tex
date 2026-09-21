@@ -63,6 +63,22 @@ for manual lifecycle management: Spark itself must now free a page
 explicitly when a task no longer needs it, work the JVM would otherwise have
 done automatically at some GC pause's cost.
 
+Trace one page through its lifecycle to see what "manual" actually means
+here. A task building a hash table for the specimen's join over
+\texttt{product\_id} asks the \texttt{TaskMemoryManager} for a page --- say
+64~KB, Tungsten's usual default page size --- and gets back a raw pointer
+into off-heap memory, not a Java object. As matching \texttt{orders} rows
+arrive, the task writes each one's \texttt{UnsafeRow} bytes directly into
+that page at increasing offsets, tracking how much of the page is used
+itself, since nothing else is tracking it. When the page fills, the task
+asks for another one; when the task finishes, either successfully or via a
+failure that unwinds it, it calls \texttt{freePage()} on every page it
+still holds, explicitly returning that memory to the pool. Skip that last
+step --- a bug in an operator's cleanup path, not a normal case --- and the
+memory is simply gone until the executor JVM itself exits, since no
+collector is ever going to notice it is unreachable and reclaim it the way
+it would an abandoned Java object.
+
 \section{Cache-aware computation}
 \label{sec:tungsten-cache-aware}
 
@@ -75,7 +91,16 @@ row into one flat array: the prefix is a fixed-size encoding of enough of
 the sort key to resolve most comparisons without ever dereferencing the
 pointer, so the hot comparison loop reads sequentially through one small,
 cache-resident array, only chasing the pointer to the full row on the rare
-comparison the prefix cannot resolve alone. For fixed-width numeric keys,
+comparison the prefix cannot resolve alone. Concretely, sorting the
+specimen's \texttt{orders} by \texttt{order\_total} (a \texttt{double}):
+the prefix \emph{is} that value's own sortable bit encoding, packed directly
+into the fixed-size prefix slot --- so two rows with \texttt{order\_total}
+of \$42.50 and \$187.00 are fully ordered by comparing their prefixes alone,
+with the pointer to each row's full data never touched at all during that
+comparison; the pointer is only followed on the rare case of two rows
+sharing the exact same \texttt{order\_total}, where the prefix cannot
+distinguish them and a real tie-break against the full row is unavoidable.
+For fixed-width numeric keys,
 Tungsten goes further with a radix sort, which sorts by key bytes directly
 with no comparisons at all.
 
@@ -87,7 +112,8 @@ row materialization at every boundary between them --- a filter producing a
 row, handed to a project, handed to an aggregate, each step paying function-call
 overhead the JIT cannot see through because the call target varies with the
 plan. \emph{Whole-stage code generation} collapses a chain of adjacent
-operators that support it (marked \texttt{CodegenSupport} internally) into
+operators that support it (marked \texttt{CodegenSupport}, a Scala trait an
+operator implements to opt into this fusion, internally) into
 one generated Java method, using a \emph{produce/consume} protocol: each
 operator's \texttt{produce()} emits the code that generates its rows, and
 calls into the next operator's \texttt{consume()} inline rather than through
@@ -125,6 +151,22 @@ final class GeneratedIteratorForCodegenStage1 extends BufferedRowIterator {
 }
 \end{lstlisting}
 
+Three unfamiliar names carry the whole mechanism, so before reading the
+payoff, here is what each one is. \texttt{BufferedRowIterator} is the base
+class every generated whole-stage method extends --- it is Spark's own
+plumbing, not something you write, and it is what lets the generated class
+plug into the rest of the engine as an ordinary iterator despite being
+freshly compiled at runtime. \texttt{InternalRow} is Catalyst's internal
+row representation --- the \texttt{UnsafeRow} byte layout from
+\Cref{sec:tungsten-row} accessed through this interface, which is why
+\texttt{scan\_row.getLong(1)} above is a direct, typed field read rather
+than a generic get-and-cast. \texttt{append(scan\_row)} is how one fused
+operator hands a row to the next one \emph{inside} the same generated
+method: it is not a function return, it is the literal inlined code of the
+next operator's \texttt{consume()} step, spliced in at compile time --- the
+mechanism the produce/consume protocol described in the abstract a moment
+ago, spelled out here in the concrete generated source.
+
 One loop, one method: the scan's \texttt{next()}, the columnar-to-row
 conversion, and the filter's comparison all inline into
 \texttt{processNext()} with no call back out to a generic \texttt{Filter}
@@ -157,11 +199,13 @@ the same "generate code instead of interpreting a tree" idea applied one
 level down. A single JVM method has a 64~KB bytecode size limit; a query
 with a very wide \texttt{SELECT} or a very deep expression tree can generate
 code that would exceed it, and Spark's codegen falls back to splitting the
-generated code across multiple smaller methods (or, past
-\conf{spark.sql.codegen.maxFields}-style limits, disabling codegen for that
-expression entirely) to stay under the limit --- a real ceiling worth
-knowing about, since a query built by tooling that emits hundreds of
-generated columns can hit it in practice.
+generated code across multiple smaller methods first; if the schema is wide
+enough to cross \conf{spark.sql.codegen.maxFields} (100 columns by default,
+the same limit \Cref{sec:wholestage-codegen} named as a whole-stage fusion
+boundary), Spark instead gives up on generating code for that expression at
+all and falls back to plain, interpreted \texttt{Expression} evaluation ---
+a real ceiling worth knowing about, since a query built by tooling that
+emits hundreds of generated columns can hit it in practice.
 
 \section{Columnar processing and vectorization}
 \label{sec:tungsten-columnar}

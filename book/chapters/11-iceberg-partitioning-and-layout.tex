@@ -42,7 +42,8 @@ appearing in the query text.
   high-volume streams (\Cref{ch:streaming}) \\
 \texttt{bucket(n, col)} & High-cardinality key with equality or join
   predicates & Even file distribution by hash; enables storage-partitioned
-  joins (\Cref{sec:joins-spj}) when both sides share the spec \\
+  joins (joins that skip the shuffle when both sides share the same bucket
+  spec, \Cref{sec:joins-spj}) \\
 \texttt{truncate(n, col)} & String or numeric prefix filters & Groups by a
   value prefix without one partition per distinct value \\
 \texttt{identity} & Low-cardinality column filtered directly & Same as
