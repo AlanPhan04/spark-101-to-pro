@@ -1,57 +1,115 @@
 \begin{titlepage}
-% Framed cover, no institutional branding.
+% Framed cover, no institutional branding. Pale sky-blue ground, orange ink.
+\definecolor{pageblue}{HTML}{C4E4F5}
+\definecolor{coverorange}{HTML}{A9490C}
+\definecolor{coveraccent}{HTML}{F0801E}
+\definecolor{covermuted}{HTML}{C07A3E}
+
 \AddToShipoutPictureBG*{%
     \AtPageLowerLeft{%
         \begin{tikzpicture}[overlay]
-            \draw[line width=3pt]
+            \fill[pageblue] (0,0) rectangle (\paperwidth,\paperheight);
+            \draw[line width=3pt, coverorange]
             (3cm, 2cm) rectangle (\paperwidth-2cm, \paperheight-2cm);
-            \draw[line width=1pt]
+            \draw[line width=1pt, coverorange]
             (3.1cm, 2.1cm) rectangle (\paperwidth-2.1cm, \paperheight-2.1cm);
         \end{tikzpicture}%
     }%
 }
 
 \begin{center}
-    \vspace*{2.4cm}
+    \vspace*{1.0cm}
 
     \fontsize{14pt}{18pt}\selectfont
-    \textbf{A PRACTITIONER'S DEEP DIVE}
+    \textcolor{covermuted}{\textbf{A PRACTITIONER'S DEEP DIVE}}
 
-    \vspace{2cm}
+    \vspace{0.8cm}
 
-    \rule{0.8\textwidth}{0.5pt}
+    \textcolor{coverorange}{\rule{0.8\textwidth}{0.5pt}}
 
-    \fontsize{25pt}{30pt}\selectfont
-    \textbf{SPARK QUERY OPTIMIZATION}\\[0.35cm]
-    \textbf{AND THE ICEBERG LAKEHOUSE}
+    \vspace{0.1cm}
+
+    % SPARK and ICEBERG carry equal weight -- the book owns the seam between
+    % them, not a Spark story with an Iceberg footnote.
+    \fontsize{48pt}{48pt}\selectfont
+    \textcolor{coverorange}{\textbf{SPARK}}
+
+    \vspace{0.05cm}
+
+    \fontsize{18pt}{20pt}\selectfont
+    \textcolor{coverorange}{\textbf{QUERY OPTIMIZATION}}
+
+    \vspace{0.2cm}
+
+    \fontsize{13pt}{15pt}\selectfont
+    \textcolor{covermuted}{\textit{and the}}
+
+    \vspace{0.2cm}
+
+    \fontsize{48pt}{48pt}\selectfont
+    \textcolor{coverorange}{\textbf{ICEBERG}}
+
+    \vspace{0.05cm}
+
+    \fontsize{18pt}{20pt}\selectfont
+    \textcolor{coverorange}{\textbf{LAKEHOUSE}}
 
     \vspace{0.3cm}
 
     \fontsize{15pt}{20pt}\selectfont
-    \textit{Why your queries run the way they do --- from Catalyst\\
-    to the shuffle to the metadata layer --- and how to change it}
+    \textcolor{covermuted}{\textit{Why your queries run the way they do --- from Catalyst\\
+    to the shuffle to the metadata layer --- and how to change it}}
 
-    \vspace{0.3cm}
+    \vspace{0.25cm}
 
-    \rule{0.8\textwidth}{0.5pt}
+    \textcolor{coverorange}{\rule{0.8\textwidth}{0.5pt}}
 
-    \vspace{2.2cm}
+    \vspace{0.5cm}
 
-    \fontsize{12.5pt}{16pt}\selectfont
-    \textit{Written against:} Spark 3.5.2 $\cdot$ Apache Iceberg v2 $\cdot$ Kyuubi\\
-    Hive Metastore $\cdot$ Google Cloud Storage $\cdot$ Kubernetes
+    % One mechanism, not two domains: a physical plan is chosen, funnels
+    % through a shuffle exchange, and settles as a committed Iceberg
+    % snapshot -- older snapshots fading into history beneath it.
+    \begin{tikzpicture}[x=1cm, y=1cm]
+        \draw[covermuted, dashed, line width=0.9pt] (3.0,6.2) -- (2.2,5.6);
+        \draw[covermuted, line width=1pt, fill=pageblue] (2.2,5.6) circle (0.09);
+
+        \draw[coverorange, line width=1.3pt] (3.0,6.2) -- (3.8,5.6);
+        \draw[coverorange, line width=1.1pt] (3.8,5.6) -- (3.4,5.0);
+        \draw[coverorange, line width=1.1pt] (3.8,5.6) -- (4.2,5.0);
+        \fill[coverorange] (3.0,6.2) circle (0.1);
+        \fill[coverorange] (3.8,5.6) circle (0.08);
+        \fill[coverorange] (3.4,5.0) circle (0.065);
+        \fill[coverorange] (4.2,5.0) circle (0.065);
+
+        \draw[coveraccent, line width=1.1pt] (3.4,5.0) -- (3.8,4.2);
+        \draw[coveraccent, line width=1.1pt] (4.2,5.0) -- (3.8,4.2);
+        \draw[coveraccent, line width=1.1pt] (3.8,4.2) -- (2.6,3.6);
+        \draw[coveraccent, line width=1.1pt] (3.8,4.2) -- (5.0,3.6);
+        \fill[coveraccent] (3.8,4.2) circle (0.07);
+        \fill[coveraccent] (2.6,3.6) circle (0.055);
+        \fill[coveraccent] (5.0,3.6) circle (0.055);
+
+        \draw[covermuted, line width=0.9pt] (2.6,3.6) -- (2.3,3.1);
+        \draw[covermuted, line width=0.9pt] (5.0,3.6) -- (5.3,3.1);
+
+        \fill[coverorange] (2.3,2.85) rectangle (5.3,3.1);
+        \fill[coveraccent] (5.45,2.975) circle (0.075);
+        \fill[coverorange!45!pageblue] (2.0,2.55) rectangle (5.6,2.8);
+        \fill[coverorange!25!pageblue] (1.7,2.25) rectangle (5.9,2.5);
+        \fill[coverorange!12!pageblue] (1.4,1.95) rectangle (6.2,2.2);
+    \end{tikzpicture}
 
     \vfill
 
     \fontsize{14pt}{18pt}\selectfont
-    \textbf{Alan Phan}
+    \textcolor{coverorange}{\textbf{Alan Phan}}
 
     \vspace{0.4cm}
 
     \fontsize{12pt}{16pt}\selectfont
-    2026
+    \textcolor{covermuted}{2026}
 
-    \vspace{1cm}
+    \vspace{0.6cm}
 \end{center}
 
 \end{titlepage}
