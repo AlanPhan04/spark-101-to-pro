@@ -1,0 +1,48 @@
+% ---------------------------------------------------------------------------
+% OPTIONAL drop-in: palette-matched callouts + listings for book/main.tex.
+% Replaces the four grayscale \newtcolorbox blocks (note / warning / tip /
+% analogy) and the three \definecolor lst* lines. Environment names are
+% unchanged, so no chapter needs editing. Propose to the author with a
+% before/after page render — it changes the look of every page.
+% ---------------------------------------------------------------------------
+
+% Book palette (same as the figures)
+\definecolor{bkBlue}{HTML}{3B6EA5}   \definecolor{bkBlueFill}{HTML}{EAF1FB}   \definecolor{bkBlueInk}{HTML}{1F3D5C}
+\definecolor{bkGreen}{HTML}{4F8A3D}  \definecolor{bkGreenFill}{HTML}{EAF4E3}  \definecolor{bkGreenInk}{HTML}{2F5320}
+\definecolor{bkRose}{HTML}{B5545E}   \definecolor{bkRoseFill}{HTML}{FDEEF0}   \definecolor{bkRoseInk}{HTML}{7D2F38}
+\definecolor{bkAmber}{HTML}{C9A227}  \definecolor{bkAmberFill}{HTML}{FBF3D9}  \definecolor{bkAmberInk}{HTML}{7A5C0A}
+\definecolor{bkPurple}{HTML}{6A5A8A}
+\definecolor{bkGrayInk}{HTML}{374151}
+
+% Listings in the same palette
+\definecolor{lstkeyword}{HTML}{3B6EA5}
+\definecolor{lstcomment}{HTML}{6B7280}
+\definecolor{lststring}{HTML}{B5545E}
+\lstset{
+  backgroundcolor=\color{bkBlueFill!45},
+  rulecolor=\color{bkBlue!35},
+  numberstyle=\tiny\color{bkGrayInk!60},
+}
+
+% One shared callout style: tinted body, colored left bar, colored title
+\tcbset{bkcallout/.style={
+  breakable, enhanced, boxrule=0pt, arc=2pt, outer arc=2pt,
+  left=10pt, right=8pt, top=6pt, bottom=6pt,
+  before skip=10pt, after skip=10pt,
+  fonttitle=\bfseries\small, attach title to upper={\enspace},
+  borderline west={3pt}{0pt}{#1},
+}}
+
+\newtcolorbox{note}{bkcallout=bkBlue, colback=bkBlueFill, colframe=bkBlueFill,
+  coltitle=bkBlueInk, title=Note}
+\newtcolorbox{tip}{bkcallout=bkGreen, colback=bkGreenFill, colframe=bkGreenFill,
+  coltitle=bkGreenInk, title=Tip}
+\newtcolorbox{warning}{bkcallout=bkRose, colback=bkRoseFill, colframe=bkRoseFill,
+  coltitle=bkRoseInk, title=Warning}
+\newtcolorbox{analogy}{bkcallout=bkAmber, colback=bkAmberFill, colframe=bkAmberFill,
+  coltitle=bkAmberInk, title=Analogy}
+
+% Optional: colored chapter number + part pages in the book blue
+% \titleformat{\chapter}[display]{\normalfont\huge\bfseries}
+%   {\color{bkBlue}\chaptertitlename\ \thechapter}{20pt}{\Huge\color{bkBlueInk}}
+% \hypersetup{linkcolor=bkBlueInk, citecolor=bkGreenInk, urlcolor=bkBlue}

@@ -1,0 +1,77 @@
+% ---------------------------------------------------------------------------
+% Chapter skeleton — matches chapters/01-shape-of-a-spark-application.tex.
+% Replace every <...>. Delete these comments. Draft figures BEFORE prose.
+% Targets per chapter: 6–9k words · ≥3 figures · ≥4 listings · ≤2 callouts/1k words
+% ---------------------------------------------------------------------------
+\chapter{<Title Case Chapter Title>}
+\label{ch:<short>}
+
+\begin{chapterintro}
+<The specimen, as the reader meets it in this chapter's terms: a symptom with a
+number. One sentence on what this chapter will NOT do. One sentence on the
+payoff: what the reader can see or change by the end.>
+\end{chapterintro}
+
+\section{<The mechanism, in plain words>}
+\label{sec:<short>-<topic>}
+
+% Beat 1 — symptom on the specimen / in the UI
+<Two or three sentences. A number from the reference cluster.>
+
+% Beat 2 — the picture, introduced before it appears
+<What the figure shows and where to look> (\Cref{fig:<slug>}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{<slug>.pdf}
+  \caption{<Takeaway sentence.> <How to read it: what red / dashed / green mean here.>}
+  \label{fig:<slug>}
+\end{figure}
+
+% Beat 3 — name it
+A \emph{<term>} is <one-sentence definition>.
+
+% Beat 4 — prove it: listing + real output + arithmetic
+\begin{lstlisting}[language=SQL,caption={<What this listing demonstrates>},captionpos=b,label=lst:<short>-<topic>]
+EXPLAIN FORMATTED
+SELECT ...
+FROM orders o
+...;
+\end{lstlisting}
+
+\begin{lstlisting}[language=text,numbers=none,caption={<Its output, trimmed>},captionpos=b,label=lst:<short>-<topic>-out]
+== Physical Plan ==
+AdaptiveSparkPlan (12)
++- ...
+-- ... 3 Filter nodes elided
+\end{lstlisting}
+% CAPTURE: run on the reference cluster (App. A) and paste the real output.
+
+Put numbers on it: <arithmetic on the reference cluster — 40 task slots, 16 GB executors>.
+
+% Beat 5 — the lever and its cost
+<Which config / rewrite / layout change moves the cost, with \conf{key} and its
+3.5.2 default, and what the change costs in turn.>
+
+\begin{tip}
+<One diagnostic shortcut — a UI panel, a metric, a one-liner.>
+\end{tip}
+
+\section{<Next mechanism>}
+\label{sec:<short>-<topic2>}
+<Same five beats.>
+
+\section{Summary}
+\label{sec:<short>-summary}
+
+<One prose paragraph restating the chapter's mental model in the terms the
+reader can now use — every term from the chapter, no new ones.>
+
+<One or two sentences: what the specimen still does wrong, and which chapter fixes it.>
+
+\exercisehead
+\begin{exercises}
+\item <Run-and-observe on orders: do X, open the Stages tab, record Y.>
+\item <Read-this-plan: given an EXPLAIN excerpt, identify Z.>
+\item <Predict-then-check: predict the effect of changing \conf{...}, then verify.>
+\end{exercises}
