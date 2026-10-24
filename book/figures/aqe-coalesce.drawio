@@ -1,0 +1,32 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="aqe-coalesce" id="aqecoal">
+    <mxGraphModel dx="800" dy="400" grid="1" gridSize="20" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="300" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lp" value="&lt;b&gt;Without coalescing&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;verticalAlign=top;spacingTop=8;fillColor=#fdeef0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="280" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="rp" value="&lt;b&gt;With coalescing&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;verticalAlign=top;spacingTop=8;fillColor=#e4f1dc;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="340" y="20" width="280" height="260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="l1" value="3 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="70" width="50" height="50" as="geometry" /></mxCell>
+        <mxCell id="l2" value="3 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=13;" vertex="1" parent="1"><mxGeometry x="100" y="70" width="50" height="50" as="geometry" /></mxCell>
+        <mxCell id="l3" value="3 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=13;" vertex="1" parent="1"><mxGeometry x="160" y="70" width="50" height="50" as="geometry" /></mxCell>
+        <mxCell id="l4" value="3 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=13;" vertex="1" parent="1"><mxGeometry x="220" y="70" width="50" height="50" as="geometry" /></mxCell>
+        <mxCell id="ln" value="… 2000 partitions in all" style="text;html=1;fillColor=none;strokeColor=none;align=center;fontColor=#57503f;fontSize=13;" vertex="1" parent="1"><mxGeometry x="40" y="130" width="230" height="26" as="geometry" /></mxCell>
+        <mxCell id="lt" value="&lt;b&gt;2000 tasks&lt;/b&gt;&lt;br&gt;scheduling dominates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;strokeWidth=2;dashed=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="60" y="190" width="200" height="60" as="geometry" /></mxCell>
+
+        <mxCell id="r1" value="≈ 64 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="360" y="70" width="70" height="50" as="geometry" /></mxCell>
+        <mxCell id="r2" value="≈ 64 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="440" y="70" width="70" height="50" as="geometry" /></mxCell>
+        <mxCell id="r3" value="≈ 64 MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="520" y="70" width="70" height="50" as="geometry" /></mxCell>
+        <mxCell id="rn" value="… ≈ 94 partitions in all" style="text;html=1;fillColor=none;strokeColor=none;align=center;fontColor=#57503f;fontSize=13;" vertex="1" parent="1"><mxGeometry x="360" y="130" width="230" height="26" as="geometry" /></mxCell>
+        <mxCell id="rt" value="&lt;b&gt;≈ 94 tasks&lt;/b&gt;&lt;br&gt;each does real work" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;strokeWidth=2;fontSize=13;" vertex="1" parent="1"><mxGeometry x="380" y="190" width="200" height="60" as="geometry" /></mxCell>
+
+        <mxCell id="m" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="lt" target="rt"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

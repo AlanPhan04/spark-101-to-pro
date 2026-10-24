@@ -42,9 +42,17 @@
 \usepackage[most]{tcolorbox}
 
 % --- code listings --------------------------------------------------------
-\definecolor{lstkeyword}{RGB}{0,0,180}
-\definecolor{lstcomment}{RGB}{100,100,100}
-\definecolor{lststring}{RGB}{160,0,0}
+% Book palette (same as the figures)
+\definecolor{bkBlue}{HTML}{3B6EA5}   \definecolor{bkBlueFill}{HTML}{EAF1FB}   \definecolor{bkBlueInk}{HTML}{1F3D5C}
+\definecolor{bkGreen}{HTML}{4F8A3D}  \definecolor{bkGreenFill}{HTML}{EAF4E3}  \definecolor{bkGreenInk}{HTML}{2F5320}
+\definecolor{bkRose}{HTML}{B5545E}   \definecolor{bkRoseFill}{HTML}{FDEEF0}   \definecolor{bkRoseInk}{HTML}{7D2F38}
+\definecolor{bkAmber}{HTML}{C9A227}  \definecolor{bkAmberFill}{HTML}{FBF3D9}  \definecolor{bkAmberInk}{HTML}{7A5C0A}
+\definecolor{bkPurple}{HTML}{6A5A8A}
+\definecolor{bkGrayInk}{HTML}{374151}
+
+\definecolor{lstkeyword}{HTML}{3B6EA5}
+\definecolor{lstcomment}{HTML}{6B7280}
+\definecolor{lststring}{HTML}{B5545E}
 
 \lstset{
     basicstyle=\small\ttfamily,
@@ -52,8 +60,10 @@
     commentstyle=\color{lstcomment}\itshape,
     stringstyle=\color{lststring},
     numbers=left,
-    numberstyle=\tiny,
+    numberstyle=\tiny\color{bkGrayInk!60},
     frame=single,
+    backgroundcolor=\color{bkBlueFill!45},
+    rulecolor=\color{bkBlue!35},
     breaklines=true,
     showstringspaces=false,
     tabsize=2,
@@ -108,28 +118,23 @@
 \setlist[exercises]{label=\arabic*., leftmargin=*, itemsep=5pt, topsep=4pt}
 \newcommand{\exercisehead}{\bigskip\noindent{\large\bfseries Exercises}\par\nopagebreak\medskip}
 
-\newtcolorbox{note}{
-  breakable, enhanced, colback=black!3, colframe=black!45, boxrule=0.4pt,
-  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
+% One shared callout style: tinted body, colored left bar, colored title
+\tcbset{bkcallout/.style={
+  breakable, enhanced, boxrule=0pt, arc=2pt, outer arc=2pt,
+  left=10pt, right=8pt, top=6pt, bottom=6pt,
   before skip=10pt, after skip=10pt,
-  fonttitle=\bfseries\small, coltitle=black, title=Note}
-\newtcolorbox{warning}{
-  breakable, enhanced, colback=black!3, colframe=black!75, boxrule=0.9pt,
-  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
-  before skip=10pt, after skip=10pt,
-  fonttitle=\bfseries\small, coltitle=black, title=Warning}
-\newtcolorbox{tip}{
-  breakable, enhanced, colback=black!3, colframe=black!45, boxrule=0.4pt,
-  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
-  before skip=10pt, after skip=10pt,
-  fonttitle=\bfseries\small, coltitle=black, title=Tip}
-\definecolor{analogybg}{HTML}{FBF3D9}
-\definecolor{analogyline}{HTML}{A9832A}
-\newtcolorbox{analogy}{
-  breakable, enhanced, colback=analogybg, colframe=analogyline, boxrule=0.4pt,
-  arc=1pt, left=7pt, right=7pt, top=5pt, bottom=5pt,
-  before skip=10pt, after skip=10pt,
-  fonttitle=\bfseries\small, coltitle=black, title=Analogy}
+  fonttitle=\bfseries\small, attach title to upper={\enspace},
+  borderline west={3pt}{0pt}{#1},
+}}
+
+\newtcolorbox{note}{bkcallout=bkBlue, colback=bkBlueFill, colframe=bkBlueFill,
+  coltitle=bkBlueInk, title=Note}
+\newtcolorbox{tip}{bkcallout=bkGreen, colback=bkGreenFill, colframe=bkGreenFill,
+  coltitle=bkGreenInk, title=Tip}
+\newtcolorbox{warning}{bkcallout=bkRose, colback=bkRoseFill, colframe=bkRoseFill,
+  coltitle=bkRoseInk, title=Warning}
+\newtcolorbox{analogy}{bkcallout=bkAmber, colback=bkAmberFill, colframe=bkAmberFill,
+  coltitle=bkAmberInk, title=Analogy}
 
 \begin{document}
 

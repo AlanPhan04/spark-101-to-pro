@@ -293,61 +293,23 @@ isFinalPlan=true}. \texttt{isFinalPlan=false} is the compile-time plan from
 \begin{description}
   \item[\texttt{AQEShuffleRead coalesced}] AQE merged small post-shuffle
         partitions after seeing their real sizes.
-  \item[\texttt{AQEShuffleRead (skew=true)}] AQE split one or more oversized
-        partitions.
+  \item[\texttt{AQEShuffleRead skewed}] AQE split one or more oversized
+        partitions of a join input.
+  \item[\texttt{AQEShuffleRead local}] a reduce task reads shuffle files from its
+        own executor; used for the large side after a broadcast promotion.
   \item[\texttt{BroadcastQueryStage}] a \texttt{SortMergeJoin} was converted to a
         broadcast at runtime because the shuffled side turned out small.
   \item[\texttt{SortMergeJoin [\ldots], isSkew=true}] AQE detected and handled
         skew in this join.
 \end{description}
 
-Here is one final plan showing several of these together, for a join between
-\texttt{orders} and the genuinely large \texttt{dim\_customer}
-(\Cref{sec:refenv-orders}) during a week hit by the viral product's skew ---
-both sides too large to broadcast, so this is a real sort-merge join, not one
-AQE later converts:
-
-\begin{lstlisting}[language=text,numbers=none,caption={A final AQE plan: a skew-split join feeding a coalesced aggregation},captionpos=b]
-AdaptiveSparkPlan isFinalPlan=true
-+- *(3) HashAggregate(keys=[category], functions=[avg(on_time)])
-   +- AQEShuffleRead coalesced
-      +- ShuffleQueryStage 2
-         +- *(2) SortMergeJoin [product_id], [product_id], Inner, isSkew=true
-            :- AQEShuffleRead (skew=true)
-            :  +- ShuffleQueryStage 0
-            +- AQEShuffleRead (skew=true)
-               +- ShuffleQueryStage 1
-\end{lstlisting}
-
-The root confirms this is the plan as it actually ran, not the compile-time
-guess. Both join inputs (\texttt{ShuffleQueryStage 0} and~\texttt{1}) carry
-\texttt{AQEShuffleRead (skew=true)}: AQE found the viral product's oversized
-partition after the shuffle and split it into several sub-partitions on the
-\texttt{orders} side, and replicated the corresponding \texttt{dim\_customer}
-partition to match, exactly \Cref{sec:aqe-skew} described. The join node's
-own \texttt{isSkew=true} flag confirms this handling applied specifically to
-this join, not just somewhere upstream. Above the join,
-\texttt{AQEShuffleRead coalesced} shows a separate, independent AQE decision:
-the aggregation's own shuffle output, originally many small partitions,
-merged back down toward the 128~MB target before the final
-\texttt{HashAggregate} runs over it --- one query, two unrelated
-runtime-measured corrections, each visible as its own marker in the same
-final plan.
-
-A \texttt{BroadcastQueryStage} node appears in a different scenario: recall
-from \Cref{sec:aqe-broadcast} that the specimen's \texttt{orders} $\bowtie$
-\texttt{dim\_product} join is planned as sort-merge (Iceberg has no
-column-level statistics to broadcast it up front), but \texttt{dim\_product}
-turns out small once its own shuffle is actually measured. In \emph{that}
-final plan, the join operator itself is no longer \texttt{SortMergeJoin} at
-all --- AQE rewrites it to \texttt{BroadcastHashJoin}, with
-\texttt{BroadcastQueryStage} standing in for the exchange-and-sort pair that
-would have run on the now-broadcast side, and \texttt{orders} reads through
-with no shuffle on that side either. A join cannot show both a
-skew-split shuffle read \emph{and} a broadcast promotion on the same side:
-promoting to broadcast removes that side's shuffle entirely, and skew-split
-handling has nothing left to split once there is no post-shuffle partition
-to measure.
+\Cref{ch:aqe} shows each of these in a final plan, with the plan annotated
+(\Cref{sec:aqe-reading}). A promoted join no longer shows
+\texttt{SortMergeJoin}: AQE rewrites it to \texttt{BroadcastHashJoin}. The large
+side's shuffle write has already happened by then, so that side is read
+through \texttt{AQEShuffleRead local} rather than skipping its shuffle. A
+join cannot show both a skew split and a broadcast promotion on the same side,
+because a promoted side has no shuffle partitions left to measure.
 
 \section{Predicate-pushdown killers}
 \label{sec:c-pushdown}

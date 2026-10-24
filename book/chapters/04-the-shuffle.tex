@@ -187,7 +187,8 @@ size, rather than trying to predict the exact right number up front:
 spark.sql.shuffle.partitions                    = 2000
 spark.sql.adaptive.enabled                      = true
 spark.sql.adaptive.coalescePartitions.enabled   = true
-spark.sql.adaptive.advisoryPartitionSizeInBytes = 134217728   -- 128 MB
+spark.sql.adaptive.coalescePartitions.parallelismFirst = false
+spark.sql.adaptive.advisoryPartitionSizeInBytes = 134217728   -- 128 MB, twice the 64 MB default
 \end{lstlisting}
 
 Over-partitioning is cheap to fix at runtime --- AQE merges small adjacent

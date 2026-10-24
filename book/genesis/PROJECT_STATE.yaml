@@ -42,7 +42,8 @@ chapters:
   - {n: 2, slug: sql-to-execution,             status: drafted}   # full draft, 1 figure + explain listing
   - {n: 3, slug: executor-memory-and-cpu,      status: drafted}   # full draft, 2 figures
   - {n: 4, slug: the-shuffle,                  status: drafted}   # full draft, 2 figures
-  # 5-19: outlined
+  - {n: 6, slug: adaptive-query-execution,     status: deepened}  # 3 figs, 8 listings (plans marked % CAPTURE), 7 tables; ~3.1k words; errata fixed (64 MB advisory, parallelismFirst formula)
+  # 5, 7-19: drafted thin (see lint_chapter.py --status)
 
 figures:                            # shared renderer: figures/_drawio.py
   - {slug: application-topology,   chapter: 1, status: rendered}

@@ -19,8 +19,9 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 | `partition-sizing` | 4 | plot | exact hyperbola (MB/task = shuffle bytes / partitions) for a 100 GB shuffle; target band + default-200 point | 1 | **done** |
 | `join-strategies` | 5 | structure | the four strategies side by side: what shuffles, what broadcasts, what sorts | 1 | spec |
 | `broadcast-vs-smj` | 5 | flow | same join, two plans; where the small side goes | 2 | spec |
-| `aqe-coalesce` | 6 | before/after | 2000 tiny post-shuffle partitions → ~50 right-sized, at runtime | 2 | spec |
-| `aqe-skew-split` | 6 | structure | one 10 GB partition split into 5; the small side replicated 5× | 2 | spec |
+| `aqe-coalesce` | 6 | before/after | 2000 tiny post-shuffle partitions (6 GB) → ~94 at 64 MB, at runtime | 2 | done |
+| `aqe-skew-split` | 6 | structure | one 3.2 GB partition split into ~50; the small side replicated | 2 | done (redrawn, legible) |
+| `aqe-feedback-loop` | 6 | flow | driver re-plans between stages from measured partition sizes | 2 | done |
 | `pruning-layers` | 7 | structure | partition → manifest → file/row-group → bloom; each layer's input filter form | 1 | spec |
 | `dpp-flow` | 7 | sequence | scan dim first → collect keys → filter fact partitions before scanning | 2 | spec |
 | `storage-levels` | 8 | table-figure | MEMORY_AND_DISK / _SER / OFF_HEAP / DISK_ONLY vs GC cost vs read speed | 2 | spec |

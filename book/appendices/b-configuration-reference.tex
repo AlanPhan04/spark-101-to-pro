@@ -68,12 +68,12 @@ value on a table or job you cannot afford to be wrong about.
 \endhead
 \conf{spark.sql.adaptive.enabled} & true (since 3.2) & Master switch for
   every mechanism in this section. \\
-\conf{spark.sql.adaptive.advisoryPartitionSizeInBytes} & 128~MB &
+\conf{spark.sql.adaptive.advisoryPartitionSizeInBytes} & 64~MB &
   Coalescing target (\Cref{sec:aqe-coalesce}). \\
 \conf{spark.sql.adaptive.coalescePartitions.minPartitionSize} & 1~MB &
   Floor that stops over-merging. \\
 \conf{spark.sql.adaptive.coalescePartitions.parallelismFirst} & true &
-  Protects core-count parallelism ahead of the size target
+  Lowers the coalescing target to the cluster parallelism when the shuffle is small
   (\Cref{sec:aqe-parallelism}). \\
 \conf{spark.sql.adaptive.autoBroadcastJoinThreshold} & same as the
   planning-time key & Runtime broadcast-conversion threshold, measured

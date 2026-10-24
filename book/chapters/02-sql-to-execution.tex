@@ -272,9 +272,9 @@ which is how you confirm what actually got fused.
 
 Now that you know what the \texttt{*(n)} markers and \texttt{Exchange} nodes
 mean, here is how to read the rest of a plan systematically.
-\texttt{EXPLAIN} prints the plans without running the query. There are six forms,
+\texttt{EXPLAIN} prints the plans without running the query. There are five modes,
 selected by a keyword in SQL or a \texttt{mode} argument to
-\texttt{df.explain(\ldots)}.
+\texttt{df.explain(\ldots)}; \Cref{tab:catalyst-explain-modes} lists them.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -290,6 +290,9 @@ selected by a keyword in SQL or a \texttt{mode} argument to
 \texttt{CODEGEN} & the physical plan plus the generated Java for each whole-stage stage \\
 \bottomrule
 \end{tabular}
+\caption{The \texttt{EXPLAIN} modes. Start with the default for a quick check and
+move to \texttt{FORMATTED} when you need each node's detail.}
+\label{tab:catalyst-explain-modes}
 \end{table}
 
 \texttt{EXPLAIN FORMATTED} has two parts: a compact tree, then a numbered list
