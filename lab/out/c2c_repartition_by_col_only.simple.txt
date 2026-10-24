@@ -1,0 +1,5 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=false
++- Exchange hashpartitioning(customer_id#81, 200), REPARTITION_BY_COL, [plan_id=355]
+   +- BatchScan lab.db.orders[order_id#78, order_ts#79, product_id#80, customer_id#81, promised_days#82, delivery_days#83, order_total#84] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772409600000000, groupedBy=] RuntimeFilters: []
+

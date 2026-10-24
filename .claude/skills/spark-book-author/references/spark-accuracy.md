@@ -50,6 +50,17 @@ printing a new one): `spark.memory.fraction` 0.6 · `spark.memory.storageFractio
 `spark.executor.heartbeatInterval` 10s · `spark.network.timeout` 120s ·
 `spark.sql.ansi.enabled` **false** on 3.5.
 
+**Measured on the lab (`lab/`, Oct 2026):** with `parallelismFirst=true` the coalescing target is
+`max(min(total_shuffle_read_bytes / P, advisory), minPartitionSize)`, `P` = default parallelism; the advisory
+size is a *ceiling*. Verified in 7 runs (tasks matched the formula: 40, 2, 41, 41, 118, 8). The bytes used are the
+compressed shuffle bytes the reduce tasks read, not the larger `Statistics(sizeInBytes)` in the plan. AQE's
+adaptive broadcast threshold compares the plan's `Statistics(sizeInBytes)` (uncompressed), not compressed
+bytes, not the built relation (4 MB threshold promoted a join whose relation was 18 MiB). Skew handling did not
+fire when the advisory size (64 MB) was barely below the hot partition (72 MB) even with a lowered floor.
+3.5 plan names: `SortMergeJoin(skew=true)`, `AQEShuffleRead coalesced | local | skewed | coalesced and skewed`.
+Iceberg `date(ts)=` and `CAST(ts AS DATE)=` on a `day(ts)` partition ARE rewritten to a range and prune.
+Under defaults the specimen's small `dim_product` is broadcast at planning time (Iceberg reports table size).
+
 **`parallelismFirst` nuance:** with the default `true`, Spark *ignores*
 `advisoryPartitionSizeInBytes` when coalescing and only respects
 `minPartitionSize`, targeting the cluster's default parallelism. Any worked

@@ -1,0 +1,38 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(4) Sort [on_time_rate#34 ASC NULLS FIRST], true, 0
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 2
+         +- Exchange rangepartitioning(on_time_rate#34 ASC NULLS FIRST, 200), ENSURE_REQUIREMENTS, [plan_id=232]
+            +- *(3) HashAggregate(keys=[category#43], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#40 <= promised_days#39) THEN 1.0 ELSE 0.0 END))])
+               +- AQEShuffleRead coalesced
+                  +- ShuffleQueryStage 1
+                     +- Exchange hashpartitioning(category#43, 200), ENSURE_REQUIREMENTS, [plan_id=196]
+                        +- *(2) HashAggregate(keys=[category#43], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#40 <= promised_days#39) THEN 1.0 ELSE 0.0 END))])
+                           +- *(2) Project [promised_days#39, delivery_days#40, category#43]
+                              +- *(2) BroadcastHashJoin [product_id#37], [product_id#42], Inner, BuildRight, false
+                                 :- *(2) Project [product_id#37, promised_days#39, delivery_days#40]
+                                 :  +- *(2) Filter isnotnull(product_id#37)
+                                 :     +- *(2) ColumnarToRow
+                                 :        +- BatchScan lab.db.orders[order_ts#36, product_id#37, promised_days#39, delivery_days#40] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                                 +- BroadcastQueryStage 0
+                                    +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=129]
+                                       +- *(1) Filter isnotnull(product_id#42)
+                                          +- *(1) ColumnarToRow
+                                             +- BatchScan lab.db.dim_product[product_id#42, category#43] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   Sort [on_time_rate#34 ASC NULLS FIRST], true, 0
+   +- Exchange rangepartitioning(on_time_rate#34 ASC NULLS FIRST, 200), ENSURE_REQUIREMENTS, [plan_id=101]
+      +- HashAggregate(keys=[category#43], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#40 <= promised_days#39) THEN 1.0 ELSE 0.0 END))])
+         +- Exchange hashpartitioning(category#43, 200), ENSURE_REQUIREMENTS, [plan_id=98]
+            +- HashAggregate(keys=[category#43], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#40 <= promised_days#39) THEN 1.0 ELSE 0.0 END))])
+               +- Project [promised_days#39, delivery_days#40, category#43]
+                  +- BroadcastHashJoin [product_id#37], [product_id#42], Inner, BuildRight, false
+                     :- Project [product_id#37, promised_days#39, delivery_days#40]
+                     :  +- Filter isnotnull(product_id#37)
+                     :     +- BatchScan lab.db.orders[order_ts#36, product_id#37, promised_days#39, delivery_days#40] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=93]
+                        +- Filter isnotnull(product_id#42)
+                           +- BatchScan lab.db.dim_product[product_id#42, category#43] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

@@ -1,0 +1,190 @@
+-- e3h_skew_on_adv8
+-- SELECT p.category, avg(CASE WHEN o.delivery_days <= o.promised_days THEN 1.0 ELSE 0.0 END) AS on_time FROM orders o JOIN dim_product p ON o.product_id = p.product_id GROUP BY p.category
+
+== Physical Plan ==
+AdaptiveSparkPlan (33)
++- == Final Plan ==
+   * HashAggregate (21)
+   +- AQEShuffleRead (20)
+      +- ShuffleQueryStage (19), Statistics(sizeInBytes=34.4 KiB, rowCount=880)
+         +- Exchange (18)
+            +- * HashAggregate (17)
+               +- * Project (16)
+                  +- * SortMergeJoin(skew=true) Inner (15)
+                     :- * Sort (7)
+                     :  +- AQEShuffleRead (6)
+                     :     +- ShuffleQueryStage (5), Statistics(sizeInBytes=1144.4 MiB, rowCount=3.00E+7)
+                     :        +- Exchange (4)
+                     :           +- * Filter (3)
+                     :              +- * ColumnarToRow (2)
+                     :                 +- BatchScan lab.db.orders (1)
+                     +- * Sort (14)
+                        +- AQEShuffleRead (13)
+                           +- ShuffleQueryStage (12), Statistics(sizeInBytes=1953.1 KiB, rowCount=5.00E+4)
+                              +- Exchange (11)
+                                 +- * Filter (10)
+                                    +- * ColumnarToRow (9)
+                                       +- BatchScan lab.db.dim_product (8)
++- == Initial Plan ==
+   HashAggregate (32)
+   +- Exchange (31)
+      +- HashAggregate (30)
+         +- Project (29)
+            +- SortMergeJoin Inner (28)
+               :- Sort (24)
+               :  +- Exchange (23)
+               :     +- Filter (22)
+               :        +- BatchScan lab.db.orders (1)
+               +- Sort (27)
+                  +- Exchange (26)
+                     +- Filter (25)
+                        +- BatchScan lab.db.dim_product (8)
+
+
+(1) BatchScan lab.db.orders
+Output [3]: [product_id#42, promised_days#44, delivery_days#45]
+lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+
+(3) Filter [codegen id : 1]
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Condition : isnotnull(product_id#42)
+
+(4) Exchange
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Arguments: hashpartitioning(product_id#42, 200), ENSURE_REQUIREMENTS, [plan_id=287]
+
+(5) ShuffleQueryStage
+Output [3]: [product_id#42, promised_days#44, delivery_days#45]
+Arguments: 0
+
+(6) AQEShuffleRead
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Arguments: coalesced and skewed
+
+(7) Sort [codegen id : 3]
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Arguments: [product_id#42 ASC NULLS FIRST], false, 0
+
+(8) BatchScan lab.db.dim_product
+Output [2]: [product_id#47, category#48]
+lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(9) ColumnarToRow [codegen id : 2]
+Input [2]: [product_id#47, category#48]
+
+(10) Filter [codegen id : 2]
+Input [2]: [product_id#47, category#48]
+Condition : isnotnull(product_id#47)
+
+(11) Exchange
+Input [2]: [product_id#47, category#48]
+Arguments: hashpartitioning(product_id#47, 200), ENSURE_REQUIREMENTS, [plan_id=303]
+
+(12) ShuffleQueryStage
+Output [2]: [product_id#47, category#48]
+Arguments: 1
+
+(13) AQEShuffleRead
+Input [2]: [product_id#47, category#48]
+Arguments: coalesced
+
+(14) Sort [codegen id : 4]
+Input [2]: [product_id#47, category#48]
+Arguments: [product_id#47 ASC NULLS FIRST], false, 0
+
+(15) SortMergeJoin(skew=true) [codegen id : 5]
+Left keys [1]: [product_id#42]
+Right keys [1]: [product_id#47]
+Join type: Inner
+Join condition: None
+
+(16) Project [codegen id : 5]
+Output [3]: [promised_days#44, delivery_days#45, category#48]
+Input [5]: [product_id#42, promised_days#44, delivery_days#45, product_id#47, category#48]
+
+(17) HashAggregate [codegen id : 5]
+Input [3]: [promised_days#44, delivery_days#45, category#48]
+Keys [1]: [category#48]
+Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [2]: [sum#68, count#69L]
+Results [3]: [category#48, sum#70, count#71L]
+
+(18) Exchange
+Input [3]: [category#48, sum#70, count#71L]
+Arguments: hashpartitioning(category#48, 200), ENSURE_REQUIREMENTS, [plan_id=427]
+
+(19) ShuffleQueryStage
+Output [3]: [category#48, sum#70, count#71L]
+Arguments: 2
+
+(20) AQEShuffleRead
+Input [3]: [category#48, sum#70, count#71L]
+Arguments: coalesced
+
+(21) HashAggregate [codegen id : 6]
+Input [3]: [category#48, sum#70, count#71L]
+Keys [1]: [category#48]
+Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))#60]
+Results [2]: [category#48, cast((avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))#60 / 10.0) as decimal(6,5)) AS on_time#39]
+
+(22) Filter
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Condition : isnotnull(product_id#42)
+
+(23) Exchange
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Arguments: hashpartitioning(product_id#42, 200), ENSURE_REQUIREMENTS, [plan_id=250]
+
+(24) Sort
+Input [3]: [product_id#42, promised_days#44, delivery_days#45]
+Arguments: [product_id#42 ASC NULLS FIRST], false, 0
+
+(25) Filter
+Input [2]: [product_id#47, category#48]
+Condition : isnotnull(product_id#47)
+
+(26) Exchange
+Input [2]: [product_id#47, category#48]
+Arguments: hashpartitioning(product_id#47, 200), ENSURE_REQUIREMENTS, [plan_id=251]
+
+(27) Sort
+Input [2]: [product_id#47, category#48]
+Arguments: [product_id#47 ASC NULLS FIRST], false, 0
+
+(28) SortMergeJoin
+Left keys [1]: [product_id#42]
+Right keys [1]: [product_id#47]
+Join type: Inner
+Join condition: None
+
+(29) Project
+Output [3]: [promised_days#44, delivery_days#45, category#48]
+Input [5]: [product_id#42, promised_days#44, delivery_days#45, product_id#47, category#48]
+
+(30) HashAggregate
+Input [3]: [promised_days#44, delivery_days#45, category#48]
+Keys [1]: [category#48]
+Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [2]: [sum#68, count#69L]
+Results [3]: [category#48, sum#70, count#71L]
+
+(31) Exchange
+Input [3]: [category#48, sum#70, count#71L]
+Arguments: hashpartitioning(category#48, 200), ENSURE_REQUIREMENTS, [plan_id=258]
+
+(32) HashAggregate
+Input [3]: [category#48, sum#70, count#71L]
+Keys [1]: [category#48]
+Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))#60]
+Results [2]: [category#48, cast((avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))#60 / 10.0) as decimal(6,5)) AS on_time#39]
+
+(33) AdaptiveSparkPlan
+Output [2]: [category#48, on_time#39]
+Arguments: isFinalPlan=true
+
+

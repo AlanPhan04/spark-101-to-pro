@@ -1,0 +1,86 @@
+-- e1c_coalesce_pf_false
+-- SELECT customer_id, count(*) AS n, sum(order_total) AS total FROM orders WHERE order_ts >= TIMESTAMP '2026-03-01 00:00:00' AND order_ts < TIMESTAMP '2026-03-08 00:00:00' GROUP BY customer_id
+
+== Physical Plan ==
+AdaptiveSparkPlan (13)
++- == Final Plan ==
+   * HashAggregate (8)
+   +- AQEShuffleRead (7)
+      +- ShuffleQueryStage (6), Statistics(sizeInBytes=245.9 MiB, rowCount=5.37E+6)
+         +- Exchange (5)
+            +- * HashAggregate (4)
+               +- * Project (3)
+                  +- * ColumnarToRow (2)
+                     +- BatchScan lab.db.orders (1)
++- == Initial Plan ==
+   HashAggregate (12)
+   +- Exchange (11)
+      +- HashAggregate (10)
+         +- Project (9)
+            +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [3]: [order_ts#58, customer_id#60, order_total#63]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [3]: [order_ts#58, customer_id#60, order_total#63]
+
+(3) Project [codegen id : 1]
+Output [2]: [customer_id#60, order_total#63]
+Input [3]: [order_ts#58, customer_id#60, order_total#63]
+
+(4) HashAggregate [codegen id : 1]
+Input [2]: [customer_id#60, order_total#63]
+Keys [1]: [customer_id#60]
+Functions [2]: [partial_count(1), partial_sum(order_total#63)]
+Aggregate Attributes [2]: [count#77L, sum#78]
+Results [3]: [customer_id#60, count#79L, sum#80]
+
+(5) Exchange
+Input [3]: [customer_id#60, count#79L, sum#80]
+Arguments: hashpartitioning(customer_id#60, 2000), ENSURE_REQUIREMENTS, [plan_id=117]
+
+(6) ShuffleQueryStage
+Output [3]: [customer_id#60, count#79L, sum#80]
+Arguments: 0
+
+(7) AQEShuffleRead
+Input [3]: [customer_id#60, count#79L, sum#80]
+Arguments: coalesced
+
+(8) HashAggregate [codegen id : 2]
+Input [3]: [customer_id#60, count#79L, sum#80]
+Keys [1]: [customer_id#60]
+Functions [2]: [count(1), sum(order_total#63)]
+Aggregate Attributes [2]: [count(1)#64L, sum(order_total#63)#65]
+Results [3]: [customer_id#60, count(1)#64L AS n#55L, sum(order_total#63)#65 AS total#56]
+
+(9) Project
+Output [2]: [customer_id#60, order_total#63]
+Input [3]: [order_ts#58, customer_id#60, order_total#63]
+
+(10) HashAggregate
+Input [2]: [customer_id#60, order_total#63]
+Keys [1]: [customer_id#60]
+Functions [2]: [partial_count(1), partial_sum(order_total#63)]
+Aggregate Attributes [2]: [count#77L, sum#78]
+Results [3]: [customer_id#60, count#79L, sum#80]
+
+(11) Exchange
+Input [3]: [customer_id#60, count#79L, sum#80]
+Arguments: hashpartitioning(customer_id#60, 2000), ENSURE_REQUIREMENTS, [plan_id=100]
+
+(12) HashAggregate
+Input [3]: [customer_id#60, count#79L, sum#80]
+Keys [1]: [customer_id#60]
+Functions [2]: [count(1), sum(order_total#63)]
+Aggregate Attributes [2]: [count(1)#64L, sum(order_total#63)#65]
+Results [3]: [customer_id#60, count(1)#64L AS n#55L, sum(order_total#63)#65 AS total#56]
+
+(13) AdaptiveSparkPlan
+Output [3]: [customer_id#60, n#55L, total#56]
+Arguments: isFinalPlan=true
+
+

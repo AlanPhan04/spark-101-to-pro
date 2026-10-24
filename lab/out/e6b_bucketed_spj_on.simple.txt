@@ -1,0 +1,27 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(4) HashAggregate(keys=[segment#379], functions=[count(1)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 0
+         +- Exchange hashpartitioning(segment#379, 200), ENSURE_REQUIREMENTS, [plan_id=1259]
+            +- *(3) HashAggregate(keys=[segment#379], functions=[partial_count(1)])
+               +- *(3) Project [segment#379]
+                  +- *(3) SortMergeJoin [customer_id#373], [customer_id#377], Inner
+                     :- *(1) Sort [customer_id#373 ASC NULLS FIRST], false, 0
+                     :  +- *(1) ColumnarToRow
+                     :     +- BatchScan lab.db.orders_b[customer_id#373] lab.db.orders_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=customer_id_bucket] RuntimeFilters: []
+                     +- *(2) Sort [customer_id#377 ASC NULLS FIRST], false, 0
+                        +- *(2) ColumnarToRow
+                           +- BatchScan lab.db.dim_customer_b[customer_id#377, segment#379] lab.db.dim_customer_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=customer_id_bucket] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[segment#379], functions=[count(1)])
+   +- Exchange hashpartitioning(segment#379, 200), ENSURE_REQUIREMENTS, [plan_id=1223]
+      +- HashAggregate(keys=[segment#379], functions=[partial_count(1)])
+         +- Project [segment#379]
+            +- SortMergeJoin [customer_id#373], [customer_id#377], Inner
+               :- Sort [customer_id#373 ASC NULLS FIRST], false, 0
+               :  +- BatchScan lab.db.orders_b[customer_id#373] lab.db.orders_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=customer_id_bucket] RuntimeFilters: []
+               +- Sort [customer_id#377 ASC NULLS FIRST], false, 0
+                  +- BatchScan lab.db.dim_customer_b[customer_id#377, segment#379] lab.db.dim_customer_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=customer_id_bucket] RuntimeFilters: []
+

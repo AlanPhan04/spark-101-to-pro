@@ -1,0 +1,35 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(6) HashAggregate(keys=[segment#349], functions=[count(1)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 2
+         +- Exchange hashpartitioning(segment#349, 200), ENSURE_REQUIREMENTS, [plan_id=1163]
+            +- *(5) HashAggregate(keys=[segment#349], functions=[partial_count(1)])
+               +- *(5) Project [segment#349]
+                  +- *(5) SortMergeJoin [customer_id#343], [customer_id#347], Inner
+                     :- *(3) Sort [customer_id#343 ASC NULLS FIRST], false, 0
+                     :  +- AQEShuffleRead coalesced
+                     :     +- ShuffleQueryStage 0
+                     :        +- Exchange hashpartitioning(customer_id#343, 200), ENSURE_REQUIREMENTS, [plan_id=1061]
+                     :           +- *(1) ColumnarToRow
+                     :              +- BatchScan lab.db.orders_b[customer_id#343] lab.db.orders_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- *(4) Sort [customer_id#347 ASC NULLS FIRST], false, 0
+                        +- AQEShuffleRead coalesced
+                           +- ShuffleQueryStage 1
+                              +- Exchange hashpartitioning(customer_id#347, 200), ENSURE_REQUIREMENTS, [plan_id=1073]
+                                 +- *(2) ColumnarToRow
+                                    +- BatchScan lab.db.dim_customer_b[customer_id#347, segment#349] lab.db.dim_customer_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[segment#349], functions=[count(1)])
+   +- Exchange hashpartitioning(segment#349, 200), ENSURE_REQUIREMENTS, [plan_id=1038]
+      +- HashAggregate(keys=[segment#349], functions=[partial_count(1)])
+         +- Project [segment#349]
+            +- SortMergeJoin [customer_id#343], [customer_id#347], Inner
+               :- Sort [customer_id#343 ASC NULLS FIRST], false, 0
+               :  +- Exchange hashpartitioning(customer_id#343, 200), ENSURE_REQUIREMENTS, [plan_id=1030]
+               :     +- BatchScan lab.db.orders_b[customer_id#343] lab.db.orders_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+               +- Sort [customer_id#347 ASC NULLS FIRST], false, 0
+                  +- Exchange hashpartitioning(customer_id#347, 200), ENSURE_REQUIREMENTS, [plan_id=1031]
+                     +- BatchScan lab.db.dim_customer_b[customer_id#347, segment#349] lab.db.dim_customer_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

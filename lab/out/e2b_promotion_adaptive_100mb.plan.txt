@@ -1,0 +1,200 @@
+-- e2b_promotion_adaptive_100mb
+-- SELECT p.category, count(*) AS orders FROM orders o JOIN dim_product p ON o.product_id = p.product_id WHERE o.order_ts >= TIMESTAMP '2026-03-01 00:00:00' AND o.order_ts < TIMESTAMP '2026-03-08 00:00:00' GROUP BY p.category
+
+== Physical Plan ==
+AdaptiveSparkPlan (35)
++- == Final Plan ==
+   * HashAggregate (22)
+   +- AQEShuffleRead (21)
+      +- ShuffleQueryStage (20), Statistics(sizeInBytes=13.1 KiB, rowCount=420)
+         +- Exchange (19)
+            +- * HashAggregate (18)
+               +- * Project (17)
+                  +- * BroadcastHashJoin Inner BuildRight (16)
+                     :- AQEShuffleRead (7)
+                     :  +- ShuffleQueryStage (6), Statistics(sizeInBytes=155.1 MiB, rowCount=6.78E+6)
+                     :     +- Exchange (5)
+                     :        +- * Project (4)
+                     :           +- * Filter (3)
+                     :              +- * ColumnarToRow (2)
+                     :                 +- BatchScan lab.db.orders (1)
+                     +- BroadcastQueryStage (15), Statistics(sizeInBytes=18.0 MiB, rowCount=5.00E+4)
+                        +- BroadcastExchange (14)
+                           +- AQEShuffleRead (13)
+                              +- ShuffleQueryStage (12), Statistics(sizeInBytes=1953.1 KiB, rowCount=5.00E+4)
+                                 +- Exchange (11)
+                                    +- * Filter (10)
+                                       +- * ColumnarToRow (9)
+                                          +- BatchScan lab.db.dim_product (8)
++- == Initial Plan ==
+   HashAggregate (34)
+   +- Exchange (33)
+      +- HashAggregate (32)
+         +- Project (31)
+            +- SortMergeJoin Inner (30)
+               :- Sort (26)
+               :  +- Exchange (25)
+               :     +- Project (24)
+               :        +- Filter (23)
+               :           +- BatchScan lab.db.orders (1)
+               +- Sort (29)
+                  +- Exchange (28)
+                     +- Filter (27)
+                        +- BatchScan lab.db.dim_product (8)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [order_ts#157, product_id#158]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [order_ts#157, product_id#158]
+
+(3) Filter [codegen id : 1]
+Input [2]: [order_ts#157, product_id#158]
+Condition : isnotnull(product_id#158)
+
+(4) Project [codegen id : 1]
+Output [1]: [product_id#158]
+Input [2]: [order_ts#157, product_id#158]
+
+(5) Exchange
+Input [1]: [product_id#158]
+Arguments: hashpartitioning(product_id#158, 200), ENSURE_REQUIREMENTS, [plan_id=604]
+
+(6) ShuffleQueryStage
+Output [1]: [product_id#158]
+Arguments: 0
+
+(7) AQEShuffleRead
+Input [1]: [product_id#158]
+Arguments: local
+
+(8) BatchScan lab.db.dim_product
+Output [2]: [product_id#163, category#164]
+lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(9) ColumnarToRow [codegen id : 2]
+Input [2]: [product_id#163, category#164]
+
+(10) Filter [codegen id : 2]
+Input [2]: [product_id#163, category#164]
+Condition : isnotnull(product_id#163)
+
+(11) Exchange
+Input [2]: [product_id#163, category#164]
+Arguments: hashpartitioning(product_id#163, 200), ENSURE_REQUIREMENTS, [plan_id=622]
+
+(12) ShuffleQueryStage
+Output [2]: [product_id#163, category#164]
+Arguments: 1
+
+(13) AQEShuffleRead
+Input [2]: [product_id#163, category#164]
+Arguments: local
+
+(14) BroadcastExchange
+Input [2]: [product_id#163, category#164]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=703]
+
+(15) BroadcastQueryStage
+Output [2]: [product_id#163, category#164]
+Arguments: 2
+
+(16) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [product_id#158]
+Right keys [1]: [product_id#163]
+Join type: Inner
+Join condition: None
+
+(17) Project [codegen id : 3]
+Output [1]: [category#164]
+Input [3]: [product_id#158, product_id#163, category#164]
+
+(18) HashAggregate [codegen id : 3]
+Input [1]: [category#164]
+Keys [1]: [category#164]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#183L]
+Results [2]: [category#164, count#184L]
+
+(19) Exchange
+Input [2]: [category#164, count#184L]
+Arguments: hashpartitioning(category#164, 200), ENSURE_REQUIREMENTS, [plan_id=751]
+
+(20) ShuffleQueryStage
+Output [2]: [category#164, count#184L]
+Arguments: 3
+
+(21) AQEShuffleRead
+Input [2]: [category#164, count#184L]
+Arguments: coalesced
+
+(22) HashAggregate [codegen id : 4]
+Input [2]: [category#164, count#184L]
+Keys [1]: [category#164]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#166L]
+Results [2]: [category#164, count(1)#166L AS orders#155L]
+
+(23) Filter
+Input [2]: [order_ts#157, product_id#158]
+Condition : isnotnull(product_id#158)
+
+(24) Project
+Output [1]: [product_id#158]
+Input [2]: [order_ts#157, product_id#158]
+
+(25) Exchange
+Input [1]: [product_id#158]
+Arguments: hashpartitioning(product_id#158, 200), ENSURE_REQUIREMENTS, [plan_id=563]
+
+(26) Sort
+Input [1]: [product_id#158]
+Arguments: [product_id#158 ASC NULLS FIRST], false, 0
+
+(27) Filter
+Input [2]: [product_id#163, category#164]
+Condition : isnotnull(product_id#163)
+
+(28) Exchange
+Input [2]: [product_id#163, category#164]
+Arguments: hashpartitioning(product_id#163, 200), ENSURE_REQUIREMENTS, [plan_id=564]
+
+(29) Sort
+Input [2]: [product_id#163, category#164]
+Arguments: [product_id#163 ASC NULLS FIRST], false, 0
+
+(30) SortMergeJoin
+Left keys [1]: [product_id#158]
+Right keys [1]: [product_id#163]
+Join type: Inner
+Join condition: None
+
+(31) Project
+Output [1]: [category#164]
+Input [3]: [product_id#158, product_id#163, category#164]
+
+(32) HashAggregate
+Input [1]: [category#164]
+Keys [1]: [category#164]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#183L]
+Results [2]: [category#164, count#184L]
+
+(33) Exchange
+Input [2]: [category#164, count#184L]
+Arguments: hashpartitioning(category#164, 200), ENSURE_REQUIREMENTS, [plan_id=571]
+
+(34) HashAggregate
+Input [2]: [category#164, count#184L]
+Keys [1]: [category#164]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#166L]
+Results [2]: [category#164, count(1)#166L AS orders#155L]
+
+(35) AdaptiveSparkPlan
+Output [2]: [category#164, orders#155L]
+Arguments: isFinalPlan=true
+
+

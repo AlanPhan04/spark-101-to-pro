@@ -1,0 +1,81 @@
+== Physical Plan ==
+AdaptiveSparkPlan (14)
++- Sort (13)
+   +- Exchange (12)
+      +- HashAggregate (11)
+         +- Exchange (10)
+            +- HashAggregate (9)
+               +- Project (8)
+                  +- BroadcastHashJoin Inner BuildRight (7)
+                     :- Project (3)
+                     :  +- Filter (2)
+                     :     +- BatchScan lab.db.orders (1)
+                     +- BroadcastExchange (6)
+                        +- Filter (5)
+                           +- BatchScan lab.db.dim_product (4)
+
+
+(1) BatchScan lab.db.orders
+Output [4]: [order_ts#2, product_id#3, promised_days#5, delivery_days#6]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=]
+
+(2) Filter
+Input [4]: [order_ts#2, product_id#3, promised_days#5, delivery_days#6]
+Condition : isnotnull(product_id#3)
+
+(3) Project
+Output [3]: [product_id#3, promised_days#5, delivery_days#6]
+Input [4]: [order_ts#2, product_id#3, promised_days#5, delivery_days#6]
+
+(4) BatchScan lab.db.dim_product
+Output [2]: [product_id#8, category#9]
+lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(5) Filter
+Input [2]: [product_id#8, category#9]
+Condition : isnotnull(product_id#8)
+
+(6) BroadcastExchange
+Input [2]: [product_id#8, category#9]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=43]
+
+(7) BroadcastHashJoin
+Left keys [1]: [product_id#3]
+Right keys [1]: [product_id#8]
+Join type: Inner
+Join condition: None
+
+(8) Project
+Output [3]: [promised_days#5, delivery_days#6, category#9]
+Input [5]: [product_id#3, promised_days#5, delivery_days#6, product_id#8, category#9]
+
+(9) HashAggregate
+Input [3]: [promised_days#5, delivery_days#6, category#9]
+Keys [1]: [category#9]
+Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [2]: [sum#30, count#31L]
+Results [3]: [category#9, sum#32, count#33L]
+
+(10) Exchange
+Input [3]: [category#9, sum#32, count#33L]
+Arguments: hashpartitioning(category#9, 200), ENSURE_REQUIREMENTS, [plan_id=48]
+
+(11) HashAggregate
+Input [3]: [category#9, sum#32, count#33L]
+Keys [1]: [category#9]
+Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#21]
+Results [2]: [category#9, cast((avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#21 / 10.0) as decimal(6,5)) AS on_time_rate#0]
+
+(12) Exchange
+Input [2]: [category#9, on_time_rate#0]
+Arguments: rangepartitioning(on_time_rate#0 ASC NULLS FIRST, 200), ENSURE_REQUIREMENTS, [plan_id=51]
+
+(13) Sort
+Input [2]: [category#9, on_time_rate#0]
+Arguments: [on_time_rate#0 ASC NULLS FIRST], true, 0
+
+(14) AdaptiveSparkPlan
+Output [2]: [category#9, on_time_rate#0]
+Arguments: isFinalPlan=false
+

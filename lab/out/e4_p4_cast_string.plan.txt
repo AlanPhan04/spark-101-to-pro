@@ -1,0 +1,91 @@
+-- e4_p4_cast_string
+-- SELECT sum(order_total) AS s FROM orders WHERE CAST(order_ts AS STRING) LIKE '2026-03-03%'
+
+== Physical Plan ==
+AdaptiveSparkPlan (14)
++- == Final Plan ==
+   * HashAggregate (8)
+   +- ShuffleQueryStage (7), Statistics(sizeInBytes=496.0 B, rowCount=31)
+      +- Exchange (6)
+         +- * HashAggregate (5)
+            +- * Project (4)
+               +- * Filter (3)
+                  +- * ColumnarToRow (2)
+                     +- BatchScan lab.db.orders (1)
++- == Initial Plan ==
+   HashAggregate (13)
+   +- Exchange (12)
+      +- HashAggregate (11)
+         +- Project (10)
+            +- Filter (9)
+               +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [order_ts#65, order_total#70]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [order_ts#65, order_total#70]
+
+(3) Filter [codegen id : 1]
+Input [2]: [order_ts#65, order_total#70]
+Condition : StartsWith(cast(order_ts#65 as string), 2026-03-03)
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#70]
+Input [2]: [order_ts#65, order_total#70]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#70]
+Keys: []
+Functions [1]: [partial_sum(order_total#70)]
+Aggregate Attributes [1]: [sum#80]
+Results [1]: [sum#81]
+
+(6) Exchange
+Input [1]: [sum#81]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=167]
+
+(7) ShuffleQueryStage
+Output [1]: [sum#81]
+Arguments: 0
+
+(8) HashAggregate [codegen id : 2]
+Input [1]: [sum#81]
+Keys: []
+Functions [1]: [sum(order_total#70)]
+Aggregate Attributes [1]: [sum(order_total#70)#76]
+Results [1]: [sum(order_total#70)#76 AS s#63]
+
+(9) Filter
+Input [2]: [order_ts#65, order_total#70]
+Condition : StartsWith(cast(order_ts#65 as string), 2026-03-03)
+
+(10) Project
+Output [1]: [order_total#70]
+Input [2]: [order_ts#65, order_total#70]
+
+(11) HashAggregate
+Input [1]: [order_total#70]
+Keys: []
+Functions [1]: [partial_sum(order_total#70)]
+Aggregate Attributes [1]: [sum#80]
+Results [1]: [sum#81]
+
+(12) Exchange
+Input [1]: [sum#81]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=147]
+
+(13) HashAggregate
+Input [1]: [sum#81]
+Keys: []
+Functions [1]: [sum(order_total#70)]
+Aggregate Attributes [1]: [sum(order_total#70)#76]
+Results [1]: [sum(order_total#70)#76 AS s#63]
+
+(14) AdaptiveSparkPlan
+Output [1]: [s#63]
+Arguments: isFinalPlan=true
+
+

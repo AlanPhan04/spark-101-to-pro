@@ -1,0 +1,170 @@
+-- e6a_bucketed_spj_off
+-- SELECT c.segment, count(*) AS n FROM orders_b o JOIN dim_customer_b c ON o.customer_id = c.customer_id GROUP BY c.segment
+
+== Physical Plan ==
+AdaptiveSparkPlan (29)
++- == Final Plan ==
+   * HashAggregate (19)
+   +- AQEShuffleRead (18)
+      +- ShuffleQueryStage (17), Statistics(sizeInBytes=5.6 KiB, rowCount=180)
+         +- Exchange (16)
+            +- * HashAggregate (15)
+               +- * Project (14)
+                  +- * SortMergeJoin Inner (13)
+                     :- * Sort (6)
+                     :  +- AQEShuffleRead (5)
+                     :     +- ShuffleQueryStage (4), Statistics(sizeInBytes=915.5 MiB, rowCount=3.00E+7)
+                     :        +- Exchange (3)
+                     :           +- * ColumnarToRow (2)
+                     :              +- BatchScan lab.db.orders_b (1)
+                     +- * Sort (12)
+                        +- AQEShuffleRead (11)
+                           +- ShuffleQueryStage (10), Statistics(sizeInBytes=91.6 MiB, rowCount=2.00E+6)
+                              +- Exchange (9)
+                                 +- * ColumnarToRow (8)
+                                    +- BatchScan lab.db.dim_customer_b (7)
++- == Initial Plan ==
+   HashAggregate (28)
+   +- Exchange (27)
+      +- HashAggregate (26)
+         +- Project (25)
+            +- SortMergeJoin Inner (24)
+               :- Sort (21)
+               :  +- Exchange (20)
+               :     +- BatchScan lab.db.orders_b (1)
+               +- Sort (23)
+                  +- Exchange (22)
+                     +- BatchScan lab.db.dim_customer_b (7)
+
+
+(1) BatchScan lab.db.orders_b
+Output [1]: [customer_id#343]
+lab.db.orders_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [1]: [customer_id#343]
+
+(3) Exchange
+Input [1]: [customer_id#343]
+Arguments: hashpartitioning(customer_id#343, 200), ENSURE_REQUIREMENTS, [plan_id=1061]
+
+(4) ShuffleQueryStage
+Output [1]: [customer_id#343]
+Arguments: 0
+
+(5) AQEShuffleRead
+Input [1]: [customer_id#343]
+Arguments: coalesced
+
+(6) Sort [codegen id : 3]
+Input [1]: [customer_id#343]
+Arguments: [customer_id#343 ASC NULLS FIRST], false, 0
+
+(7) BatchScan lab.db.dim_customer_b
+Output [2]: [customer_id#347, segment#349]
+lab.db.dim_customer_b (branch=null) [filters=customer_id IS NOT NULL, groupedBy=]
+
+(8) ColumnarToRow [codegen id : 2]
+Input [2]: [customer_id#347, segment#349]
+
+(9) Exchange
+Input [2]: [customer_id#347, segment#349]
+Arguments: hashpartitioning(customer_id#347, 200), ENSURE_REQUIREMENTS, [plan_id=1073]
+
+(10) ShuffleQueryStage
+Output [2]: [customer_id#347, segment#349]
+Arguments: 1
+
+(11) AQEShuffleRead
+Input [2]: [customer_id#347, segment#349]
+Arguments: coalesced
+
+(12) Sort [codegen id : 4]
+Input [2]: [customer_id#347, segment#349]
+Arguments: [customer_id#347 ASC NULLS FIRST], false, 0
+
+(13) SortMergeJoin [codegen id : 5]
+Left keys [1]: [customer_id#343]
+Right keys [1]: [customer_id#347]
+Join type: Inner
+Join condition: None
+
+(14) Project [codegen id : 5]
+Output [1]: [segment#349]
+Input [3]: [customer_id#343, customer_id#347, segment#349]
+
+(15) HashAggregate [codegen id : 5]
+Input [1]: [segment#349]
+Keys [1]: [segment#349]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#367L]
+Results [2]: [segment#349, count#368L]
+
+(16) Exchange
+Input [2]: [segment#349, count#368L]
+Arguments: hashpartitioning(segment#349, 200), ENSURE_REQUIREMENTS, [plan_id=1163]
+
+(17) ShuffleQueryStage
+Output [2]: [segment#349, count#368L]
+Arguments: 2
+
+(18) AQEShuffleRead
+Input [2]: [segment#349, count#368L]
+Arguments: coalesced
+
+(19) HashAggregate [codegen id : 6]
+Input [2]: [segment#349, count#368L]
+Keys [1]: [segment#349]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#351L]
+Results [2]: [segment#349, count(1)#351L AS n#339L]
+
+(20) Exchange
+Input [1]: [customer_id#343]
+Arguments: hashpartitioning(customer_id#343, 200), ENSURE_REQUIREMENTS, [plan_id=1030]
+
+(21) Sort
+Input [1]: [customer_id#343]
+Arguments: [customer_id#343 ASC NULLS FIRST], false, 0
+
+(22) Exchange
+Input [2]: [customer_id#347, segment#349]
+Arguments: hashpartitioning(customer_id#347, 200), ENSURE_REQUIREMENTS, [plan_id=1031]
+
+(23) Sort
+Input [2]: [customer_id#347, segment#349]
+Arguments: [customer_id#347 ASC NULLS FIRST], false, 0
+
+(24) SortMergeJoin
+Left keys [1]: [customer_id#343]
+Right keys [1]: [customer_id#347]
+Join type: Inner
+Join condition: None
+
+(25) Project
+Output [1]: [segment#349]
+Input [3]: [customer_id#343, customer_id#347, segment#349]
+
+(26) HashAggregate
+Input [1]: [segment#349]
+Keys [1]: [segment#349]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#367L]
+Results [2]: [segment#349, count#368L]
+
+(27) Exchange
+Input [2]: [segment#349, count#368L]
+Arguments: hashpartitioning(segment#349, 200), ENSURE_REQUIREMENTS, [plan_id=1038]
+
+(28) HashAggregate
+Input [2]: [segment#349, count#368L]
+Keys [1]: [segment#349]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#351L]
+Results [2]: [segment#349, count(1)#351L AS n#339L]
+
+(29) AdaptiveSparkPlan
+Output [2]: [segment#349, n#339L]
+Arguments: isFinalPlan=true
+
+

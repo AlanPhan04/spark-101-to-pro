@@ -1,0 +1,44 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(4) HashAggregate(keys=[category#42], functions=[count(1)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 2
+         +- Exchange hashpartitioning(category#42, 200), ENSURE_REQUIREMENTS, [plan_id=267]
+            +- *(3) HashAggregate(keys=[category#42], functions=[partial_count(1)])
+               +- *(3) Project [category#42]
+                  +- *(3) BroadcastHashJoin [product_id#31], [product_id#41], Inner, BuildRight, false
+                     :- *(3) Project [product_id#31]
+                     :  +- *(3) BroadcastHashJoin [order_date#36], [date#37], Inner, BuildRight, false
+                     :     :- *(3) Filter isnotnull(product_id#31)
+                     :     :  +- *(3) ColumnarToRow
+                     :     :     +- BatchScan lab.db.orders_d[product_id#31, order_date#36] lab.db.orders_d (branch=null) [filters=order_date IS NOT NULL, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     :     +- BroadcastQueryStage 0
+                     :        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=140]
+                     :           +- *(1) Project [date#37]
+                     :              +- *(1) Filter ((((isnotnull(day_of_week#40) AND isnotnull(month#39)) AND (day_of_week#40 = Sat)) AND (month#39 = 3)) AND isnotnull(date#37))
+                     :                 +- *(1) ColumnarToRow
+                     :                    +- BatchScan lab.db.dim_date[date#37, month#39, day_of_week#40] lab.db.dim_date (branch=null) [filters=day_of_week IS NOT NULL, month IS NOT NULL, day_of_week = 'Sat', month = 3, date IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- BroadcastQueryStage 1
+                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=158]
+                           +- *(2) Filter isnotnull(product_id#41)
+                              +- *(2) ColumnarToRow
+                                 +- BatchScan lab.db.dim_product[product_id#41, category#42] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[category#42], functions=[count(1)])
+   +- Exchange hashpartitioning(category#42, 200), ENSURE_REQUIREMENTS, [plan_id=107]
+      +- HashAggregate(keys=[category#42], functions=[partial_count(1)])
+         +- Project [category#42]
+            +- BroadcastHashJoin [product_id#31], [product_id#41], Inner, BuildRight, false
+               :- Project [product_id#31]
+               :  +- BroadcastHashJoin [order_date#36], [date#37], Inner, BuildRight, false
+               :     :- Filter isnotnull(product_id#31)
+               :     :  +- BatchScan lab.db.orders_d[product_id#31, order_date#36] lab.db.orders_d (branch=null) [filters=order_date IS NOT NULL, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+               :     +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=98]
+               :        +- Project [date#37]
+               :           +- Filter ((((isnotnull(day_of_week#40) AND isnotnull(month#39)) AND (day_of_week#40 = Sat)) AND (month#39 = 3)) AND isnotnull(date#37))
+               :              +- BatchScan lab.db.dim_date[date#37, month#39, day_of_week#40] lab.db.dim_date (branch=null) [filters=day_of_week IS NOT NULL, month IS NOT NULL, day_of_week = 'Sat', month = 3, date IS NOT NULL, groupedBy=] RuntimeFilters: []
+               +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=102]
+                  +- Filter isnotnull(product_id#41)
+                     +- BatchScan lab.db.dim_product[product_id#41, category#42] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

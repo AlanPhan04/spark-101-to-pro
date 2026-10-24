@@ -1,0 +1,123 @@
+-- e1f_big_pf_true_adv4
+-- SELECT count(*) FROM (SELECT customer_id, product_id, count(*) AS n FROM orders GROUP BY customer_id, product_id)
+
+== Physical Plan ==
+AdaptiveSparkPlan (18)
++- == Final Plan ==
+   * HashAggregate (11)
+   +- ShuffleQueryStage (10), Statistics(sizeInBytes=1888.0 B, rowCount=118)
+      +- Exchange (9)
+         +- * HashAggregate (8)
+            +- * HashAggregate (7)
+               +- AQEShuffleRead (6)
+                  +- ShuffleQueryStage (5), Statistics(sizeInBytes=1344.8 MiB, rowCount=2.94E+7)
+                     +- Exchange (4)
+                        +- * HashAggregate (3)
+                           +- * ColumnarToRow (2)
+                              +- BatchScan lab.db.orders (1)
++- == Initial Plan ==
+   HashAggregate (17)
+   +- Exchange (16)
+      +- HashAggregate (15)
+         +- HashAggregate (14)
+            +- Exchange (13)
+               +- HashAggregate (12)
+                  +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [product_id#3, customer_id#4]
+lab.db.orders (branch=null) [filters=, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [product_id#3, customer_id#4]
+
+(3) HashAggregate [codegen id : 1]
+Input [2]: [product_id#3, customer_id#4]
+Keys [2]: [customer_id#4, product_id#3]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [customer_id#4, product_id#3]
+
+(4) Exchange
+Input [2]: [customer_id#4, product_id#3]
+Arguments: hashpartitioning(customer_id#4, product_id#3, 2000), ENSURE_REQUIREMENTS, [plan_id=43]
+
+(5) ShuffleQueryStage
+Output [2]: [customer_id#4, product_id#3]
+Arguments: 0
+
+(6) AQEShuffleRead
+Input [2]: [customer_id#4, product_id#3]
+Arguments: coalesced
+
+(7) HashAggregate [codegen id : 2]
+Input [2]: [customer_id#4, product_id#3]
+Keys [2]: [customer_id#4, product_id#3]
+Functions: []
+Aggregate Attributes: []
+Results: []
+
+(8) HashAggregate [codegen id : 2]
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#19L]
+Results [1]: [count#20L]
+
+(9) Exchange
+Input [1]: [count#20L]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=76]
+
+(10) ShuffleQueryStage
+Output [1]: [count#20L]
+Arguments: 1
+
+(11) HashAggregate [codegen id : 3]
+Input [1]: [count#20L]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#9L]
+Results [1]: [count(1)#9L AS count(1)#10L]
+
+(12) HashAggregate
+Input [2]: [product_id#3, customer_id#4]
+Keys [2]: [customer_id#4, product_id#3]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [customer_id#4, product_id#3]
+
+(13) Exchange
+Input [2]: [customer_id#4, product_id#3]
+Arguments: hashpartitioning(customer_id#4, product_id#3, 2000), ENSURE_REQUIREMENTS, [plan_id=21]
+
+(14) HashAggregate
+Input [2]: [customer_id#4, product_id#3]
+Keys [2]: [customer_id#4, product_id#3]
+Functions: []
+Aggregate Attributes: []
+Results: []
+
+(15) HashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#19L]
+Results [1]: [count#20L]
+
+(16) Exchange
+Input [1]: [count#20L]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=25]
+
+(17) HashAggregate
+Input [1]: [count#20L]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#9L]
+Results [1]: [count(1)#9L AS count(1)#10L]
+
+(18) AdaptiveSparkPlan
+Output [1]: [count(1)#10L]
+Arguments: isFinalPlan=true
+
+

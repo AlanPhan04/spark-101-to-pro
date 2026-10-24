@@ -1,0 +1,19 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(2) HashAggregate(keys=[], functions=[sum(order_total#91)])
+   +- ShuffleQueryStage 0
+      +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=218]
+         +- *(1) HashAggregate(keys=[], functions=[partial_sum(order_total#91)])
+            +- *(1) Project [order_total#91]
+               +- *(1) Filter ((order_ts#86 + INTERVAL '1' DAY > 2026-03-04 00:00:00) AND (order_ts#86 + INTERVAL '1' DAY <= 2026-03-05 00:00:00))
+                  +- *(1) ColumnarToRow
+                     +- BatchScan lab.db.orders[order_ts#86, order_total#91] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[], functions=[sum(order_total#91)])
+   +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=198]
+      +- HashAggregate(keys=[], functions=[partial_sum(order_total#91)])
+         +- Project [order_total#91]
+            +- Filter ((order_ts#86 + INTERVAL '1' DAY > 2026-03-04 00:00:00) AND (order_ts#86 + INTERVAL '1' DAY <= 2026-03-05 00:00:00))
+               +- BatchScan lab.db.orders[order_ts#86, order_total#91] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, groupedBy=] RuntimeFilters: []
+

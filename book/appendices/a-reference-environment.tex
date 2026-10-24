@@ -48,6 +48,37 @@ discussion depends on exactly this separation). A cluster of 10 such
 executors gives 40 task slots --- the number \Cref{sec:shuffle-sizing}'s
 shuffle-partition-count reasoning starts from.
 
+\section{The lab: where the captured output comes from}
+\label{sec:refenv-lab}
+
+The plans, task counts, and timings printed in the book's listings were captured
+on a laptop-sized \emph{lab}, not on the reference cluster. The lab is a single
+Docker container running Spark 3.5.2 on JDK~17 in local mode with eight cores,
+Apache Iceberg 1.6.1, and a file-based Iceberg catalog; it has no Hive Metastore,
+no GCS, and no GKE. Its source lives in the \texttt{lab/} directory of the book's
+repository, including the data generator and every experiment script, so any
+number can be reproduced.
+
+\begin{itemize}
+  \item \textbf{Data.} The generator builds the \texttt{orders} star schema of
+        the next section at 30 million \texttt{orders} rows over March 2026,
+        2 million \texttt{dim\_customer} rows, and 50\,000 \texttt{dim\_product}
+        rows, with one product taking 30\% of all orders. \texttt{orders} is
+        about 1~GB of Parquet.
+  \item \textbf{Parallelism.} \conf{spark.default.parallelism} is pinned to 40,
+        so the quantity AQE's coalescing divides by matches the reference
+        cluster's 40 task slots (\Cref{sec:refenv-cluster}), even though only
+        eight tasks run at once.
+  \item \textbf{Scaling.} Production thresholds assume production data. Where an
+        experiment needs a smaller advisory size or skew floor to trigger, the
+        text says so and gives the values used.
+\end{itemize}
+
+What transfers is the mechanism: which plan node appears, which task count
+follows from which formula. What does not is absolute time. Treat every
+duration in the book as a comparison between two runs on the same lab, never as
+a prediction for your cluster.
+
 \section{The running example: \texttt{orders}}
 \label{sec:refenv-orders}
 

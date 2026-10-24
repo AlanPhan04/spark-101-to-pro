@@ -1,0 +1,41 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(6) HashAggregate(keys=[category#51], functions=[count(1)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 2
+         +- Exchange hashpartitioning(category#51, 200), ENSURE_REQUIREMENTS, [plan_id=366]
+            +- *(5) HashAggregate(keys=[category#51], functions=[partial_count(1)])
+               +- *(5) Project [category#51]
+                  +- *(5) SortMergeJoin [product_id#45], [product_id#50], Inner
+                     :- *(3) Sort [product_id#45 ASC NULLS FIRST], false, 0
+                     :  +- AQEShuffleRead coalesced
+                     :     +- ShuffleQueryStage 0
+                     :        +- Exchange hashpartitioning(product_id#45, 200), ENSURE_REQUIREMENTS, [plan_id=256]
+                     :           +- *(1) Project [product_id#45]
+                     :              +- *(1) Filter isnotnull(product_id#45)
+                     :                 +- *(1) ColumnarToRow
+                     :                    +- BatchScan lab.db.orders[order_ts#44, product_id#45] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- *(4) Sort [product_id#50 ASC NULLS FIRST], false, 0
+                        +- AQEShuffleRead coalesced
+                           +- ShuffleQueryStage 1
+                              +- Exchange hashpartitioning(product_id#50, 200), ENSURE_REQUIREMENTS, [plan_id=274]
+                                 +- *(2) Filter isnotnull(product_id#50)
+                                    +- *(2) ColumnarToRow
+                                       +- BatchScan lab.db.dim_product[product_id#50, category#51] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[category#51], functions=[count(1)])
+   +- Exchange hashpartitioning(category#51, 200), ENSURE_REQUIREMENTS, [plan_id=223]
+      +- HashAggregate(keys=[category#51], functions=[partial_count(1)])
+         +- Project [category#51]
+            +- SortMergeJoin [product_id#45], [product_id#50], Inner
+               :- Sort [product_id#45 ASC NULLS FIRST], false, 0
+               :  +- Exchange hashpartitioning(product_id#45, 200), ENSURE_REQUIREMENTS, [plan_id=215]
+               :     +- Project [product_id#45]
+               :        +- Filter isnotnull(product_id#45)
+               :           +- BatchScan lab.db.orders[order_ts#44, product_id#45] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+               +- Sort [product_id#50 ASC NULLS FIRST], false, 0
+                  +- Exchange hashpartitioning(product_id#50, 200), ENSURE_REQUIREMENTS, [plan_id=216]
+                     +- Filter isnotnull(product_id#50)
+                        +- BatchScan lab.db.dim_product[product_id#50, category#51] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

@@ -1,0 +1,91 @@
+-- e4_p5_arith
+-- SELECT sum(order_total) AS s FROM orders WHERE order_ts + INTERVAL 1 DAY > TIMESTAMP '2026-03-04 00:00:00' AND order_ts + INTERVAL 1 DAY <= TIMESTAMP '2026-03-05 00:00:00'
+
+== Physical Plan ==
+AdaptiveSparkPlan (14)
++- == Final Plan ==
+   * HashAggregate (8)
+   +- ShuffleQueryStage (7), Statistics(sizeInBytes=496.0 B, rowCount=31)
+      +- Exchange (6)
+         +- * HashAggregate (5)
+            +- * Project (4)
+               +- * Filter (3)
+                  +- * ColumnarToRow (2)
+                     +- BatchScan lab.db.orders (1)
++- == Initial Plan ==
+   HashAggregate (13)
+   +- Exchange (12)
+      +- HashAggregate (11)
+         +- Project (10)
+            +- Filter (9)
+               +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [order_ts#86, order_total#91]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [order_ts#86, order_total#91]
+
+(3) Filter [codegen id : 1]
+Input [2]: [order_ts#86, order_total#91]
+Condition : ((order_ts#86 + INTERVAL '1' DAY > 2026-03-04 00:00:00) AND (order_ts#86 + INTERVAL '1' DAY <= 2026-03-05 00:00:00))
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#91]
+Input [2]: [order_ts#86, order_total#91]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#91]
+Keys: []
+Functions [1]: [partial_sum(order_total#91)]
+Aggregate Attributes [1]: [sum#101]
+Results [1]: [sum#102]
+
+(6) Exchange
+Input [1]: [sum#102]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=218]
+
+(7) ShuffleQueryStage
+Output [1]: [sum#102]
+Arguments: 0
+
+(8) HashAggregate [codegen id : 2]
+Input [1]: [sum#102]
+Keys: []
+Functions [1]: [sum(order_total#91)]
+Aggregate Attributes [1]: [sum(order_total#91)#97]
+Results [1]: [sum(order_total#91)#97 AS s#84]
+
+(9) Filter
+Input [2]: [order_ts#86, order_total#91]
+Condition : ((order_ts#86 + INTERVAL '1' DAY > 2026-03-04 00:00:00) AND (order_ts#86 + INTERVAL '1' DAY <= 2026-03-05 00:00:00))
+
+(10) Project
+Output [1]: [order_total#91]
+Input [2]: [order_ts#86, order_total#91]
+
+(11) HashAggregate
+Input [1]: [order_total#91]
+Keys: []
+Functions [1]: [partial_sum(order_total#91)]
+Aggregate Attributes [1]: [sum#101]
+Results [1]: [sum#102]
+
+(12) Exchange
+Input [1]: [sum#102]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=198]
+
+(13) HashAggregate
+Input [1]: [sum#102]
+Keys: []
+Functions [1]: [sum(order_total#91)]
+Aggregate Attributes [1]: [sum(order_total#91)#97]
+Results [1]: [sum(order_total#91)#97 AS s#84]
+
+(14) AdaptiveSparkPlan
+Output [1]: [s#84]
+Arguments: isFinalPlan=true
+
+

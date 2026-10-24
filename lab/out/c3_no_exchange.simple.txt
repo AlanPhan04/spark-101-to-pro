@@ -1,0 +1,6 @@
+== Physical Plan ==
+*(1) Project [order_id#160]
++- *(1) Filter (isnotnull(order_total#166) AND (order_total#166 > 300.0))
+   +- *(1) ColumnarToRow
+      +- BatchScan lab.db.orders[order_id#160, order_ts#161, order_total#166] lab.db.orders (branch=null) [filters=order_total IS NOT NULL, order_ts IS NOT NULL, order_total > 300.0, order_ts >= 1772323200000000, order_ts < 1772409600000000, groupedBy=] RuntimeFilters: []
+

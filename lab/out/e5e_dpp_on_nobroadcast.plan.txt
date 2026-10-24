@@ -1,0 +1,308 @@
+-- e5e_dpp_on_nobroadcast
+-- SELECT p.category, count(*) AS n FROM orders_d o JOIN dim_date d ON o.order_date = d.date JOIN dim_product p ON o.product_id = p.product_id WHERE d.day_of_week = 'Sat' AND d.month = 3 GROUP BY p.category
+
+== Physical Plan ==
+AdaptiveSparkPlan (56)
++- == Final Plan ==
+   * HashAggregate (35)
+   +- AQEShuffleRead (34)
+      +- ShuffleQueryStage (33), Statistics(sizeInBytes=8.1 KiB, rowCount=260)
+         +- Exchange (32)
+            +- * HashAggregate (31)
+               +- * Project (30)
+                  +- * SortMergeJoin Inner (29)
+                     :- * Sort (21)
+                     :  +- AQEShuffleRead (20)
+                     :     +- ShuffleQueryStage (19), Statistics(sizeInBytes=88.6 MiB, rowCount=3.87E+6)
+                     :        +- Exchange (18)
+                     :           +- * Project (17)
+                     :              +- * SortMergeJoin Inner (16)
+                     :                 :- * Sort (7)
+                     :                 :  +- AQEShuffleRead (6)
+                     :                 :     +- ShuffleQueryStage (5), Statistics(sizeInBytes=915.5 MiB, rowCount=3.00E+7)
+                     :                 :        +- Exchange (4)
+                     :                 :           +- * Filter (3)
+                     :                 :              +- * ColumnarToRow (2)
+                     :                 :                 +- BatchScan lab.db.orders_d (1)
+                     :                 +- * Sort (15)
+                     :                    +- AQEShuffleRead (14)
+                     :                       +- ShuffleQueryStage (13), Statistics(sizeInBytes=64.0 B, rowCount=4)
+                     :                          +- Exchange (12)
+                     :                             +- * Project (11)
+                     :                                +- * Filter (10)
+                     :                                   +- * ColumnarToRow (9)
+                     :                                      +- BatchScan lab.db.dim_date (8)
+                     +- * Sort (28)
+                        +- AQEShuffleRead (27)
+                           +- ShuffleQueryStage (26), Statistics(sizeInBytes=1953.1 KiB, rowCount=5.00E+4)
+                              +- Exchange (25)
+                                 +- * Filter (24)
+                                    +- * ColumnarToRow (23)
+                                       +- BatchScan lab.db.dim_product (22)
++- == Initial Plan ==
+   HashAggregate (55)
+   +- Exchange (54)
+      +- HashAggregate (53)
+         +- Project (52)
+            +- SortMergeJoin Inner (51)
+               :- Sort (47)
+               :  +- Exchange (46)
+               :     +- Project (45)
+               :        +- SortMergeJoin Inner (44)
+               :           :- Sort (39)
+               :           :  +- Exchange (38)
+               :           :     +- Filter (37)
+               :           :        +- BatchScan lab.db.orders_d (36)
+               :           +- Sort (43)
+               :              +- Exchange (42)
+               :                 +- Project (41)
+               :                    +- Filter (40)
+               :                       +- BatchScan lab.db.dim_date (8)
+               +- Sort (50)
+                  +- Exchange (49)
+                     +- Filter (48)
+                        +- BatchScan lab.db.dim_product (22)
+
+
+(1) BatchScan lab.db.orders_d
+Output [2]: [product_id#119, order_date#124]
+lab.db.orders_d (branch=null) [filters=order_date IS NOT NULL, product_id IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [product_id#119, order_date#124]
+
+(3) Filter [codegen id : 1]
+Input [2]: [product_id#119, order_date#124]
+Condition : isnotnull(product_id#119)
+
+(4) Exchange
+Input [2]: [product_id#119, order_date#124]
+Arguments: hashpartitioning(order_date#124, 200), ENSURE_REQUIREMENTS, [plan_id=759]
+
+(5) ShuffleQueryStage
+Output [2]: [product_id#119, order_date#124]
+Arguments: 0
+
+(6) AQEShuffleRead
+Input [2]: [product_id#119, order_date#124]
+Arguments: coalesced
+
+(7) Sort [codegen id : 4]
+Input [2]: [product_id#119, order_date#124]
+Arguments: [order_date#124 ASC NULLS FIRST], false, 0
+
+(8) BatchScan lab.db.dim_date
+Output [3]: [date#125, month#127, day_of_week#128]
+lab.db.dim_date (branch=null) [filters=day_of_week IS NOT NULL, month IS NOT NULL, day_of_week = 'Sat', month = 3, date IS NOT NULL, groupedBy=]
+
+(9) ColumnarToRow [codegen id : 2]
+Input [3]: [date#125, month#127, day_of_week#128]
+
+(10) Filter [codegen id : 2]
+Input [3]: [date#125, month#127, day_of_week#128]
+Condition : ((((isnotnull(day_of_week#128) AND isnotnull(month#127)) AND (day_of_week#128 = Sat)) AND (month#127 = 3)) AND isnotnull(date#125))
+
+(11) Project [codegen id : 2]
+Output [1]: [date#125]
+Input [3]: [date#125, month#127, day_of_week#128]
+
+(12) Exchange
+Input [1]: [date#125]
+Arguments: hashpartitioning(date#125, 200), ENSURE_REQUIREMENTS, [plan_id=779]
+
+(13) ShuffleQueryStage
+Output [1]: [date#125]
+Arguments: 1
+
+(14) AQEShuffleRead
+Input [1]: [date#125]
+Arguments: coalesced
+
+(15) Sort [codegen id : 5]
+Input [1]: [date#125]
+Arguments: [date#125 ASC NULLS FIRST], false, 0
+
+(16) SortMergeJoin [codegen id : 6]
+Left keys [1]: [order_date#124]
+Right keys [1]: [date#125]
+Join type: Inner
+Join condition: None
+
+(17) Project [codegen id : 6]
+Output [1]: [product_id#119]
+Input [3]: [product_id#119, order_date#124, date#125]
+
+(18) Exchange
+Input [1]: [product_id#119]
+Arguments: hashpartitioning(product_id#119, 200), ENSURE_REQUIREMENTS, [plan_id=931]
+
+(19) ShuffleQueryStage
+Output [1]: [product_id#119]
+Arguments: 3
+
+(20) AQEShuffleRead
+Input [1]: [product_id#119]
+Arguments: coalesced
+
+(21) Sort [codegen id : 7]
+Input [1]: [product_id#119]
+Arguments: [product_id#119 ASC NULLS FIRST], false, 0
+
+(22) BatchScan lab.db.dim_product
+Output [2]: [product_id#129, category#130]
+lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(23) ColumnarToRow [codegen id : 3]
+Input [2]: [product_id#129, category#130]
+
+(24) Filter [codegen id : 3]
+Input [2]: [product_id#129, category#130]
+Condition : isnotnull(product_id#129)
+
+(25) Exchange
+Input [2]: [product_id#129, category#130]
+Arguments: hashpartitioning(product_id#129, 200), ENSURE_REQUIREMENTS, [plan_id=801]
+
+(26) ShuffleQueryStage
+Output [2]: [product_id#129, category#130]
+Arguments: 2
+
+(27) AQEShuffleRead
+Input [2]: [product_id#129, category#130]
+Arguments: coalesced
+
+(28) Sort [codegen id : 8]
+Input [2]: [product_id#129, category#130]
+Arguments: [product_id#129 ASC NULLS FIRST], false, 0
+
+(29) SortMergeJoin [codegen id : 9]
+Left keys [1]: [product_id#119]
+Right keys [1]: [product_id#129]
+Join type: Inner
+Join condition: None
+
+(30) Project [codegen id : 9]
+Output [1]: [category#130]
+Input [3]: [product_id#119, product_id#129, category#130]
+
+(31) HashAggregate [codegen id : 9]
+Input [1]: [category#130]
+Keys [1]: [category#130]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#158L]
+Results [2]: [category#130, count#159L]
+
+(32) Exchange
+Input [2]: [category#130, count#159L]
+Arguments: hashpartitioning(category#130, 200), ENSURE_REQUIREMENTS, [plan_id=1034]
+
+(33) ShuffleQueryStage
+Output [2]: [category#130, count#159L]
+Arguments: 4
+
+(34) AQEShuffleRead
+Input [2]: [category#130, count#159L]
+Arguments: coalesced
+
+(35) HashAggregate [codegen id : 10]
+Input [2]: [category#130, count#159L]
+Keys [1]: [category#130]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#132L]
+Results [2]: [category#130, count(1)#132L AS n#116L]
+
+(36) BatchScan lab.db.orders_d
+Output [2]: [product_id#119, order_date#124]
+lab.db.orders_d (branch=null) [filters=order_date IS NOT NULL, product_id IS NOT NULL, groupedBy=]
+
+(37) Filter
+Input [2]: [product_id#119, order_date#124]
+Condition : isnotnull(product_id#119)
+
+(38) Exchange
+Input [2]: [product_id#119, order_date#124]
+Arguments: hashpartitioning(order_date#124, 200), ENSURE_REQUIREMENTS, [plan_id=688]
+
+(39) Sort
+Input [2]: [product_id#119, order_date#124]
+Arguments: [order_date#124 ASC NULLS FIRST], false, 0
+
+(40) Filter
+Input [3]: [date#125, month#127, day_of_week#128]
+Condition : ((((isnotnull(day_of_week#128) AND isnotnull(month#127)) AND (day_of_week#128 = Sat)) AND (month#127 = 3)) AND isnotnull(date#125))
+
+(41) Project
+Output [1]: [date#125]
+Input [3]: [date#125, month#127, day_of_week#128]
+
+(42) Exchange
+Input [1]: [date#125]
+Arguments: hashpartitioning(date#125, 200), ENSURE_REQUIREMENTS, [plan_id=689]
+
+(43) Sort
+Input [1]: [date#125]
+Arguments: [date#125 ASC NULLS FIRST], false, 0
+
+(44) SortMergeJoin
+Left keys [1]: [order_date#124]
+Right keys [1]: [date#125]
+Join type: Inner
+Join condition: None
+
+(45) Project
+Output [1]: [product_id#119]
+Input [3]: [product_id#119, order_date#124, date#125]
+
+(46) Exchange
+Input [1]: [product_id#119]
+Arguments: hashpartitioning(product_id#119, 200), ENSURE_REQUIREMENTS, [plan_id=696]
+
+(47) Sort
+Input [1]: [product_id#119]
+Arguments: [product_id#119 ASC NULLS FIRST], false, 0
+
+(48) Filter
+Input [2]: [product_id#129, category#130]
+Condition : isnotnull(product_id#129)
+
+(49) Exchange
+Input [2]: [product_id#129, category#130]
+Arguments: hashpartitioning(product_id#129, 200), ENSURE_REQUIREMENTS, [plan_id=697]
+
+(50) Sort
+Input [2]: [product_id#129, category#130]
+Arguments: [product_id#129 ASC NULLS FIRST], false, 0
+
+(51) SortMergeJoin
+Left keys [1]: [product_id#119]
+Right keys [1]: [product_id#129]
+Join type: Inner
+Join condition: None
+
+(52) Project
+Output [1]: [category#130]
+Input [3]: [product_id#119, product_id#129, category#130]
+
+(53) HashAggregate
+Input [1]: [category#130]
+Keys [1]: [category#130]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#158L]
+Results [2]: [category#130, count#159L]
+
+(54) Exchange
+Input [2]: [category#130, count#159L]
+Arguments: hashpartitioning(category#130, 200), ENSURE_REQUIREMENTS, [plan_id=704]
+
+(55) HashAggregate
+Input [2]: [category#130, count#159L]
+Keys [1]: [category#130]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#132L]
+Results [2]: [category#130, count(1)#132L AS n#116L]
+
+(56) AdaptiveSparkPlan
+Output [2]: [category#130, n#116L]
+Arguments: isFinalPlan=true
+
+

@@ -1,0 +1,42 @@
+-- e1a_coalesce_aqe_off
+-- SELECT customer_id, count(*) AS n, sum(order_total) AS total FROM orders WHERE order_ts >= TIMESTAMP '2026-03-01 00:00:00' AND order_ts < TIMESTAMP '2026-03-08 00:00:00' GROUP BY customer_id
+
+== Physical Plan ==
+* HashAggregate (6)
++- Exchange (5)
+   +- * HashAggregate (4)
+      +- * Project (3)
+         +- * ColumnarToRow (2)
+            +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [3]: [order_ts#3, customer_id#5, order_total#8]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [3]: [order_ts#3, customer_id#5, order_total#8]
+
+(3) Project [codegen id : 1]
+Output [2]: [customer_id#5, order_total#8]
+Input [3]: [order_ts#3, customer_id#5, order_total#8]
+
+(4) HashAggregate [codegen id : 1]
+Input [2]: [customer_id#5, order_total#8]
+Keys [1]: [customer_id#5]
+Functions [2]: [partial_count(1), partial_sum(order_total#8)]
+Aggregate Attributes [2]: [count#22L, sum#23]
+Results [3]: [customer_id#5, count#24L, sum#25]
+
+(5) Exchange
+Input [3]: [customer_id#5, count#24L, sum#25]
+Arguments: hashpartitioning(customer_id#5, 2000), ENSURE_REQUIREMENTS, [plan_id=27]
+
+(6) HashAggregate [codegen id : 2]
+Input [3]: [customer_id#5, count#24L, sum#25]
+Keys [1]: [customer_id#5]
+Functions [2]: [count(1), sum(order_total#8)]
+Aggregate Attributes [2]: [count(1)#9L, sum(order_total#8)#10]
+Results [3]: [customer_id#5, count(1)#9L AS n#0L, sum(order_total#8)#10 AS total#1]
+
+

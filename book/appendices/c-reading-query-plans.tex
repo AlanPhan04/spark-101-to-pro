@@ -294,13 +294,14 @@ isFinalPlan=true}. \texttt{isFinalPlan=false} is the compile-time plan from
   \item[\texttt{AQEShuffleRead coalesced}] AQE merged small post-shuffle
         partitions after seeing their real sizes.
   \item[\texttt{AQEShuffleRead skewed}] AQE split one or more oversized
-        partitions of a join input.
+        partitions of a join input. When coalescing also applied, the argument
+        reads \texttt{coalesced and skewed}.
   \item[\texttt{AQEShuffleRead local}] a reduce task reads shuffle files from its
         own executor; used for the large side after a broadcast promotion.
   \item[\texttt{BroadcastQueryStage}] a \texttt{SortMergeJoin} was converted to a
         broadcast at runtime because the shuffled side turned out small.
-  \item[\texttt{SortMergeJoin [\ldots], isSkew=true}] AQE detected and handled
-        skew in this join.
+  \item[\texttt{SortMergeJoin(skew=true)}] AQE detected and handled skew in
+        this join.
 \end{description}
 
 \Cref{ch:aqe} shows each of these in a final plan, with the plan annotated

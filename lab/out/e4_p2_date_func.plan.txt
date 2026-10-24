@@ -1,0 +1,81 @@
+-- e4_p2_date_func
+-- SELECT sum(order_total) AS s FROM orders WHERE date(order_ts) = DATE '2026-03-03'
+
+== Physical Plan ==
+AdaptiveSparkPlan (12)
++- == Final Plan ==
+   * HashAggregate (7)
+   +- ShuffleQueryStage (6), Statistics(sizeInBytes=16.0 B, rowCount=1)
+      +- Exchange (5)
+         +- * HashAggregate (4)
+            +- * Project (3)
+               +- * ColumnarToRow (2)
+                  +- BatchScan lab.db.orders (1)
++- == Initial Plan ==
+   HashAggregate (11)
+   +- Exchange (10)
+      +- HashAggregate (9)
+         +- Project (8)
+            +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [order_ts#23, order_total#28]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772496000000000, order_ts < 1772582400000000, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [order_ts#23, order_total#28]
+
+(3) Project [codegen id : 1]
+Output [1]: [order_total#28]
+Input [2]: [order_ts#23, order_total#28]
+
+(4) HashAggregate [codegen id : 1]
+Input [1]: [order_total#28]
+Keys: []
+Functions [1]: [partial_sum(order_total#28)]
+Aggregate Attributes [1]: [sum#38]
+Results [1]: [sum#39]
+
+(5) Exchange
+Input [1]: [sum#39]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=75]
+
+(6) ShuffleQueryStage
+Output [1]: [sum#39]
+Arguments: 0
+
+(7) HashAggregate [codegen id : 2]
+Input [1]: [sum#39]
+Keys: []
+Functions [1]: [sum(order_total#28)]
+Aggregate Attributes [1]: [sum(order_total#28)#34]
+Results [1]: [sum(order_total#28)#34 AS s#21]
+
+(8) Project
+Output [1]: [order_total#28]
+Input [2]: [order_ts#23, order_total#28]
+
+(9) HashAggregate
+Input [1]: [order_total#28]
+Keys: []
+Functions [1]: [partial_sum(order_total#28)]
+Aggregate Attributes [1]: [sum#38]
+Results [1]: [sum#39]
+
+(10) Exchange
+Input [1]: [sum#39]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=59]
+
+(11) HashAggregate
+Input [1]: [sum#39]
+Keys: []
+Functions [1]: [sum(order_total#28)]
+Aggregate Attributes [1]: [sum(order_total#28)#34]
+Results [1]: [sum(order_total#28)#34 AS s#21]
+
+(12) AdaptiveSparkPlan
+Output [1]: [s#21]
+Arguments: isFinalPlan=true
+
+

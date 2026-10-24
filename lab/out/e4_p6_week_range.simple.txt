@@ -1,0 +1,17 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(2) HashAggregate(keys=[], functions=[sum(order_total#112)])
+   +- ShuffleQueryStage 0
+      +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=263]
+         +- *(1) HashAggregate(keys=[], functions=[partial_sum(order_total#112)])
+            +- *(1) Project [order_total#112]
+               +- *(1) ColumnarToRow
+                  +- BatchScan lab.db.orders[order_ts#107, order_total#112] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[], functions=[sum(order_total#112)])
+   +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=247]
+      +- HashAggregate(keys=[], functions=[partial_sum(order_total#112)])
+         +- Project [order_total#112]
+            +- BatchScan lab.db.orders[order_ts#107, order_total#112] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=] RuntimeFilters: []
+
