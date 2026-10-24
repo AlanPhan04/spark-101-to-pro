@@ -180,8 +180,8 @@ restarts on the far side of every shuffle, exactly the stage boundary
 \Cref{sec:catalyst-physical} already described from the other direction. A
 sort-merge join itself, despite materializing state per key, does implement
 \texttt{CodegenSupport} and fuses like any other operator --- this is why
-the specimen's own plan (\Cref{lst:explain-anatomy}) shows \texttt{*(2)
-SortMergeJoin Inner (9)} carrying a star rather than breaking the chain.
+the specimen's own plan (\Cref{lst:c-specimen-plan}) shows \texttt{*(5)
+SortMergeJoin} carrying a star rather than breaking the chain.
 What genuinely does not fuse is an aggregate whose buffer needs arbitrary
 objects (\texttt{ObjectHashAggregate} falling back past its distinct-key
 threshold, \Cref{sec:c-agg}) or a row-at-a-time UDF Catalyst cannot

@@ -5,7 +5,7 @@
 AdaptiveSparkPlan (18)
 +- == Final Plan ==
    * HashAggregate (11)
-   +- ShuffleQueryStage (10), Statistics(sizeInBytes=1888.0 B, rowCount=118)
+   +- ShuffleQueryStage (10), Statistics(sizeInBytes=2.1 KiB, rowCount=134)
       +- Exchange (9)
          +- * HashAggregate (8)
             +- * HashAggregate (7)

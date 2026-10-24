@@ -18,12 +18,10 @@ for name, pred in variants.items():
     run(spark, f"e4_{name}", SUM + pred)
 
 # --- E5: dynamic partition pruning ----------------------------------------------------------------------
-DPP = """SELECT p.category, count(*) AS n
+DPP = """SELECT count(*) AS n, sum(o.order_total) AS total
          FROM orders o
          JOIN dim_date d ON CAST(o.order_ts AS DATE) = d.date
-         JOIN dim_product p ON o.product_id = p.product_id
-         WHERE d.day_of_week = 'Sat' AND d.month = 3
-         GROUP BY p.category"""
+         WHERE d.day_of_week = 'Sat' AND d.month = 3"""
 C("spark.sql.optimizer.dynamicPartitionPruning.enabled", "false")
 run(spark, "e5a_dpp_off", DPP)
 C("spark.sql.optimizer.dynamicPartitionPruning.enabled", "true")

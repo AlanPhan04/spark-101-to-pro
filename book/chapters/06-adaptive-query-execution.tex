@@ -111,19 +111,24 @@ AdaptiveSparkPlan isFinalPlan=false
          +- Exchange hashpartitioning(category, 200)
             +- HashAggregate(keys=[category], functions=[partial_avg(...)])
                +- Project [promised_days, delivery_days, category]
-                  +- BroadcastHashJoin [product_id], [product_id], Inner, BuildRight
-                     :- Project [...] <- Filter ... <- BatchScan lab.db.orders[...]
-                     +- BroadcastExchange HashedRelationBroadcastMode(...)
-                        +- Filter ... <- BatchScan lab.db.dim_product[...]
+                  +- SortMergeJoin [product_id], [product_id], Inner
+                     :- Sort [product_id ASC NULLS FIRST]
+                     :  +- Exchange hashpartitioning(product_id, 200)
+                     :     +- ... Filter <- BatchScan lab.db.orders[...]
+                     +- Sort [product_id ASC NULLS FIRST]
+                        +- Exchange hashpartitioning(product_id, 200)
+                           +- Filter <- BatchScan lab.db.dim_product[...]
 \end{lstlisting}
 
-Notice what the planner chose. On the lab, Iceberg reports \texttt{dim\_product}'s
-size from table metadata, the planner finds it under the 10~MB broadcast
-threshold, and it plans a \texttt{BroadcastHashJoin} directly. AQE has no join to
-rescue in this plan. The three rewrites still matter, because the plan has
-exchanges of its own --- the two above the aggregate --- and because the estimate
-is not always this accurate. To see the join rewrite work, the lab experiments
-below take the planner's broadcast away.
+Notice what the planner chose. \texttt{dim\_product} is about 170~MB, and Iceberg
+reports a table's size from its snapshot metadata, so the planner knows this
+without column statistics; it is far over the 10~MB threshold, and the join is
+planned as a \texttt{SortMergeJoin} with four exchanges in all. That is the right
+call for the whole table. It is the wrong call for a query that filters
+\texttt{dim\_product} down to one category, and the planner cannot see that,
+because the metadata gives it the size of the table, not how much a filter
+removes. That gap is what AQE's join rewrite exists for, and the rest of the
+chapter shows each of the three rewrites on this plan.
 
 \section{Coalescing shuffle partitions}
 \label{sec:aqe-coalesce}
@@ -221,24 +226,26 @@ bytes the stage read.
 AQE off & 94.1~MB & --- & --- & 2000 & 2000 \\
 baseline & 94.1~MB & 64~MB & true & 40 & 40 \\
 \texttt{parallelismFirst} off & 94.1~MB & 64~MB & false & 2 & 2 \\
-bigger shuffle & 467.9~MB & 64~MB & true & $\approx$ 40 & 41 \\
-smaller advisory & 467.9~MB & 16~MB & true & $\approx$ 40 & 41 \\
-tiny advisory & 467.9~MB & 4~MB & true & $\approx$ 117 & 118 \\
-bigger shuffle, \texttt{pF} off & 467.9~MB & 64~MB & false & $\approx$ 8 & 8 \\
+bigger shuffle & 512.1~MB & 64~MB & true & $\approx$ 40 & 41 \\
+smaller advisory & 512.1~MB & 16~MB & true & $\approx$ 40 & 41 \\
+tiny advisory & 512.1~MB & 4~MB & true & $\approx$ 128 & 134 \\
+bigger shuffle, \texttt{pF} off & 512.1~MB & 64~MB & false & $\approx$ 8 & 9 \\
 \bottomrule
 \end{tabular}
 \caption{Measured on the lab. Each prediction uses only the formula and the
 shuffle bytes the reduce stage read (\texttt{pF} is \texttt{parallelismFirst}).
 The advisory size changes nothing until it falls below the parallelism term
-($467.9 / 40 \approx 11.7$~MB), exactly as the formula says.}
+($512.1 / 40 \approx 12.8$~MB), exactly as the formula says.}
 \label{tab:aqe-lab-coalesce}
 \end{table}
 
-All seven rows agree, which is what makes the ceiling reading of the advisory
-size more than a guess: a 16~MB advisory and a 64~MB advisory produce the same 41
-tasks, because $467.9 / 40$ is below both. The cost of ignoring the formula shows
-in the task times. The last row's 8 tasks each read about 64~MB and took a median
-of 8.3~s; the 41-task baseline took a median of 0.55~s per task.
+All seven rows agree to within a few tasks (AQE merges greedily, so the observed
+count runs slightly above the quotient), which is what makes the ceiling reading
+of the advisory size more than a guess: a 16~MB advisory and a 64~MB advisory
+produce the same 41 tasks, because $512.1 / 40$ is below both. The cost of
+ignoring the formula shows in the task times. The last row's 9 tasks each read
+about 64~MB and took a median of 8.2~s; the 41-task baseline took a median of
+0.6~s per task.
 
 One more observation from these runs, because it will mislead you otherwise. The
 final plan prints a \texttt{Statistics} annotation on every
@@ -305,8 +312,10 @@ way. An oversized partition is handled by a different mechanism
 \label{sec:aqe-broadcast}
 
 \Cref{sec:joins-selection} chooses a join strategy from an estimate, and an
-estimate can land on the wrong side of the threshold. When it does, AQE gets a
-second chance after the join's inputs have shuffled. It reads the runtime
+estimate can land on the wrong side of the threshold: a filter on
+\texttt{dim\_product} shrinks it to a few megabytes, and the planner, which sees
+only the 170~MB table, cannot know. AQE gets a second chance after the join's
+inputs have shuffled. It reads the runtime
 statistics of each side's shuffle stage, and if one is below the adaptive
 threshold, it rewrites the sort-merge join into a broadcast hash join before the
 join runs. The final plan shows \texttt{BroadcastHashJoin} where the plan had
@@ -330,11 +339,11 @@ slice from every executor. The plan marks it with the argument \texttt{local}.
    :- AQEShuffleRead                        -- Arguments: local
    :  +- ShuffleQueryStage, Statistics(sizeInBytes=155.1 MiB, rowCount=6.78E+6)
    :     +- Exchange                        -- the big side was shuffled anyway
-   +- BroadcastQueryStage, Statistics(sizeInBytes=18.0 MiB, rowCount=5.00E+4)
+   +- BroadcastQueryStage, Statistics(sizeInBytes=20.0 MiB, rowCount=1.00E+5)
       +- BroadcastExchange
          +- AQEShuffleRead                  -- Arguments: local
-            +- ShuffleQueryStage, Statistics(sizeInBytes=1953.1 KiB, rowCount=5.00E+4)
-               +- Exchange                  -- the small side's shuffle, now feeding a broadcast
+            +- ShuffleQueryStage, Statistics(sizeInBytes=3.8 MiB, rowCount=1.00E+5)
+               +- Exchange                  -- the filtered side's shuffle, now feeding a broadcast
 \end{lstlisting}
 
 Compare this to a join Catalyst broadcast at planning time. There, the big side
@@ -375,14 +384,14 @@ relation that gets built from them.}
 \end{table}
 
 The lab shows the gap between those last two quantities directly. In
-\Cref{lst:aqe-broadcast-plan} the small side's shuffle stage measures
-1953.1~KiB, about 1.9~MiB, and the \texttt{BroadcastQueryStage} built from it
-measures 18.0~MiB: the in-memory hash relation is about nine times larger than
-the number the threshold was compared against. \Cref{tab:aqe-lab-threshold}
-tests the comparison by moving the adaptive threshold across 1.9~MiB with the
-planning-time broadcast disabled. The compressed shuffle files for that side were
-only 0.8~MB, which would have cleared the 1~MB threshold; the join was not
-promoted, so the comparison is against the larger, uncompressed figure.
+\Cref{lst:aqe-broadcast-plan} the filtered \texttt{dim\_product}'s shuffle stage
+measures 3.8~MiB, and the \texttt{BroadcastQueryStage} built from it measures
+20.0~MiB: the in-memory hash relation is more than five times larger than the
+number the threshold was compared against. \Cref{tab:aqe-lab-threshold} tests
+the comparison by moving the adaptive threshold across 3.8~MiB. The compressed
+shuffle files for that side were only 0.9~MB, which would have cleared the 1~MB
+threshold; the join was not promoted, so the comparison is against the larger,
+uncompressed figure.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -391,15 +400,14 @@ promoted, so the comparison is against the larger, uncompressed figure.
 \toprule
 \textbf{Adaptive threshold} & \textbf{Shuffle stage measures} & \textbf{Final join} \\
 \midrule
-unset ($= -1$, from the planning key) & 1.9~MiB & \texttt{SortMergeJoin} \\
-1~MB & 1.9~MiB & \texttt{SortMergeJoin} \\
-4~MB & 1.9~MiB & \texttt{BroadcastHashJoin} (relation is 18.0~MiB) \\
-100~MB & 1.9~MiB & \texttt{BroadcastHashJoin} \\
+1~MB & 3.8~MiB & \texttt{SortMergeJoin} \\
+4~MB & 3.8~MiB & \texttt{BroadcastHashJoin} (relation is 20.0~MiB) \\
+unset ($= 10$~MB, from the planning key) & 3.8~MiB & \texttt{BroadcastHashJoin} \\
 \bottomrule
 \end{tabular}
 \caption{The adaptive threshold decides on the shuffle stage's size, not on the
 relation that gets built: a 4~MB threshold promoted a join whose broadcast
-relation was 18.0~MiB.}
+relation was 20.0~MiB.}
 \label{tab:aqe-lab-threshold}
 \end{table}
 
@@ -422,25 +430,26 @@ below it, AQE keeps the sort-merge join however small the total is. The reason
 is that a mostly-empty shuffle usually means the data lives in a few hot
 partitions, and broadcasting that is a different bet than the total suggests.
 
-The experiment in \Cref{tab:aqe-lab-threshold} is two settings and a query:
+Nothing needs configuring to see the promotion: the query below ran with default
+settings and was promoted, because the filtered side's 3.8~MiB is under the
+10~MB default. The experiment in \Cref{tab:aqe-lab-threshold} changes one key:
 
-\begin{lstlisting}[language=SQL,caption={Forcing the sort-merge plan, then letting AQE promote it},captionpos=b,label=lst:aqe-promotion-experiment]
-SET spark.sql.autoBroadcastJoinThreshold = -1;                  -- planner never broadcasts
-SET spark.sql.adaptive.autoBroadcastJoinThreshold = 104857600;  -- AQE may, up to 100 MB
-
+\begin{lstlisting}[language=SQL,caption={A filtered dimension that AQE promotes to a broadcast},captionpos=b,label=lst:aqe-promotion-experiment]
+-- SET spark.sql.adaptive.autoBroadcastJoinThreshold = 1048576;  -- 1 MB: no promotion
 SELECT p.category, COUNT(*) AS orders
 FROM orders o
 JOIN dim_product p ON o.product_id = p.product_id
 WHERE o.order_ts >= TIMESTAMP '2026-03-01 00:00:00'
   AND o.order_ts <  TIMESTAMP '2026-03-08 00:00:00'
+  AND p.category = 'books'
 GROUP BY p.category;
 \end{lstlisting}
 
 Before the query runs, \texttt{EXPLAIN} prints a \texttt{SortMergeJoin}: the
-planner had no choice. After it runs, the SQL tab shows the shape in
-\Cref{lst:aqe-broadcast-plan}. Set the adaptive threshold back to its default
-and run it again, and the \texttt{SortMergeJoin} survives into the final plan.
-That pair of runs is the whole argument for treating the two keys as separate.
+planner sees 170~MB. After it runs, the SQL tab shows the shape in
+\Cref{lst:aqe-broadcast-plan}. Uncomment the first line and the
+\texttt{SortMergeJoin} survives into the final plan. That pair of runs is the
+whole argument for treating the two keys as separate.
 
 \section{Skew-join handling: split and replicate}
 \label{sec:aqe-skew}
@@ -538,7 +547,8 @@ broadcast \texttt{dim\_product}, and compare skew handling off and on over the
 whole month:
 
 \begin{lstlisting}[language=SQL,caption={Isolating skew handling on the specimen's join},captionpos=b,label=lst:aqe-skew-experiment]
-SET spark.sql.autoBroadcastJoinThreshold = -1;       -- keep the join sort-merge
+SET spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes = 33554432;  -- 32 MB (lab scale)
+SET spark.sql.adaptive.advisoryPartitionSizeInBytes = 8388608;               -- 8 MB (lab scale)
 SET spark.sql.adaptive.skewJoin.enabled = false;     -- run 1: no skew handling
 -- run the month-wide join, then open Stages -> the join stage -> Summary Metrics
 
@@ -547,11 +557,11 @@ SET spark.sql.adaptive.skewJoin.enabled = true;      -- run 2
 \end{lstlisting}
 
 On the lab's 30 million rows, with one product taking 30\% of them, the hot
-partition is about 72~MB of compressed shuffle data against ordinary partitions
+partition is about 73~MB of compressed shuffle data against ordinary partitions
 of about 1~MB. That is skewed by any sane reading, and the defaults did \emph{not}
 split it: the 256~MB absolute floor is a number tuned for production data, and
 the lab's hot partition never reaches it. Lowering the floor to 32~MB was still
-not enough. The split target is the 64~MB advisory size, and a 72~MB partition
+not enough. The split target is the 64~MB advisory size, and a 73~MB partition
 sits barely above it, so splitting it would leave a remainder too small to keep
 as its own piece. The plan showed no skew handling in either case. (The split
 heuristic is the explanation consistent with the observation; confirm it against
@@ -567,17 +577,17 @@ It split once the target dropped below the partition, with the advisory size at
 \toprule
 \textbf{Run} & \textbf{Join-stage tasks} & \textbf{Max task shuffle read} & \textbf{Median task} & \textbf{Max task} \\
 \midrule
-skew handling off & 35 & 72.7~MB & 701~ms & 3264~ms \\
-skew handling on & 44 & 9.4~MB & 596~ms & 687~ms \\
+skew handling off & 42 & 72.8~MB & 775~ms & 5115~ms \\
+skew handling on & 51 & 9.5~MB & 647~ms & 844~ms \\
 \bottomrule
 \end{tabular}
 \caption{Measured on the lab (advisory size 8~MB, skew floor 32~MB). Skew
-handling turned 35 tasks into 44 and cut the slowest task from 3264~ms to
-687~ms, 4.8 times, while the median barely moved.}
+handling turned 42 tasks into 51 and cut the slowest task from 5115~ms to
+844~ms, 6.1 times, while the median barely moved.}
 \label{tab:aqe-lab-skew}
 \end{table}
 
-The straggler is gone: the largest task reads 9.4~MB instead of 72.7~MB, and the
+The straggler is gone: the largest task reads 9.5~MB instead of 72.8~MB, and the
 stage ends when its slowest task, now close to the median, ends. The final plan
 marks the handling on the join node and on the skewed side's read:
 
@@ -687,7 +697,7 @@ why. Two rows were checked on the lab: a query with no exchange printed a plain
 physical plan with no \texttt{AdaptiveSparkPlan} root, and
 \texttt{repartition(200)} and \texttt{repartition(200, customer\_id)} both ran
 exactly 200 reduce tasks, while \texttt{repartition(customer\_id)} with no count
-was coalesced to 46.
+was coalesced to 47.
 
 \begin{table}[htbp]
 \centering\footnotesize

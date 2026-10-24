@@ -3,10 +3,11 @@
 
 \begin{chapterintro}
 Spark has four ways to run a join and picks one from a size estimate. When the
-estimate is right, the choice is right. When the table has no statistics ---
-the common case for Iceberg, as the specimen query already showed
-(\Cref{sec:catalyst-analysis}) --- the planner guesses, and a join that should
-have broadcast a 30~MB dimension instead shuffles a billion rows. This chapter
+estimate is right, the choice is right. The estimate comes from table size, and
+a table's size says nothing about how much a filter will shrink it: Iceberg
+knows \texttt{dim\_product} is 170~MB but not that a \texttt{category} filter
+leaves 4~MB of it, so a join that should have broadcast a 4~MB slice shuffles a
+billion rows instead. This chapter
 covers the four strategies, how the planner chooses between them, and how to
 override it when you know better than the statistics do.
 \end{chapterintro}
@@ -49,19 +50,15 @@ enforces a hard ceiling (roughly 8~GB serialized, and a few hundred million
 rows) past which a table cannot be broadcast at all, regardless of the
 threshold.
 
-Put numbers on it: \texttt{dim\_product} (\Cref{sec:refenv-orders}) is a
-6~MB Parquet file, comfortably under the default 10~MB
-\conf{spark.sql.autoBroadcastJoinThreshold} on its real, on-disk size. Here
-is what "twice the serialized size" means once that file is actually
-broadcast: Parquet's columnar compression packs those 6~MB down from perhaps
-20~MB of raw column values; decoded back into JVM row objects on the driver
-(\Cref{sec:mem-heap}'s per-object overhead applies here too), that 6~MB file
-can easily inflate to 25--35~MB in memory, and the driver holds roughly two
-copies of that while it collects the file's rows and then builds the
-broadcast payload to ship out --- 50--70~MB of driver heap spent
-broadcasting a file whose on-disk size looked negligible. A dimension table
-ten times larger inflates the same way, which is exactly why the
-comfortable-looking 10~MB threshold on disk still leaves real headroom
+Put numbers on it, from the lab (\Cref{sec:refenv-lab}). Filter
+\texttt{dim\_product} to one category and 100\,000 rows remain. Spark's own
+statistics for that side's shuffle read \texttt{3.8 MiB}; the broadcast relation
+built from those same rows measured \texttt{20.0 MiB} in memory, more than five
+times larger (\Cref{lst:aqe-broadcast-plan}). A threshold compared against the
+first number is therefore a weak guard for the second, and the driver holds
+roughly two copies of that relation while it collects the rows and builds the
+payload to ship out. A dimension ten times larger inflates the same way, which
+is why the comfortable-looking 10~MB threshold still leaves real headroom
 before it threatens a driver's heap.
 
 \section{Shuffle hash join}
@@ -96,8 +93,9 @@ was absent in the qualifying case.
 \label{sec:joins-smj}
 
 Sort-merge join is the default for two large, roughly comparable inputs, and it
-is what the specimen query uses in \Cref{ch:catalyst}: both sides are shuffled
-on the join key, each partition is then sorted locally, and the join is
+is what the specimen query uses in \Cref{ch:catalyst}, because
+\texttt{dim\_product} (about 170~MB) is far over the broadcast threshold: both
+sides are shuffled on the join key, each partition is then sorted locally, and the join is
 produced by walking both sorted streams together, advancing whichever key is
 behind. It is the most expensive of the equi-join strategies --- two shuffles
 and two sorts --- but it is also the most robust: a sort spills to disk cleanly
@@ -165,11 +163,15 @@ last, not by default.
 \section{Forcing a strategy}
 \label{sec:joins-forcing}
 
-When the estimate is missing or wrong, a hint overrides it directly:
+When the estimate is wrong, a hint overrides it directly. The planner sees
+\texttt{dim\_product} at its full 170~MB and will not broadcast it, but you know
+the \texttt{category} filter leaves a few megabytes:
 
-\begin{lstlisting}[language=SQL,caption={Forcing a broadcast when statistics are missing},captionpos=b]
+\begin{lstlisting}[language=SQL,caption={Forcing a broadcast of a filtered dimension},captionpos=b,label=lst:joins-hint]
 SELECT /*+ BROADCAST(p) */ o.product_id, p.category
-FROM orders o JOIN dim_product p ON o.product_id = p.product_id;
+FROM orders o
+JOIN (SELECT * FROM dim_product WHERE category = 'books') p
+  ON o.product_id = p.product_id;
 \end{lstlisting}
 
 The hints, in priority order, are \texttt{BROADCAST} (or
@@ -187,11 +189,14 @@ ANALYZE TABLE db.dim_product COMPUTE STATISTICS FOR ALL COLUMNS;
 \end{lstlisting}
 
 Iceberg tables carry file-level size and row counts in their metadata for free,
-but not the column-level statistics the cost-based optimizer uses to size a
-join --- which is exactly why the specimen query's small \texttt{dim\_product}
-table was shuffled instead of broadcast in \Cref{ch:catalyst}. Running
-\texttt{ANALYZE} once after a table's data changes materially is usually
-cheaper, and safer over time, than hard-coding a hint.
+so the planner's size estimate for an \emph{unfiltered} table is accurate;
+\texttt{dim\_product}'s 170~MB is why the specimen shuffled it in
+\Cref{ch:catalyst}. What Iceberg does not carry is the column-level statistics
+the cost-based optimizer uses to estimate how much a \emph{filter} shrinks a
+table, so a filtered scan is still estimated at full size. \texttt{ANALYZE}
+supplies those statistics, and running it once after a table's data changes
+materially is usually cheaper, and safer over time, than hard-coding a hint.
+Whether it changes a particular join is something to measure, not assume.
 
 \begin{tip}
 Adaptive Query Execution catches many of these mistakes without any of the
@@ -244,9 +249,10 @@ removes the shuffle from the decision entirely.
 \begin{exercises}
 \item Given four table sizes and the broadcast threshold, predict each join's
       strategy. Then change one config value and predict which join flips.
-\item Run the specimen query, then run \texttt{ANALYZE TABLE dim\_product
-      COMPUTE STATISTICS FOR ALL COLUMNS} and run it again. Did the join
-      strategy change? Explain from \Cref{sec:joins-selection}.
+\item Run the specimen query and read the join strategy. Then raise
+      \conf{spark.sql.autoBroadcastJoinThreshold} above \texttt{dim\_product}'s
+      size and run it again. Predict the number of \texttt{Exchange} nodes
+      before and after, and check against the plan.
 \item Write a join with a non-equi condition on two tables, neither of which is
       small. Confirm in \texttt{EXPLAIN FORMATTED} that it becomes a
       \texttt{CartesianProduct}, and rewrite it to avoid one.

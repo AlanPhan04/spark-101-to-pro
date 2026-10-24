@@ -62,7 +62,7 @@ number can be reproduced.
 \begin{itemize}
   \item \textbf{Data.} The generator builds the \texttt{orders} star schema of
         the next section at 30 million \texttt{orders} rows over March 2026,
-        2 million \texttt{dim\_customer} rows, and 50\,000 \texttt{dim\_product}
+        2 million \texttt{dim\_customer} rows, and 2 million \texttt{dim\_product}
         rows, with one product taking 30\% of all orders. \texttt{orders} is
         about 1~GB of Parquet.
   \item \textbf{Parallelism.} \conf{spark.default.parallelism} is pinned to 40,
@@ -113,12 +113,14 @@ date, loyalty segment); and \texttt{dim\_date} (\texttt{date},
 \texttt{year}, \texttt{month}, \texttt{day\_of\_week}), used throughout
 \Cref{ch:pruning}'s dynamic-partition-pruning examples to filter
 \texttt{orders} indirectly by calendar attributes that are not columns on
-the fact table itself. \texttt{dim\_product} is small enough to broadcast
-under default settings (\Cref{sec:joins-selection}); \texttt{dim\_date} is
-smaller still. \texttt{dim\_customer} is larger --- large enough that it is
-\emph{not} broadcast by default, the deliberate contrast
-\Cref{sec:joins-selection} uses to show a sort-merge join actually chosen
-rather than assumed.
+the fact table itself. \texttt{dim\_date} is small enough to broadcast under default
+settings (\Cref{sec:joins-selection}). \texttt{dim\_product} is a catalog of
+millions of products with titles, brands, and descriptions: about 170~MB on the
+lab, far over the 10~MB broadcast threshold, so the specimen joins it with a
+sort-merge join and it becomes broadcastable only after a filter shrinks it
+(\Cref{sec:aqe-broadcast}). \texttt{dim\_customer} is larger still. Neither
+needs column statistics to be classified: Iceberg reports a table's size from
+its snapshot metadata.
 
 \begin{note}
 One product, a heavily-discounted, briefly viral item, accounts for a

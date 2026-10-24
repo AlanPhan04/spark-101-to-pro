@@ -16,16 +16,7 @@ spark.conf.unset("spark.sql.adaptive.advisoryPartitionSizeInBytes")
 C("spark.sql.adaptive.coalescePartitions.parallelismFirst", "true")
 C("spark.sql.shuffle.partitions", "200")
 
-JOIN_WEEK = """SELECT p.category, count(*) AS orders
-               FROM orders o JOIN dim_product p ON o.product_id = p.product_id
-               WHERE o.order_ts >= TIMESTAMP '2026-03-01 00:00:00' AND o.order_ts < TIMESTAMP '2026-03-08 00:00:00'
-               GROUP BY p.category"""
 C("spark.sql.autoBroadcastJoinThreshold", "-1")
-C("spark.sql.adaptive.autoBroadcastJoinThreshold", str(1 * 1024 * 1024))
-run(spark, "e2c_threshold_1mb", JOIN_WEEK)
-C("spark.sql.adaptive.autoBroadcastJoinThreshold", str(4 * 1024 * 1024))
-run(spark, "e2d_threshold_4mb", JOIN_WEEK)
-spark.conf.unset("spark.sql.adaptive.autoBroadcastJoinThreshold")
 
 JOIN_MONTH = """SELECT p.category, avg(CASE WHEN o.delivery_days <= o.promised_days THEN 1.0 ELSE 0.0 END) AS on_time
                 FROM orders o JOIN dim_product p ON o.product_id = p.product_id

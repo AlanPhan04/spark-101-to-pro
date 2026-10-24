@@ -34,44 +34,55 @@ plus a \texttt{:} spine for the first child of a binary operator (a join). A
 whole-stage-generated Java stage \texttt{n} (\Cref{sec:c-codegen}).
 
 Here is that process actually applied, to the specimen's own
-\texttt{orders}~$\bowtie$~\texttt{dim\_product} plan from
-\Cref{lst:explain-anatomy}:
+\texttt{orders}~$\bowtie$~\texttt{dim\_product} plan, captured on the lab with AQE
+turned off so that every operator carries its codegen marker (with AQE on, the
+same plan gains the query-stage nodes of \Cref{sec:c-aqe}). \Cref{lst:explain-anatomy}
+shows the same plan before it runs.
 
-\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily]
-*(3) Sort (13)
-+- *(3) HashAggregate (12)
-   +- *(2) HashAggregate (10)
-      +- *(2) SortMergeJoin Inner (9)
-         :- *(1) Sort (5)
-         :  +- Exchange hashpartitioning(product_id, 200) (4)
-         :     +- *(1) Filter (3)
-         :        +- *(1) ColumnarToRow (2)
-         :           +- BatchScan orders (1)
-         +- *(1) Sort (8)
-            +- Exchange hashpartitioning(product_id, 200) (7)
-               +- BatchScan dim_product (6)
+\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily,caption={The specimen's physical plan with AQE off (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:c-specimen-plan]
+*(7) Sort [on_time_rate ASC NULLS FIRST], true, 0
++- Exchange rangepartitioning(on_time_rate ASC NULLS FIRST, 200)
+   +- *(6) HashAggregate(keys=[category], functions=[avg(...)])
+      +- Exchange hashpartitioning(category, 200)
+         +- *(5) HashAggregate(keys=[category], functions=[partial_avg(...)])
+            +- *(5) Project [promised_days, delivery_days, category]
+               +- *(5) SortMergeJoin [product_id], [product_id], Inner
+                  :- *(2) Sort [product_id ASC NULLS FIRST]
+                  :  +- Exchange hashpartitioning(product_id, 200)
+                  :     +- *(1) Project [product_id, promised_days, delivery_days]
+                  :        +- *(1) Filter isnotnull(product_id)
+                  :           +- *(1) ColumnarToRow
+                  :              +- BatchScan lab.db.orders[order_ts, product_id, ...]
+                  +- *(4) Sort [product_id ASC NULLS FIRST]
+                     +- Exchange hashpartitioning(product_id, 200)
+                        +- *(3) Filter isnotnull(product_id)
+                           +- *(3) ColumnarToRow
+                              +- BatchScan lab.db.dim_product[product_id, category]
 \end{lstlisting}
 
-Reading it bottom-up, one operator at a time: node~(1) is the first thing
-that runs --- \texttt{BatchScan orders} reads the raw files. Node~(2)
-converts the columnar batches it produces into row form. Node~(3) applies
-the \texttt{order\_ts} range filter, discarding rows outside the query's
-week. That is the entire left-hand side up to node~(4), an
-\texttt{Exchange}: the filtered rows are shuffled by
-\texttt{hash(product\_id)} into 200 partitions, so that every row with a
-given \texttt{product\_id} ends up in the same partition as every other row
-sharing it. Node~(5) locally sorts each of those partitions by
-\texttt{product\_id}. The right-hand branch, nodes~(6)--(8), does the exact
-same three things --- scan, shuffle, sort --- to \texttt{dim\_product},
-independently and in parallel with the left branch. Only once both branches
-have reached a sorted, co-partitioned state does node~(9),
-\texttt{SortMergeJoin}, run: it walks both sorted streams together,
-matching rows with equal \texttt{product\_id}. From there, node~(10) runs a
-partial aggregation per partition (no new exchange needed, since the join
-already grouped matching keys together), node~(12) finishes that
-aggregation, and node~(13) sorts the small, already-aggregated result for
-final output. Every step in this reading is exactly "what does this node
-need before it can run, and has that already happened lower in the tree" ---
+Reading it bottom-up, one operator at a time: the first thing that runs is the
+left-hand \texttt{BatchScan} of \texttt{orders}, which reads the raw files. The
+\texttt{ColumnarToRow} above it converts the columnar batches the scan produces
+into row form, the \texttt{Filter} drops rows with a null key, and the
+\texttt{Project} keeps the three columns the join and aggregate need. That is the
+entire left-hand side up to the first \texttt{Exchange}: the filtered rows are
+shuffled by \texttt{hash(product\_id)} into 200 partitions, so that every row
+with a given \texttt{product\_id} ends up in the same partition as every other
+row sharing it, and the \texttt{Sort} above it orders each partition by
+\texttt{product\_id}. The right-hand branch does the same three things --- scan,
+shuffle, sort --- to \texttt{dim\_product}, independently and in parallel with
+the left. Only once both branches have reached a sorted, co-partitioned state
+does the \texttt{SortMergeJoin} run: it walks both sorted streams together,
+matching rows with equal \texttt{product\_id}. A partial aggregation then runs
+per partition, but it cannot finish the aggregate: the join partitioned by
+\texttt{product\_id} and the aggregate groups by \texttt{category}, so a second
+\texttt{Exchange} regroups the partial results by \texttt{category} before the
+final \texttt{HashAggregate} (marker \texttt{*(6)}). A third \texttt{Exchange},
+\texttt{rangepartitioning}, orders the twenty rows for the global
+\texttt{ORDER BY}, and the final \texttt{Sort} emits them. Four exchanges, so five
+stages; the codegen markers \texttt{*(1)} through \texttt{*(7)} count the
+fused pieces inside them. Every step in this reading is exactly ``what does this
+node need before it can run, and has that already happened lower in the tree'' ---
 which is the whole discipline bottom-up reading is.
 
 \section{Scan operators}

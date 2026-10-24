@@ -1,0 +1,23 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(3) HashAggregate(keys=[], functions=[count(1)])
+   +- ShuffleQueryStage 1
+      +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=295]
+         +- *(2) HashAggregate(keys=[], functions=[partial_count(1)])
+            +- *(2) HashAggregate(keys=[customer_id#108, product_id#107], functions=[])
+               +- AQEShuffleRead coalesced
+                  +- ShuffleQueryStage 0
+                     +- Exchange hashpartitioning(customer_id#108, product_id#107, 2000), ENSURE_REQUIREMENTS, [plan_id=262]
+                        +- *(1) HashAggregate(keys=[customer_id#108, product_id#107], functions=[])
+                           +- *(1) ColumnarToRow
+                              +- BatchScan lab.db.orders[product_id#107, customer_id#108] lab.db.orders (branch=null) [filters=, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[], functions=[count(1)])
+   +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=244]
+      +- HashAggregate(keys=[], functions=[partial_count(1)])
+         +- HashAggregate(keys=[customer_id#108, product_id#107], functions=[])
+            +- Exchange hashpartitioning(customer_id#108, product_id#107, 2000), ENSURE_REQUIREMENTS, [plan_id=240]
+               +- HashAggregate(keys=[customer_id#108, product_id#107], functions=[])
+                  +- BatchScan lab.db.orders[product_id#107, customer_id#108] lab.db.orders (branch=null) [filters=, groupedBy=] RuntimeFilters: []
+

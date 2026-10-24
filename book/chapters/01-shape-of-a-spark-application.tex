@@ -43,8 +43,8 @@ join}, and \emph{hash aggregate}.
 Executing that plan is a distributed affair. The plan is split into a \emph{job},
 the job into \emph{stages}, and each stage into \emph{tasks} that run in parallel
 on \emph{executors}. The result flows back to the process that submitted the
-query, the \emph{driver}. On the reference cluster this specimen produces one
-job, three stages, and a few hundred tasks, and it takes about four minutes.
+query, the \emph{driver}. On the reference cluster this specimen runs as five
+stages and a few hundred tasks, and it takes about four minutes.
 
 Why four minutes and not one, or forty? That question is what the rest of the
 book answers. This chapter's job is narrower: to give you the vocabulary and the
@@ -136,8 +136,9 @@ the query from \Cref{lst:shape-query}, step by step
   \item \textbf{Compile (driver).} The driver parses the text, resolves
         \texttt{orders} and \texttt{dim\_product} against the catalog, runs the
         optimizer, and produces a physical plan (\Cref{ch:catalyst}). Its DAG
-        scheduler then cuts that plan into three stages at the shuffle and builds
-        a set of tasks for each --- one task per input partition.
+        scheduler then cuts that plan into five stages, one cut per
+        \texttt{Exchange} node, and builds a set of tasks for each --- one task
+        per input partition.
   \item \textbf{Acquire executors (cluster manager).} If the driver does not
         already have enough executors, it asks Kubernetes for more pods. Under
         Kyuubi the pool is usually already warm, so this step does nothing and
@@ -152,21 +153,25 @@ the query from \Cref{lst:shape-query}, step by step
         concurrently, and every task reports its metrics to the driver as it
         finishes.
   \item \textbf{Shuffle.} Once both map stages are done the driver launches
-        stage~2 --- 200 tasks, one per value of
-        \conf{spark.sql.shuffle.partitions}. Each stage-2 task connects to
-        \emph{every} executor that ran a map task and fetches the shuffle files
-        for its slice of \texttt{product\_id}. This all-to-all transfer over the
-        network is the shuffle, and it is why the map side (stages~0--1) and the
-        reduce side (stage~2) are separate stages.
-  \item \textbf{Run the reduce stage (executors).} Each stage-2 task now holds
+        stage~2. The plan calls for 200 tasks, one per value of
+        \conf{spark.sql.shuffle.partitions}; AQE may merge them into fewer
+        (\Cref{ch:aqe}). Each stage-2 task connects to \emph{every} executor
+        that ran a map task and fetches the shuffle files for its slice of
+        \texttt{product\_id}. This all-to-all transfer over the network is the
+        shuffle, and it is why the map side (stages~0--1) and the reduce side
+        (stage~2) are separate stages.
+  \item \textbf{Run the reduce stages (executors).} Each stage-2 task now holds
         every row for its products, from both tables. It sorts and merges them,
-        performs the join, and aggregates the on-time rate per category.
+        performs the join, computes a partial aggregate per category, and
+        writes shuffle files again, this time keyed by \texttt{category}.
+        Stage~3 fetches those, finishes the aggregate, and writes
+        range-partitioned output for the \texttt{ORDER BY}; stage~4 sorts it.
   \item \textbf{Collect (driver).} The result is one row per category --- a
-        handful of rows --- so the driver gathers them from the stage-2 tasks. A
-        query returning millions of rows would overwhelm the driver at exactly
-        this step (\Cref{ch:execmem}).
+        handful of rows --- so the driver gathers them from the last stage's
+        tasks. A query returning millions of rows would overwhelm the driver at
+        exactly this step (\Cref{ch:execmem}).
   \item \textbf{Return.} The driver sends the result set to the client and marks
-        the job complete. The Spark UI now shows the finished job, its three
+        the query complete. The Spark UI now shows the finished query, its
         stages, and every task's metrics --- the view you learn to read in
         \Cref{sec:shape-ui}.
 \end{enumerate}
@@ -209,7 +214,10 @@ Spark transformations are \emph{lazy}: \texttt{filter}, \texttt{join},
 \texttt{groupBy}, and the rest build up a plan but run nothing. Work starts only
 when an \emph{action} asks for a result --- a write, a \texttt{count}, a
 \texttt{collect}, or the implicit collect that returns rows to a SQL client. Each
-action triggers one \textbf{job}.
+action triggers one \textbf{job}. (With Adaptive Query Execution, \Cref{ch:aqe}, one SQL
+query shows up as \emph{several} jobs, because Spark submits each query stage
+as its own job and later jobs list the earlier stages as skipped. Count stages,
+not jobs.)
 
 Within a job, the driver's \emph{DAG scheduler} --- named for the
 \textbf{d}irected \textbf{a}cyclic \textbf{g}raph of stages it builds, since a
@@ -229,54 +237,64 @@ for its duration. The number of tasks in a stage is therefore the number of
 partitions, and it sets how much parallelism the stage can use: 8 tasks on a
 cluster with 200 free slots leaves 192 idle.
 
-\Cref{fig:job-stage-task} shows the specimen's shape. Because
-\texttt{dim\_product} has no statistics that would let the planner broadcast
-it (an Iceberg table usually does not, until you \texttt{ANALYZE} it ---
-\Cref{ch:joins}), the planner chooses a sort-merge join: both inputs are
+\Cref{fig:job-stage-task} shows the specimen's shape. The planner chose a
+sort-merge join because \texttt{dim\_product}, a catalog of millions of products,
+is about 170~MB: far over the 10~MB broadcast threshold, so both inputs are
 shuffled so that rows with the same \texttt{product\_id} land on the same
-executor. That gives:
+executor (\Cref{ch:joins}). The aggregate groups by a different key and the
+\texttt{ORDER BY} needs a global order, so two more shuffles follow. Four
+exchanges give five stages:
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{job-stage-task.pdf}
-  \caption{The specimen as one job of three stages. Stage 0 scans and filters
-  \texttt{orders}; stage 1 scans \texttt{dim\_product}; both write shuffle files
-  partitioned by \texttt{product\_id}. Stage 2 reads from both, joins, and
-  aggregates. Each stage runs one task per input partition. One task in stage 2
-  runs far longer than its peers --- the first sighting of skew.}
+  \caption{The specimen as five stages, one per side of each shuffle. Stages 0
+  and 1 scan \texttt{orders} and \texttt{dim\_product} and shuffle by
+  \texttt{product\_id}; stage 2 joins and partially aggregates; stages 3 and 4
+  finish the aggregate and sort. Rose arrows are the four shuffles. One task in
+  stage 2 runs far longer than its peers --- the first sighting of skew.}
   \label{fig:job-stage-task}
 \end{figure}
 
 \begin{itemize}
   \item \textbf{Stage 0} --- scan the March partitions of \texttt{orders}, apply
         the timestamp filter, and write shuffle files keyed by \texttt{product\_id}.
-        Roughly 180 tasks, one per input file split.
+        One task per input file split: roughly 180 on the reference cluster, 7 on
+        the lab's one-week slice.
   \item \textbf{Stage 1} --- scan \texttt{dim\_product} and write shuffle files
-        keyed by \texttt{product\_id}. A handful of tasks; the table is tiny.
+        keyed by \texttt{product\_id}. A few dozen tasks (14 on the lab).
   \item \textbf{Stage 2} --- fetch both sides' shuffle files, merge them on
-        \texttt{product\_id}, join, and aggregate per category. 200 tasks, because
-        \conf{spark.sql.shuffle.partitions} defaults to 200
-        (\Cref{ch:shuffle}). The final \texttt{ORDER BY} is small enough to
-        finish inside this stage.
+        \texttt{product\_id}, join, and compute a partial aggregate per category.
+        200 tasks, because \conf{spark.sql.shuffle.partitions} defaults to 200
+        (\Cref{ch:shuffle}); AQE merged them to 40 on the lab (\Cref{ch:aqe}).
+  \item \textbf{Stage 3} --- fetch the per-category partial aggregates and
+        finish the aggregate. One task on the lab: twenty rows is little work.
+  \item \textbf{Stage 4} --- sort the twenty rows and return them.
 \end{itemize}
 
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{1.6cm}p{5.4cm}p{2cm}p{4.6cm}@{}}
+\begin{tabular}{@{}p{1.6cm}p{5.4cm}p{2.2cm}p{4.4cm}@{}}
 \toprule
-\textbf{Stage} & \textbf{Reads} & \textbf{Tasks} & \textbf{Writes / does} \\
+\textbf{Stage} & \textbf{Reads} & \textbf{Tasks (lab)} & \textbf{Writes / does} \\
 \midrule
-0 & \texttt{orders}, March partitions, filtered & $\sim$180 & shuffle files, keyed by \texttt{product\_id} \\
-1 & \texttt{dim\_product} & a handful & shuffle files, keyed by \texttt{product\_id} \\
-2 & stage 0 + stage 1 shuffle output & 200 & sort-merge join, aggregate, sort \\
+0 & \texttt{orders}, March partitions, filtered & 7 & shuffle files, keyed by \texttt{product\_id} \\
+1 & \texttt{dim\_product} & 14 & shuffle files, keyed by \texttt{product\_id} \\
+2 & stage 0 + stage 1 shuffle output & 40 & sort-merge join, partial aggregate \\
+3 & stage 2 shuffle output & 1 & final aggregate \\
+4 & stage 3 shuffle output & 1 & global sort \\
 \bottomrule
 \end{tabular}
-\caption{The specimen at a glance, matching \Cref{fig:job-stage-task}.}
+\caption{The specimen at a glance, matching \Cref{fig:job-stage-task}. Task
+counts were captured on the lab of \Cref{sec:refenv-lab}, one week of
+\texttt{orders}; the reference cluster's counts are larger.}
+\label{tab:shape-specimen-stages}
 \end{table}
 
-The \texttt{ORDER BY} on the aggregated result is cheap --- a few thousand rows
---- so it does not add a stage here. On a larger result it would.
+The \texttt{ORDER BY} on twenty rows is cheap, but it is still a stage: a global
+sort needs a range-partitioned shuffle, and Spark runs a small extra sampling job
+to choose the range boundaries.
 
 \section{Narrow versus wide dependencies}
 \label{sec:shape-deps}
@@ -349,7 +367,8 @@ for each level of the model.
         rows and the time spent at each operator after execution. This is where
         you confirm which join strategy ran and count the \emph{Exchange} nodes;
         each Exchange is one shuffle.
-  \item[Jobs] One row per action. The specimen shows a single job.
+  \item[Jobs] One row per job. With AQE the specimen shows several --- one per
+        query stage --- all belonging to one SQL query.
   \item[Stages] The stages of each job, with a timeline and, for every stage, a
         \emph{Summary Metrics} table: the minimum, 25th percentile, median, 75th
         percentile, and maximum across the stage's tasks for duration, shuffle
@@ -383,8 +402,8 @@ and \emph{GC time} (too much, \Cref{sec:mem-gc}). Check them in that order.
 You can now describe what happens when a query runs. The \emph{driver} plans it
 and coordinates; \emph{executors} run \emph{tasks}, one per core, on partitions of
 the data; the \emph{cluster manager} (Kubernetes here) provides the containers.
-An action triggers a \emph{job}; the job is cut into \emph{stages} at every
-shuffle; a stage runs one task per partition. A \emph{narrow} dependency keeps
+An action triggers a \emph{job} (under AQE, several small ones per query); the
+plan is cut into \emph{stages} at every shuffle; a stage runs one task per partition. A \emph{narrow} dependency keeps
 work in place; a \emph{wide} dependency forces a shuffle and ends the stage, and
 that is where a query spends most of its time. In the Spark UI you can find the
 job, its stages, and their tasks, identify a stage boundary as a shuffle from the

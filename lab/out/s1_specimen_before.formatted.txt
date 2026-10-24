@@ -1,0 +1,96 @@
+== Physical Plan ==
+AdaptiveSparkPlan (17)
++- Sort (16)
+   +- Exchange (15)
+      +- HashAggregate (14)
+         +- Exchange (13)
+            +- HashAggregate (12)
+               +- Project (11)
+                  +- SortMergeJoin Inner (10)
+                     :- Sort (5)
+                     :  +- Exchange (4)
+                     :     +- Project (3)
+                     :        +- Filter (2)
+                     :           +- BatchScan lab.db.orders (1)
+                     +- Sort (9)
+                        +- Exchange (8)
+                           +- Filter (7)
+                              +- BatchScan lab.db.dim_product (6)
+
+
+(1) BatchScan lab.db.orders
+Output [4]: [order_ts#2, product_id#3, promised_days#5, delivery_days#6]
+lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=]
+
+(2) Filter
+Input [4]: [order_ts#2, product_id#3, promised_days#5, delivery_days#6]
+Condition : isnotnull(product_id#3)
+
+(3) Project
+Output [3]: [product_id#3, promised_days#5, delivery_days#6]
+Input [4]: [order_ts#2, product_id#3, promised_days#5, delivery_days#6]
+
+(4) Exchange
+Input [3]: [product_id#3, promised_days#5, delivery_days#6]
+Arguments: hashpartitioning(product_id#3, 200), ENSURE_REQUIREMENTS, [plan_id=44]
+
+(5) Sort
+Input [3]: [product_id#3, promised_days#5, delivery_days#6]
+Arguments: [product_id#3 ASC NULLS FIRST], false, 0
+
+(6) BatchScan lab.db.dim_product
+Output [2]: [product_id#8, category#9]
+lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(7) Filter
+Input [2]: [product_id#8, category#9]
+Condition : isnotnull(product_id#8)
+
+(8) Exchange
+Input [2]: [product_id#8, category#9]
+Arguments: hashpartitioning(product_id#8, 200), ENSURE_REQUIREMENTS, [plan_id=45]
+
+(9) Sort
+Input [2]: [product_id#8, category#9]
+Arguments: [product_id#8 ASC NULLS FIRST], false, 0
+
+(10) SortMergeJoin
+Left keys [1]: [product_id#3]
+Right keys [1]: [product_id#8]
+Join type: Inner
+Join condition: None
+
+(11) Project
+Output [3]: [promised_days#5, delivery_days#6, category#9]
+Input [5]: [product_id#3, promised_days#5, delivery_days#6, product_id#8, category#9]
+
+(12) HashAggregate
+Input [3]: [promised_days#5, delivery_days#6, category#9]
+Keys [1]: [category#9]
+Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [2]: [sum#33, count#34L]
+Results [3]: [category#9, sum#35, count#36L]
+
+(13) Exchange
+Input [3]: [category#9, sum#35, count#36L]
+Arguments: hashpartitioning(category#9, 200), ENSURE_REQUIREMENTS, [plan_id=52]
+
+(14) HashAggregate
+Input [3]: [category#9, sum#35, count#36L]
+Keys [1]: [category#9]
+Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#24]
+Results [2]: [category#9, cast((avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#24 / 10.0) as decimal(6,5)) AS on_time_rate#0]
+
+(15) Exchange
+Input [2]: [category#9, on_time_rate#0]
+Arguments: rangepartitioning(on_time_rate#0 ASC NULLS FIRST, 200), ENSURE_REQUIREMENTS, [plan_id=55]
+
+(16) Sort
+Input [2]: [category#9, on_time_rate#0]
+Arguments: [on_time_rate#0 ASC NULLS FIRST], true, 0
+
+(17) AdaptiveSparkPlan
+Output [2]: [category#9, on_time_rate#0]
+Arguments: isFinalPlan=false
+

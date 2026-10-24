@@ -17,7 +17,7 @@ AdaptiveSparkPlan (30)
                   :           +- * ColumnarToRow (2)
                   :              +- BatchScan lab.db.orders (1)
                   +- * Sort (12)
-                     +- ShuffleQueryStage (11), Statistics(sizeInBytes=1953.1 KiB, rowCount=5.00E+4)
+                     +- ShuffleQueryStage (11), Statistics(sizeInBytes=76.3 MiB, rowCount=2.00E+6)
                         +- Exchange (10)
                            +- * Filter (9)
                               +- * ColumnarToRow (8)
@@ -98,23 +98,23 @@ Input [5]: [product_id#3, promised_days#5, delivery_days#6, product_id#8, catego
 Input [3]: [promised_days#5, delivery_days#6, category#9]
 Keys [1]: [category#9]
 Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [2]: [sum#29, count#30L]
-Results [3]: [category#9, sum#31, count#32L]
+Aggregate Attributes [2]: [sum#32, count#33L]
+Results [3]: [category#9, sum#34, count#35L]
 
 (16) Exchange
-Input [3]: [category#9, sum#31, count#32L]
+Input [3]: [category#9, sum#34, count#35L]
 Arguments: hashpartitioning(category#9, 200), ENSURE_REQUIREMENTS, [plan_id=176]
 
 (17) ShuffleQueryStage
-Output [3]: [category#9, sum#31, count#32L]
+Output [3]: [category#9, sum#34, count#35L]
 Arguments: 2
 
 (18) HashAggregate [codegen id : 6]
-Input [3]: [category#9, sum#31, count#32L]
+Input [3]: [category#9, sum#34, count#35L]
 Keys [1]: [category#9]
 Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#21]
-Results [2]: [category#9, cast((avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#21 / 10.0) as decimal(6,5)) AS on_time#0]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#24]
+Results [2]: [category#9, cast((avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#24 / 10.0) as decimal(6,5)) AS on_time#0]
 
 (19) Filter
 Input [3]: [product_id#3, promised_days#5, delivery_days#6]
@@ -154,19 +154,19 @@ Input [5]: [product_id#3, promised_days#5, delivery_days#6, product_id#8, catego
 Input [3]: [promised_days#5, delivery_days#6, category#9]
 Keys [1]: [category#9]
 Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [2]: [sum#29, count#30L]
-Results [3]: [category#9, sum#31, count#32L]
+Aggregate Attributes [2]: [sum#32, count#33L]
+Results [3]: [category#9, sum#34, count#35L]
 
 (28) Exchange
-Input [3]: [category#9, sum#31, count#32L]
+Input [3]: [category#9, sum#34, count#35L]
 Arguments: hashpartitioning(category#9, 200), ENSURE_REQUIREMENTS, [plan_id=47]
 
 (29) HashAggregate
-Input [3]: [category#9, sum#31, count#32L]
+Input [3]: [category#9, sum#34, count#35L]
 Keys [1]: [category#9]
 Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#21]
-Results [2]: [category#9, cast((avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#21 / 10.0) as decimal(6,5)) AS on_time#0]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#24]
+Results [2]: [category#9, cast((avg(UnscaledValue(CASE WHEN (delivery_days#6 <= promised_days#5) THEN 1.0 ELSE 0.0 END))#24 / 10.0) as decimal(6,5)) AS on_time#0]
 
 (30) AdaptiveSparkPlan
 Output [2]: [category#9, on_time#0]

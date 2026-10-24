@@ -1,4 +1,4 @@
 == Physical Plan ==
 *(1) ColumnarToRow
-+- BatchScan lab.db.orders[order_id#212, order_ts#213, product_id#214, customer_id#215, promised_days#216, delivery_days#217, order_total#218] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1773532800000000, groupedBy=] RuntimeFilters: []
++- BatchScan lab.db.orders[order_id#206, order_ts#207, product_id#208, customer_id#209, promised_days#210, delivery_days#211, order_total#212] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1773532800000000, groupedBy=] RuntimeFilters: []
 

@@ -1,39 +1,39 @@
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=true
 +- == Final Plan ==
-   *(6) HashAggregate(keys=[category#48], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))])
+   *(6) HashAggregate(keys=[category#51], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#48 <= promised_days#47) THEN 1.0 ELSE 0.0 END))])
    +- AQEShuffleRead coalesced
       +- ShuffleQueryStage 2
-         +- Exchange hashpartitioning(category#48, 200), ENSURE_REQUIREMENTS, [plan_id=427]
-            +- *(5) HashAggregate(keys=[category#48], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))])
-               +- *(5) Project [promised_days#44, delivery_days#45, category#48]
-                  +- *(5) SortMergeJoin(skew=true) [product_id#42], [product_id#47], Inner
-                     :- *(3) Sort [product_id#42 ASC NULLS FIRST], false, 0
+         +- Exchange hashpartitioning(category#51, 200), ENSURE_REQUIREMENTS, [plan_id=427]
+            +- *(5) HashAggregate(keys=[category#51], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#48 <= promised_days#47) THEN 1.0 ELSE 0.0 END))])
+               +- *(5) Project [promised_days#47, delivery_days#48, category#51]
+                  +- *(5) SortMergeJoin(skew=true) [product_id#45], [product_id#50], Inner
+                     :- *(3) Sort [product_id#45 ASC NULLS FIRST], false, 0
                      :  +- AQEShuffleRead coalesced and skewed
                      :     +- ShuffleQueryStage 0
-                     :        +- Exchange hashpartitioning(product_id#42, 200), ENSURE_REQUIREMENTS, [plan_id=287]
-                     :           +- *(1) Filter isnotnull(product_id#42)
+                     :        +- Exchange hashpartitioning(product_id#45, 200), ENSURE_REQUIREMENTS, [plan_id=287]
+                     :           +- *(1) Filter isnotnull(product_id#45)
                      :              +- *(1) ColumnarToRow
-                     :                 +- BatchScan lab.db.orders[product_id#42, promised_days#44, delivery_days#45] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
-                     +- *(4) Sort [product_id#47 ASC NULLS FIRST], false, 0
+                     :                 +- BatchScan lab.db.orders[product_id#45, promised_days#47, delivery_days#48] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- *(4) Sort [product_id#50 ASC NULLS FIRST], false, 0
                         +- AQEShuffleRead coalesced
                            +- ShuffleQueryStage 1
-                              +- Exchange hashpartitioning(product_id#47, 200), ENSURE_REQUIREMENTS, [plan_id=303]
-                                 +- *(2) Filter isnotnull(product_id#47)
+                              +- Exchange hashpartitioning(product_id#50, 200), ENSURE_REQUIREMENTS, [plan_id=303]
+                                 +- *(2) Filter isnotnull(product_id#50)
                                     +- *(2) ColumnarToRow
-                                       +- BatchScan lab.db.dim_product[product_id#47, category#48] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                                       +- BatchScan lab.db.dim_product[product_id#50, category#51] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
 +- == Initial Plan ==
-   HashAggregate(keys=[category#48], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))])
-   +- Exchange hashpartitioning(category#48, 200), ENSURE_REQUIREMENTS, [plan_id=258]
-      +- HashAggregate(keys=[category#48], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#45 <= promised_days#44) THEN 1.0 ELSE 0.0 END))])
-         +- Project [promised_days#44, delivery_days#45, category#48]
-            +- SortMergeJoin [product_id#42], [product_id#47], Inner
-               :- Sort [product_id#42 ASC NULLS FIRST], false, 0
-               :  +- Exchange hashpartitioning(product_id#42, 200), ENSURE_REQUIREMENTS, [plan_id=250]
-               :     +- Filter isnotnull(product_id#42)
-               :        +- BatchScan lab.db.orders[product_id#42, promised_days#44, delivery_days#45] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
-               +- Sort [product_id#47 ASC NULLS FIRST], false, 0
-                  +- Exchange hashpartitioning(product_id#47, 200), ENSURE_REQUIREMENTS, [plan_id=251]
-                     +- Filter isnotnull(product_id#47)
-                        +- BatchScan lab.db.dim_product[product_id#47, category#48] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+   HashAggregate(keys=[category#51], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#48 <= promised_days#47) THEN 1.0 ELSE 0.0 END))])
+   +- Exchange hashpartitioning(category#51, 200), ENSURE_REQUIREMENTS, [plan_id=258]
+      +- HashAggregate(keys=[category#51], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#48 <= promised_days#47) THEN 1.0 ELSE 0.0 END))])
+         +- Project [promised_days#47, delivery_days#48, category#51]
+            +- SortMergeJoin [product_id#45], [product_id#50], Inner
+               :- Sort [product_id#45 ASC NULLS FIRST], false, 0
+               :  +- Exchange hashpartitioning(product_id#45, 200), ENSURE_REQUIREMENTS, [plan_id=250]
+               :     +- Filter isnotnull(product_id#45)
+               :        +- BatchScan lab.db.orders[product_id#45, promised_days#47, delivery_days#48] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+               +- Sort [product_id#50 ASC NULLS FIRST], false, 0
+                  +- Exchange hashpartitioning(product_id#50, 200), ENSURE_REQUIREMENTS, [plan_id=251]
+                     +- Filter isnotnull(product_id#50)
+                        +- BatchScan lab.db.dim_product[product_id#50, category#51] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
 

@@ -13,9 +13,9 @@ import sys
 from pyspark.sql import SparkSession, functions as F
 
 N_ORDERS = int(sys.argv[1]) if len(sys.argv) > 1 else 30_000_000
-N_PRODUCTS = 50_000
+N_PRODUCTS = 2_000_000       # a real catalog: millions of SKUs, too big to broadcast by default
 N_CUSTOMERS = 2_000_000
-HOT_PRODUCT = "p000042"      # the viral, heavily discounted item
+HOT_PRODUCT = "p0000042"      # the viral, heavily discounted item
 MARCH_1 = 1772323200        # 2026-03-01 00:00:00 UTC, epoch seconds
 HOT_SHARE = 0.30             # share of orders that hit the hot product
 
@@ -30,9 +30,12 @@ cat_arr = F.array(*[F.lit(c) for c in categories])
 
 # dim_product -----------------------------------------------------------------------------
 dim_product = (spark.range(N_PRODUCTS)
-    .select(F.format_string("p%06d", F.col("id").cast("int")).alias("product_id"),
+    .select(F.format_string("p%07d", F.col("id").cast("int")).alias("product_id"),
             cat_arr[(F.col("id") % len(categories)).cast("int")].alias("category"),
-            F.round(F.rand(1) * 200 + 5, 2).alias("list_price")))
+            F.round(F.rand(1) * 200 + 5, 2).alias("list_price"),
+            F.concat(F.lit("Item "), F.sha2(F.col("id").cast("string"), 256).substr(1, 24)).alias("title"),
+            F.concat(F.lit("brand-"), (F.col("id") % 5000).cast("string")).alias("brand"),
+            F.sha2(F.concat(F.col("id").cast("string"), F.lit("d")), 512).alias("description")))
 dim_product.writeTo("lab.db.dim_product").using("iceberg").createOrReplace()
 
 # dim_customer ------------------------------------------------------------------------------
@@ -57,7 +60,7 @@ orders = (spark.range(N_ORDERS)
     .select(F.expr("uuid()").alias("order_id"),
             F.timestamp_seconds(F.lit(MARCH_1) + (F.rand(5) * 31 * 86400).cast("long")).alias("order_ts"),
             F.when(F.rand(6) < HOT_SHARE, F.lit(HOT_PRODUCT))
-             .otherwise(F.format_string("p%06d", (F.rand(7) * N_PRODUCTS).cast("int"))).alias("product_id"),
+             .otherwise(F.format_string("p%07d", (F.rand(7) * N_PRODUCTS).cast("int"))).alias("product_id"),
             F.format_string("c%08d", (F.rand(8) * N_CUSTOMERS).cast("int")).alias("customer_id"),
             promised.alias("promised_days"))
     .withColumn("delivery_days", F.greatest(F.lit(1), F.col("promised_days") + (F.rand(9) * 5 - 2).cast("int")))

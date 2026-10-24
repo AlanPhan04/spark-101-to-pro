@@ -1,0 +1,47 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(7) Sort [on_time_rate#37 ASC NULLS FIRST], true, 0
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 3
+         +- Exchange rangepartitioning(on_time_rate#37 ASC NULLS FIRST, 200), ENSURE_REQUIREMENTS, [plan_id=316]
+            +- *(6) HashAggregate(keys=[category#46], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#43 <= promised_days#42) THEN 1.0 ELSE 0.0 END))])
+               +- AQEShuffleRead coalesced
+                  +- ShuffleQueryStage 2
+                     +- Exchange hashpartitioning(category#46, 200), ENSURE_REQUIREMENTS, [plan_id=274]
+                        +- *(5) HashAggregate(keys=[category#46], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#43 <= promised_days#42) THEN 1.0 ELSE 0.0 END))])
+                           +- *(5) Project [promised_days#42, delivery_days#43, category#46]
+                              +- *(5) SortMergeJoin [product_id#40], [product_id#45], Inner
+                                 :- *(3) Sort [product_id#40 ASC NULLS FIRST], false, 0
+                                 :  +- AQEShuffleRead coalesced
+                                 :     +- ShuffleQueryStage 0
+                                 :        +- Exchange hashpartitioning(product_id#40, 200), ENSURE_REQUIREMENTS, [plan_id=146]
+                                 :           +- *(1) Project [product_id#40, promised_days#42, delivery_days#43]
+                                 :              +- *(1) Filter isnotnull(product_id#40)
+                                 :                 +- *(1) ColumnarToRow
+                                 :                    +- BatchScan lab.db.orders[order_ts#39, product_id#40, promised_days#42, delivery_days#43] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                                 +- *(4) Sort [product_id#45 ASC NULLS FIRST], false, 0
+                                    +- AQEShuffleRead coalesced
+                                       +- ShuffleQueryStage 1
+                                          +- Exchange hashpartitioning(product_id#45, 200), ENSURE_REQUIREMENTS, [plan_id=164]
+                                             +- *(2) Filter isnotnull(product_id#45)
+                                                +- *(2) ColumnarToRow
+                                                   +- BatchScan lab.db.dim_product[product_id#45, category#46] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   Sort [on_time_rate#37 ASC NULLS FIRST], true, 0
+   +- Exchange rangepartitioning(on_time_rate#37 ASC NULLS FIRST, 200), ENSURE_REQUIREMENTS, [plan_id=109]
+      +- HashAggregate(keys=[category#46], functions=[avg(UnscaledValue(CASE WHEN (delivery_days#43 <= promised_days#42) THEN 1.0 ELSE 0.0 END))])
+         +- Exchange hashpartitioning(category#46, 200), ENSURE_REQUIREMENTS, [plan_id=106]
+            +- HashAggregate(keys=[category#46], functions=[partial_avg(UnscaledValue(CASE WHEN (delivery_days#43 <= promised_days#42) THEN 1.0 ELSE 0.0 END))])
+               +- Project [promised_days#42, delivery_days#43, category#46]
+                  +- SortMergeJoin [product_id#40], [product_id#45], Inner
+                     :- Sort [product_id#40 ASC NULLS FIRST], false, 0
+                     :  +- Exchange hashpartitioning(product_id#40, 200), ENSURE_REQUIREMENTS, [plan_id=98]
+                     :     +- Project [product_id#40, promised_days#42, delivery_days#43]
+                     :        +- Filter isnotnull(product_id#40)
+                     :           +- BatchScan lab.db.orders[order_ts#39, product_id#40, promised_days#42, delivery_days#43] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- Sort [product_id#45 ASC NULLS FIRST], false, 0
+                        +- Exchange hashpartitioning(product_id#45, 200), ENSURE_REQUIREMENTS, [plan_id=99]
+                           +- Filter isnotnull(product_id#45)
+                              +- BatchScan lab.db.dim_product[product_id#45, category#46] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

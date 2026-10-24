@@ -1,0 +1,41 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(4) HashAggregate(keys=[category#9], functions=[count(1)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 3
+         +- Exchange hashpartitioning(category#9, 200), ENSURE_REQUIREMENTS, [plan_id=227]
+            +- *(3) HashAggregate(keys=[category#9], functions=[partial_count(1)])
+               +- *(3) Project [category#9]
+                  +- *(3) BroadcastHashJoin [product_id#3], [product_id#8], Inner, BuildRight, false
+                     :- AQEShuffleRead local
+                     :  +- ShuffleQueryStage 0
+                     :     +- Exchange hashpartitioning(product_id#3, 200), ENSURE_REQUIREMENTS, [plan_id=80]
+                     :        +- *(1) Project [product_id#3]
+                     :           +- *(1) Filter isnotnull(product_id#3)
+                     :              +- *(1) ColumnarToRow
+                     :                 +- BatchScan lab.db.orders[order_ts#2, product_id#3] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+                     +- BroadcastQueryStage 2
+                        +- BroadcastExchange HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=179]
+                           +- AQEShuffleRead local
+                              +- ShuffleQueryStage 1
+                                 +- Exchange hashpartitioning(product_id#8, 200), ENSURE_REQUIREMENTS, [plan_id=98]
+                                    +- *(2) Filter ((isnotnull(category#9) AND (category#9 = books)) AND isnotnull(product_id#8))
+                                       +- *(2) ColumnarToRow
+                                          +- BatchScan lab.db.dim_product[product_id#8, category#9] lab.db.dim_product (branch=null) [filters=category IS NOT NULL, category = 'books', product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[category#9], functions=[count(1)])
+   +- Exchange hashpartitioning(category#9, 200), ENSURE_REQUIREMENTS, [plan_id=47]
+      +- HashAggregate(keys=[category#9], functions=[partial_count(1)])
+         +- Project [category#9]
+            +- SortMergeJoin [product_id#3], [product_id#8], Inner
+               :- Sort [product_id#3 ASC NULLS FIRST], false, 0
+               :  +- Exchange hashpartitioning(product_id#3, 200), ENSURE_REQUIREMENTS, [plan_id=39]
+               :     +- Project [product_id#3]
+               :        +- Filter isnotnull(product_id#3)
+               :           +- BatchScan lab.db.orders[order_ts#2, product_id#3] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+               +- Sort [product_id#8 ASC NULLS FIRST], false, 0
+                  +- Exchange hashpartitioning(product_id#8, 200), ENSURE_REQUIREMENTS, [plan_id=40]
+                     +- Filter ((isnotnull(category#9) AND (category#9 = books)) AND isnotnull(product_id#8))
+                        +- BatchScan lab.db.dim_product[product_id#8, category#9] lab.db.dim_product (branch=null) [filters=category IS NOT NULL, category = 'books', product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

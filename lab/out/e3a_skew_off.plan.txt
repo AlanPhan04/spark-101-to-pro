@@ -20,7 +20,7 @@ AdaptiveSparkPlan (33)
                      :                 +- BatchScan lab.db.orders (1)
                      +- * Sort (14)
                         +- AQEShuffleRead (13)
-                           +- ShuffleQueryStage (12), Statistics(sizeInBytes=1953.1 KiB, rowCount=5.00E+4)
+                           +- ShuffleQueryStage (12), Statistics(sizeInBytes=76.3 MiB, rowCount=2.00E+6)
                               +- Exchange (11)
                                  +- * Filter (10)
                                     +- * ColumnarToRow (9)
@@ -42,149 +42,149 @@ AdaptiveSparkPlan (33)
 
 
 (1) BatchScan lab.db.orders
-Output [3]: [product_id#188, promised_days#190, delivery_days#191]
+Output [3]: [product_id#227, promised_days#229, delivery_days#230]
 lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
 
 (2) ColumnarToRow [codegen id : 1]
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
 
 (3) Filter [codegen id : 1]
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
-Condition : isnotnull(product_id#188)
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
+Condition : isnotnull(product_id#227)
 
 (4) Exchange
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
-Arguments: hashpartitioning(product_id#188, 200), ENSURE_REQUIREMENTS, [plan_id=845]
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
+Arguments: hashpartitioning(product_id#227, 200), ENSURE_REQUIREMENTS, [plan_id=1090]
 
 (5) ShuffleQueryStage
-Output [3]: [product_id#188, promised_days#190, delivery_days#191]
+Output [3]: [product_id#227, promised_days#229, delivery_days#230]
 Arguments: 0
 
 (6) AQEShuffleRead
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
 Arguments: coalesced
 
 (7) Sort [codegen id : 3]
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
-Arguments: [product_id#188 ASC NULLS FIRST], false, 0
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
+Arguments: [product_id#227 ASC NULLS FIRST], false, 0
 
 (8) BatchScan lab.db.dim_product
-Output [2]: [product_id#193, category#194]
+Output [2]: [product_id#232, category#233]
 lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
 
 (9) ColumnarToRow [codegen id : 2]
-Input [2]: [product_id#193, category#194]
+Input [2]: [product_id#232, category#233]
 
 (10) Filter [codegen id : 2]
-Input [2]: [product_id#193, category#194]
-Condition : isnotnull(product_id#193)
+Input [2]: [product_id#232, category#233]
+Condition : isnotnull(product_id#232)
 
 (11) Exchange
-Input [2]: [product_id#193, category#194]
-Arguments: hashpartitioning(product_id#193, 200), ENSURE_REQUIREMENTS, [plan_id=861]
+Input [2]: [product_id#232, category#233]
+Arguments: hashpartitioning(product_id#232, 200), ENSURE_REQUIREMENTS, [plan_id=1106]
 
 (12) ShuffleQueryStage
-Output [2]: [product_id#193, category#194]
+Output [2]: [product_id#232, category#233]
 Arguments: 1
 
 (13) AQEShuffleRead
-Input [2]: [product_id#193, category#194]
+Input [2]: [product_id#232, category#233]
 Arguments: coalesced
 
 (14) Sort [codegen id : 4]
-Input [2]: [product_id#193, category#194]
-Arguments: [product_id#193 ASC NULLS FIRST], false, 0
+Input [2]: [product_id#232, category#233]
+Arguments: [product_id#232 ASC NULLS FIRST], false, 0
 
 (15) SortMergeJoin [codegen id : 5]
-Left keys [1]: [product_id#188]
-Right keys [1]: [product_id#193]
+Left keys [1]: [product_id#227]
+Right keys [1]: [product_id#232]
 Join type: Inner
 Join condition: None
 
 (16) Project [codegen id : 5]
-Output [3]: [promised_days#190, delivery_days#191, category#194]
-Input [5]: [product_id#188, promised_days#190, delivery_days#191, product_id#193, category#194]
+Output [3]: [promised_days#229, delivery_days#230, category#233]
+Input [5]: [product_id#227, promised_days#229, delivery_days#230, product_id#232, category#233]
 
 (17) HashAggregate [codegen id : 5]
-Input [3]: [promised_days#190, delivery_days#191, category#194]
-Keys [1]: [category#194]
-Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [2]: [sum#214, count#215L]
-Results [3]: [category#194, sum#216, count#217L]
+Input [3]: [promised_days#229, delivery_days#230, category#233]
+Keys [1]: [category#233]
+Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [2]: [sum#256, count#257L]
+Results [3]: [category#233, sum#258, count#259L]
 
 (18) Exchange
-Input [3]: [category#194, sum#216, count#217L]
-Arguments: hashpartitioning(category#194, 200), ENSURE_REQUIREMENTS, [plan_id=953]
+Input [3]: [category#233, sum#258, count#259L]
+Arguments: hashpartitioning(category#233, 200), ENSURE_REQUIREMENTS, [plan_id=1198]
 
 (19) ShuffleQueryStage
-Output [3]: [category#194, sum#216, count#217L]
+Output [3]: [category#233, sum#258, count#259L]
 Arguments: 2
 
 (20) AQEShuffleRead
-Input [3]: [category#194, sum#216, count#217L]
+Input [3]: [category#233, sum#258, count#259L]
 Arguments: coalesced
 
 (21) HashAggregate [codegen id : 6]
-Input [3]: [category#194, sum#216, count#217L]
-Keys [1]: [category#194]
-Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))#206]
-Results [2]: [category#194, cast((avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))#206 / 10.0) as decimal(6,5)) AS on_time#185]
+Input [3]: [category#233, sum#258, count#259L]
+Keys [1]: [category#233]
+Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))#248]
+Results [2]: [category#233, cast((avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))#248 / 10.0) as decimal(6,5)) AS on_time#224]
 
 (22) Filter
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
-Condition : isnotnull(product_id#188)
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
+Condition : isnotnull(product_id#227)
 
 (23) Exchange
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
-Arguments: hashpartitioning(product_id#188, 200), ENSURE_REQUIREMENTS, [plan_id=808]
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
+Arguments: hashpartitioning(product_id#227, 200), ENSURE_REQUIREMENTS, [plan_id=1053]
 
 (24) Sort
-Input [3]: [product_id#188, promised_days#190, delivery_days#191]
-Arguments: [product_id#188 ASC NULLS FIRST], false, 0
+Input [3]: [product_id#227, promised_days#229, delivery_days#230]
+Arguments: [product_id#227 ASC NULLS FIRST], false, 0
 
 (25) Filter
-Input [2]: [product_id#193, category#194]
-Condition : isnotnull(product_id#193)
+Input [2]: [product_id#232, category#233]
+Condition : isnotnull(product_id#232)
 
 (26) Exchange
-Input [2]: [product_id#193, category#194]
-Arguments: hashpartitioning(product_id#193, 200), ENSURE_REQUIREMENTS, [plan_id=809]
+Input [2]: [product_id#232, category#233]
+Arguments: hashpartitioning(product_id#232, 200), ENSURE_REQUIREMENTS, [plan_id=1054]
 
 (27) Sort
-Input [2]: [product_id#193, category#194]
-Arguments: [product_id#193 ASC NULLS FIRST], false, 0
+Input [2]: [product_id#232, category#233]
+Arguments: [product_id#232 ASC NULLS FIRST], false, 0
 
 (28) SortMergeJoin
-Left keys [1]: [product_id#188]
-Right keys [1]: [product_id#193]
+Left keys [1]: [product_id#227]
+Right keys [1]: [product_id#232]
 Join type: Inner
 Join condition: None
 
 (29) Project
-Output [3]: [promised_days#190, delivery_days#191, category#194]
-Input [5]: [product_id#188, promised_days#190, delivery_days#191, product_id#193, category#194]
+Output [3]: [promised_days#229, delivery_days#230, category#233]
+Input [5]: [product_id#227, promised_days#229, delivery_days#230, product_id#232, category#233]
 
 (30) HashAggregate
-Input [3]: [promised_days#190, delivery_days#191, category#194]
-Keys [1]: [category#194]
-Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [2]: [sum#214, count#215L]
-Results [3]: [category#194, sum#216, count#217L]
+Input [3]: [promised_days#229, delivery_days#230, category#233]
+Keys [1]: [category#233]
+Functions [1]: [partial_avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [2]: [sum#256, count#257L]
+Results [3]: [category#233, sum#258, count#259L]
 
 (31) Exchange
-Input [3]: [category#194, sum#216, count#217L]
-Arguments: hashpartitioning(category#194, 200), ENSURE_REQUIREMENTS, [plan_id=816]
+Input [3]: [category#233, sum#258, count#259L]
+Arguments: hashpartitioning(category#233, 200), ENSURE_REQUIREMENTS, [plan_id=1061]
 
 (32) HashAggregate
-Input [3]: [category#194, sum#216, count#217L]
-Keys [1]: [category#194]
-Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))]
-Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))#206]
-Results [2]: [category#194, cast((avg(UnscaledValue(CASE WHEN (delivery_days#191 <= promised_days#190) THEN 1.0 ELSE 0.0 END))#206 / 10.0) as decimal(6,5)) AS on_time#185]
+Input [3]: [category#233, sum#258, count#259L]
+Keys [1]: [category#233]
+Functions [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))]
+Aggregate Attributes [1]: [avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))#248]
+Results [2]: [category#233, cast((avg(UnscaledValue(CASE WHEN (delivery_days#230 <= promised_days#229) THEN 1.0 ELSE 0.0 END))#248 / 10.0) as decimal(6,5)) AS on_time#224]
 
 (33) AdaptiveSparkPlan
-Output [2]: [category#194, on_time#185]
+Output [2]: [category#233, on_time#224]
 Arguments: isFinalPlan=true
 
 

@@ -198,11 +198,18 @@ This is why the \emph{number of Exchange nodes in the physical plan} is the
 single best predictor of a query's cost, and why \Cref{ch:shape} told you to
 count them in the UI.
 
-For the specimen, with no broadcastable statistics on \texttt{dim\_product}, the
-planner produces: two scans, each followed by an \texttt{Exchange hashpartitioning(product\_id, 200)},
-a \texttt{SortMergeJoin}, a partial and final \texttt{HashAggregate} (which need
-no new exchange, because the join already partitioned by \texttt{product\_id}), and
-a final small sort. Three stages, exactly as \Cref{fig:job-stage-task} showed.
+For the specimen, the planner produces (captured on the lab of
+\Cref{sec:refenv-lab}): two scans, each followed by an \texttt{Exchange
+hashpartitioning(product\_id, 200)}; a \texttt{SortMergeJoin}, because
+\texttt{dim\_product} is about 170~MB, far over the 10~MB broadcast threshold
+--- Iceberg reports a table's size from its snapshot metadata, so the planner
+knows this without any column statistics; a partial \texttt{HashAggregate}; a
+second exchange, \texttt{hashpartitioning(category, 200)}, because the aggregate
+groups by a different key than the join, so the join's partitioning does not
+carry over; the final \texttt{HashAggregate}; and a fourth exchange,
+\texttt{rangepartitioning(on\_time\_rate, 200)}, for the global \texttt{ORDER BY}
+before the final \texttt{Sort}. Four exchanges, so five stages, as
+\Cref{fig:job-stage-task} shows.
 
 \section{Whole-stage code generation}
 \label{sec:wholestage-codegen}
@@ -299,26 +306,35 @@ move to \texttt{FORMATTED} when you need each node's detail.}
 where each node's details are spelled out. Read the tree \textbf{bottom-up} ---
 the leaves are scans, the root is the final operator.
 
-\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily,caption={\texttt{EXPLAIN FORMATTED} on the specimen (trimmed)},captionpos=b,label=lst:explain-anatomy]
+\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily,caption={\texttt{EXPLAIN FORMATTED} on the specimen, before it runs (trimmed)},captionpos=b,label=lst:explain-anatomy]
 == Physical Plan ==
-*(3) Sort (13)
-+- *(3) HashAggregate (12)            -- final aggregate
-   +- *(2) HashAggregate (10)         -- partial aggregate
-      +- *(2) SortMergeJoin Inner (9) -- both sides shuffled; not broadcast
-         :- *(1) Sort (5)             -- local sort, one per SMJ input
-         :  +- Exchange hashpartitioning(product_id, 200) (4)   -- shuffle #1
-         :     +- *(1) Filter (3)
-         :        +- *(1) ColumnarToRow (2)
-         :           +- BatchScan orders (1)   -- FileScan for a Hive table
-         +- *(1) Sort (8)
-            +- Exchange hashpartitioning(product_id, 200) (7)   -- shuffle #2
-               +- BatchScan dim_product (6)
+AdaptiveSparkPlan (17)
++- Sort (16)                               -- global ORDER BY
+   +- Exchange (15)                        -- rangepartitioning(on_time_rate, 200): shuffle #4
+      +- HashAggregate (14)                -- final aggregate
+         +- Exchange (13)                  -- hashpartitioning(category, 200): shuffle #3
+            +- HashAggregate (12)          -- partial aggregate
+               +- Project (11)
+                  +- SortMergeJoin Inner (10)   -- dim_product is too big to broadcast
+                     :- Sort (5)           -- local sort, one per SMJ input
+                     :  +- Exchange (4)    -- hashpartitioning(product_id, 200): shuffle #1
+                     :     +- Project (3)
+                     :        +- Filter (2)
+                     :           +- BatchScan lab.db.orders (1)
+                     +- Sort (9)
+                        +- Exchange (8)    -- hashpartitioning(product_id, 200): shuffle #2
+                           +- Filter (7)
+                              +- BatchScan lab.db.dim_product (6)
 
-(1) BatchScan orders
-    PartitionFilters: [order_ts >= 2026-03-01, order_ts < 2026-03-08]
-    PushedFilters:    [IsNotNull(product_id)]       -- row groups skipped
-    ReadSchema:       struct<product_id,promised_days,delivery_days,order_ts>
+(1) BatchScan lab.db.orders
+    Output [4]: [order_ts, product_id, promised_days, delivery_days]
+    filters=order_ts IS NOT NULL, order_ts >= 1772323200000000,
+            order_ts < 1772928000000000, product_id IS NOT NULL
 \end{lstlisting}
+
+The \texttt{*(n)} markers appear only after execution, in the final plan; the
+plan before it runs has none. The root is \texttt{AdaptiveSparkPlan} because AQE
+is on (\Cref{ch:aqe}).
 
 The nodes you will meet most --- a full catalogue is \Cref{app:plans}:
 
@@ -327,7 +343,8 @@ DataSource~V2 table (Spark's newer, pluggable table-source API, covered in
 \Cref{ch:dsv2} --- Iceberg tables always go through it); \texttt{FileScan
 parquet} for a Hive-catalogued table;
 \texttt{InMemoryTableScan} for cached data. Its fields are where pruning is
-confirmed or denied: \texttt{PartitionFilters} (whole partitions skipped ---
+confirmed or denied (an Iceberg \texttt{BatchScan} prints its pushed predicates in
+one \texttt{filters=} list instead, as above): \texttt{PartitionFilters} (whole partitions skipped ---
 directories on object storage), \texttt{PushedFilters} (row groups skipped inside
 the files that are read, using column min/max and bloom filters),
 \texttt{DataFilters} (everything, including the part evaluated row-by-row after
@@ -353,8 +370,8 @@ exchanges and the join.
 
 \begin{tip}
 The fast scan of any plan, in order: (1) the join operator ---
-\texttt{SortMergeJoin} on a small dimension means missing statistics
-(\Cref{ch:joins}); (2) the number of \texttt{Exchange} nodes; (3)
+\texttt{SortMergeJoin} on a table you expected to be small means its size
+estimate is over the broadcast threshold (\Cref{ch:joins}); (2) the number of \texttt{Exchange} nodes; (3)
 \texttt{PartitionFilters} non-empty on a partitioned table (\Cref{ch:pruning});
 (4) \texttt{PushedFilters} non-empty; (5) \texttt{ReadSchema} listing only needed
 columns.

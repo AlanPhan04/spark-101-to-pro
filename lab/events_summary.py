@@ -8,7 +8,13 @@ import os
 import statistics
 import sys
 
-events_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "events")
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+events_dir = args[0] if args else os.path.join(os.path.dirname(os.path.abspath(__file__)), "events")
+# --after=FILE: only event logs written after FILE was last modified (skip runs on older data)
+cutoff = 0
+for a in sys.argv[1:]:
+    if a.startswith("--after="):
+        cutoff = os.path.getmtime(a.split("=", 1)[1])
 
 
 def mb(x):
@@ -16,6 +22,8 @@ def mb(x):
 
 
 for path in sorted(glob.glob(os.path.join(events_dir, "*")), key=os.path.getmtime):
+    if os.path.getmtime(path) <= cutoff:
+        continue
     app = None
     job_group = {}          # job id -> group
     stage_job = {}          # stage id -> job id

@@ -1,214 +1,140 @@
 -- e5c_dpp_off_identity
--- SELECT p.category, count(*) AS n FROM orders_d o JOIN dim_date d ON o.order_date = d.date JOIN dim_product p ON o.product_id = p.product_id WHERE d.day_of_week = 'Sat' AND d.month = 3 GROUP BY p.category
+-- SELECT count(*) AS n, sum(o.order_total) AS total FROM orders_d o JOIN dim_date d ON o.order_date = d.date WHERE d.day_of_week = 'Sat' AND d.month = 3
 
 == Physical Plan ==
-AdaptiveSparkPlan (37)
+AdaptiveSparkPlan (23)
 +- == Final Plan ==
-   * HashAggregate (23)
-   +- AQEShuffleRead (22)
-      +- ShuffleQueryStage (21), Statistics(sizeInBytes=2.5 KiB, rowCount=80)
-         +- Exchange (20)
-            +- * HashAggregate (19)
-               +- * Project (18)
-                  +- * BroadcastHashJoin Inner BuildRight (17)
-                     :- * Project (11)
-                     :  +- * BroadcastHashJoin Inner BuildRight (10)
-                     :     :- * Filter (3)
-                     :     :  +- * ColumnarToRow (2)
-                     :     :     +- BatchScan lab.db.orders_d (1)
-                     :     +- BroadcastQueryStage (9), Statistics(sizeInBytes=16.0 MiB, rowCount=4)
-                     :        +- BroadcastExchange (8)
-                     :           +- * Project (7)
-                     :              +- * Filter (6)
-                     :                 +- * ColumnarToRow (5)
-                     :                    +- BatchScan lab.db.dim_date (4)
-                     +- BroadcastQueryStage (16), Statistics(sizeInBytes=18.0 MiB, rowCount=5.00E+4)
-                        +- BroadcastExchange (15)
-                           +- * Filter (14)
-                              +- * ColumnarToRow (13)
-                                 +- BatchScan lab.db.dim_product (12)
+   * HashAggregate (14)
+   +- ShuffleQueryStage (13), Statistics(sizeInBytes=744.0 B, rowCount=31)
+      +- Exchange (12)
+         +- * HashAggregate (11)
+            +- * Project (10)
+               +- * BroadcastHashJoin Inner BuildRight (9)
+                  :- * ColumnarToRow (2)
+                  :  +- BatchScan lab.db.orders_d (1)
+                  +- BroadcastQueryStage (8), Statistics(sizeInBytes=16.0 MiB, rowCount=4)
+                     +- BroadcastExchange (7)
+                        +- * Project (6)
+                           +- * Filter (5)
+                              +- * ColumnarToRow (4)
+                                 +- BatchScan lab.db.dim_date (3)
 +- == Initial Plan ==
-   HashAggregate (36)
-   +- Exchange (35)
-      +- HashAggregate (34)
-         +- Project (33)
-            +- BroadcastHashJoin Inner BuildRight (32)
-               :- Project (29)
-               :  +- BroadcastHashJoin Inner BuildRight (28)
-               :     :- Filter (24)
-               :     :  +- BatchScan lab.db.orders_d (1)
-               :     +- BroadcastExchange (27)
-               :        +- Project (26)
-               :           +- Filter (25)
-               :              +- BatchScan lab.db.dim_date (4)
-               +- BroadcastExchange (31)
-                  +- Filter (30)
-                     +- BatchScan lab.db.dim_product (12)
+   HashAggregate (22)
+   +- Exchange (21)
+      +- HashAggregate (20)
+         +- Project (19)
+            +- BroadcastHashJoin Inner BuildRight (18)
+               :- BatchScan lab.db.orders_d (1)
+               +- BroadcastExchange (17)
+                  +- Project (16)
+                     +- Filter (15)
+                        +- BatchScan lab.db.dim_date (3)
 
 
 (1) BatchScan lab.db.orders_d
-Output [2]: [product_id#31, order_date#36]
-lab.db.orders_d (branch=null) [filters=order_date IS NOT NULL, product_id IS NOT NULL, groupedBy=]
+Output [2]: [order_total#36, order_date#37]
+lab.db.orders_d (branch=null) [filters=order_date IS NOT NULL, groupedBy=]
 
-(2) ColumnarToRow [codegen id : 3]
-Input [2]: [product_id#31, order_date#36]
+(2) ColumnarToRow [codegen id : 2]
+Input [2]: [order_total#36, order_date#37]
 
-(3) Filter [codegen id : 3]
-Input [2]: [product_id#31, order_date#36]
-Condition : isnotnull(product_id#31)
-
-(4) BatchScan lab.db.dim_date
-Output [3]: [date#37, month#39, day_of_week#40]
+(3) BatchScan lab.db.dim_date
+Output [3]: [date#38, month#40, day_of_week#41]
 lab.db.dim_date (branch=null) [filters=day_of_week IS NOT NULL, month IS NOT NULL, day_of_week = 'Sat', month = 3, date IS NOT NULL, groupedBy=]
 
-(5) ColumnarToRow [codegen id : 1]
-Input [3]: [date#37, month#39, day_of_week#40]
+(4) ColumnarToRow [codegen id : 1]
+Input [3]: [date#38, month#40, day_of_week#41]
 
-(6) Filter [codegen id : 1]
-Input [3]: [date#37, month#39, day_of_week#40]
-Condition : ((((isnotnull(day_of_week#40) AND isnotnull(month#39)) AND (day_of_week#40 = Sat)) AND (month#39 = 3)) AND isnotnull(date#37))
+(5) Filter [codegen id : 1]
+Input [3]: [date#38, month#40, day_of_week#41]
+Condition : ((((isnotnull(day_of_week#41) AND isnotnull(month#40)) AND (day_of_week#41 = Sat)) AND (month#40 = 3)) AND isnotnull(date#38))
 
-(7) Project [codegen id : 1]
-Output [1]: [date#37]
-Input [3]: [date#37, month#39, day_of_week#40]
+(6) Project [codegen id : 1]
+Output [1]: [date#38]
+Input [3]: [date#38, month#40, day_of_week#41]
 
-(8) BroadcastExchange
-Input [1]: [date#37]
-Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=140]
+(7) BroadcastExchange
+Input [1]: [date#38]
+Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=101]
 
-(9) BroadcastQueryStage
-Output [1]: [date#37]
+(8) BroadcastQueryStage
+Output [1]: [date#38]
 Arguments: 0
 
-(10) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [order_date#36]
-Right keys [1]: [date#37]
+(9) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [order_date#37]
+Right keys [1]: [date#38]
 Join type: Inner
 Join condition: None
 
-(11) Project [codegen id : 3]
-Output [1]: [product_id#31]
-Input [3]: [product_id#31, order_date#36, date#37]
+(10) Project [codegen id : 2]
+Output [1]: [order_total#36]
+Input [3]: [order_total#36, order_date#37, date#38]
 
-(12) BatchScan lab.db.dim_product
-Output [2]: [product_id#41, category#42]
-lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+(11) HashAggregate [codegen id : 2]
+Input [1]: [order_total#36]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(order_total#36)]
+Aggregate Attributes [2]: [count#61L, sum#62]
+Results [2]: [count#63L, sum#64]
 
-(13) ColumnarToRow [codegen id : 2]
-Input [2]: [product_id#41, category#42]
+(12) Exchange
+Input [2]: [count#63L, sum#64]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=151]
 
-(14) Filter [codegen id : 2]
-Input [2]: [product_id#41, category#42]
-Condition : isnotnull(product_id#41)
-
-(15) BroadcastExchange
-Input [2]: [product_id#41, category#42]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=158]
-
-(16) BroadcastQueryStage
-Output [2]: [product_id#41, category#42]
+(13) ShuffleQueryStage
+Output [2]: [count#63L, sum#64]
 Arguments: 1
 
-(17) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [product_id#31]
-Right keys [1]: [product_id#41]
+(14) HashAggregate [codegen id : 3]
+Input [2]: [count#63L, sum#64]
+Keys: []
+Functions [2]: [count(1), sum(order_total#36)]
+Aggregate Attributes [2]: [count(1)#42L, sum(order_total#36)#43]
+Results [2]: [count(1)#42L AS n#28L, sum(order_total#36)#43 AS total#29]
+
+(15) Filter
+Input [3]: [date#38, month#40, day_of_week#41]
+Condition : ((((isnotnull(day_of_week#41) AND isnotnull(month#40)) AND (day_of_week#41 = Sat)) AND (month#40 = 3)) AND isnotnull(date#38))
+
+(16) Project
+Output [1]: [date#38]
+Input [3]: [date#38, month#40, day_of_week#41]
+
+(17) BroadcastExchange
+Input [1]: [date#38]
+Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=72]
+
+(18) BroadcastHashJoin
+Left keys [1]: [order_date#37]
+Right keys [1]: [date#38]
 Join type: Inner
 Join condition: None
 
-(18) Project [codegen id : 3]
-Output [1]: [category#42]
-Input [3]: [product_id#31, product_id#41, category#42]
+(19) Project
+Output [1]: [order_total#36]
+Input [3]: [order_total#36, order_date#37, date#38]
 
-(19) HashAggregate [codegen id : 3]
-Input [1]: [category#42]
-Keys [1]: [category#42]
-Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#69L]
-Results [2]: [category#42, count#70L]
+(20) HashAggregate
+Input [1]: [order_total#36]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(order_total#36)]
+Aggregate Attributes [2]: [count#61L, sum#62]
+Results [2]: [count#63L, sum#64]
 
-(20) Exchange
-Input [2]: [category#42, count#70L]
-Arguments: hashpartitioning(category#42, 200), ENSURE_REQUIREMENTS, [plan_id=267]
+(21) Exchange
+Input [2]: [count#63L, sum#64]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=77]
 
-(21) ShuffleQueryStage
-Output [2]: [category#42, count#70L]
-Arguments: 2
+(22) HashAggregate
+Input [2]: [count#63L, sum#64]
+Keys: []
+Functions [2]: [count(1), sum(order_total#36)]
+Aggregate Attributes [2]: [count(1)#42L, sum(order_total#36)#43]
+Results [2]: [count(1)#42L AS n#28L, sum(order_total#36)#43 AS total#29]
 
-(22) AQEShuffleRead
-Input [2]: [category#42, count#70L]
-Arguments: coalesced
-
-(23) HashAggregate [codegen id : 4]
-Input [2]: [category#42, count#70L]
-Keys [1]: [category#42]
-Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#44L]
-Results [2]: [category#42, count(1)#44L AS n#28L]
-
-(24) Filter
-Input [2]: [product_id#31, order_date#36]
-Condition : isnotnull(product_id#31)
-
-(25) Filter
-Input [3]: [date#37, month#39, day_of_week#40]
-Condition : ((((isnotnull(day_of_week#40) AND isnotnull(month#39)) AND (day_of_week#40 = Sat)) AND (month#39 = 3)) AND isnotnull(date#37))
-
-(26) Project
-Output [1]: [date#37]
-Input [3]: [date#37, month#39, day_of_week#40]
-
-(27) BroadcastExchange
-Input [1]: [date#37]
-Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=98]
-
-(28) BroadcastHashJoin
-Left keys [1]: [order_date#36]
-Right keys [1]: [date#37]
-Join type: Inner
-Join condition: None
-
-(29) Project
-Output [1]: [product_id#31]
-Input [3]: [product_id#31, order_date#36, date#37]
-
-(30) Filter
-Input [2]: [product_id#41, category#42]
-Condition : isnotnull(product_id#41)
-
-(31) BroadcastExchange
-Input [2]: [product_id#41, category#42]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, false]),false), [plan_id=102]
-
-(32) BroadcastHashJoin
-Left keys [1]: [product_id#31]
-Right keys [1]: [product_id#41]
-Join type: Inner
-Join condition: None
-
-(33) Project
-Output [1]: [category#42]
-Input [3]: [product_id#31, product_id#41, category#42]
-
-(34) HashAggregate
-Input [1]: [category#42]
-Keys [1]: [category#42]
-Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#69L]
-Results [2]: [category#42, count#70L]
-
-(35) Exchange
-Input [2]: [category#42, count#70L]
-Arguments: hashpartitioning(category#42, 200), ENSURE_REQUIREMENTS, [plan_id=107]
-
-(36) HashAggregate
-Input [2]: [category#42, count#70L]
-Keys [1]: [category#42]
-Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#44L]
-Results [2]: [category#42, count(1)#44L AS n#28L]
-
-(37) AdaptiveSparkPlan
-Output [2]: [category#42, n#28L]
+(23) AdaptiveSparkPlan
+Output [2]: [n#28L, total#29]
 Arguments: isFinalPlan=true
 
 

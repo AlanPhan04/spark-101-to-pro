@@ -1,0 +1,18 @@
+== Physical Plan ==
+AdaptiveSparkPlan isFinalPlan=true
++- == Final Plan ==
+   *(2) HashAggregate(keys=[customer_id#60], functions=[count(1), sum(order_total#63)])
+   +- AQEShuffleRead coalesced
+      +- ShuffleQueryStage 0
+         +- Exchange hashpartitioning(customer_id#60, 2000), ENSURE_REQUIREMENTS, [plan_id=117]
+            +- *(1) HashAggregate(keys=[customer_id#60], functions=[partial_count(1), partial_sum(order_total#63)])
+               +- *(1) Project [customer_id#60, order_total#63]
+                  +- *(1) ColumnarToRow
+                     +- BatchScan lab.db.orders[order_ts#58, customer_id#60, order_total#63] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=] RuntimeFilters: []
++- == Initial Plan ==
+   HashAggregate(keys=[customer_id#60], functions=[count(1), sum(order_total#63)])
+   +- Exchange hashpartitioning(customer_id#60, 2000), ENSURE_REQUIREMENTS, [plan_id=100]
+      +- HashAggregate(keys=[customer_id#60], functions=[partial_count(1), partial_sum(order_total#63)])
+         +- Project [customer_id#60, order_total#63]
+            +- BatchScan lab.db.orders[order_ts#58, customer_id#60, order_total#63] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=] RuntimeFilters: []
+

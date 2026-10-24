@@ -144,12 +144,10 @@ Static pruning needs a literal known before the query runs. A star-schema join
 for the planner to use:
 
 \begin{lstlisting}[language=SQL,caption={A filter on the dimension, not the fact table},captionpos=b,label=lst:pruning-dpp-query]
-SELECT p.category, COUNT(*) AS n
+SELECT COUNT(*) AS n, SUM(o.order_total) AS total
 FROM orders_d o
 JOIN dim_date d ON o.order_date = d.date
-JOIN dim_product p ON o.product_id = p.product_id
-WHERE d.day_of_week = 'Sat' AND d.month = 3
-GROUP BY p.category;
+WHERE d.day_of_week = 'Sat' AND d.month = 3;
 \end{lstlisting}
 
 Here \texttt{orders\_d} is a copy of \texttt{orders} partitioned by an identity
@@ -190,10 +188,10 @@ cases that matter.
 \toprule
 \textbf{Case} & \textbf{\texttt{RuntimeFilters} on the fact scan} & \textbf{Input} & \textbf{Tasks} \\
 \midrule
-\texttt{orders\_d}, identity partition, DPP off & empty & 57.8~MB & 31 \\
-\texttt{orders\_d}, identity partition, DPP on & \texttt{dynamicpruningexpression(order\_date IN \ldots)} & 7.5~MB & 4 \\
-\texttt{orders\_d}, DPP on, broadcast disabled & \texttt{dynamicpruningexpression(true)} & 57.8~MB & 31 \\
-\texttt{orders}, \texttt{day(order\_ts)}, join on \texttt{CAST(order\_ts AS DATE)}, DPP on & \texttt{dynamicpruningexpression(cast(order\_ts as date) IN \ldots)} & 202.6~MB & 31 \\
+\texttt{orders\_d}, identity partition, DPP off & empty & 60.6~MB & 31 \\
+\texttt{orders\_d}, identity partition, DPP on & \texttt{dynamicpruningexpression(order\_date IN \ldots)} & 7.8~MB & 4 \\
+\texttt{orders\_d}, DPP on, broadcast disabled & \texttt{dynamicpruningexpression(true)} & 60.6~MB & 31 \\
+\texttt{orders}, \texttt{day(order\_ts)}, join on \texttt{CAST(order\_ts AS DATE)}, DPP on & \texttt{dynamicpruningexpression(cast(order\_ts as date) IN \ldots)} & 207.3~MB & 31 \\
 \bottomrule
 \end{tabular}
 \caption{Dynamic partition pruning on the lab. It cuts the scan from 31 tasks
@@ -247,7 +245,7 @@ The first condition is the one a hidden-partitioned Iceberg table trips. The
 specimen's \texttt{orders} is partitioned by \texttt{day(order\_ts)}, so no
 column called \texttt{order\_date} exists to join on, and a join on
 \texttt{CAST(order\_ts AS DATE)} got a runtime filter that the Iceberg scan could
-not turn into a partition skip: 31 tasks, 202.6~MB, identical to the run with
+not turn into a partition skip: 31 tasks, 207.3~MB, identical to the run with
 DPP off. Whether a different Iceberg version or a different join expression
 closes that gap is worth testing on your table; until you have, treat a DPP
 filter on a transformed partition column as unproven.
@@ -373,7 +371,7 @@ column was measured on the lab for the first three rows.
 \midrule
 \texttt{repartition(n)} & yes & round-robin & no: 200 requested, 200 tasks ran \\
 \texttt{repartition(n, cols)} & yes & hash of columns & no: 200 requested, 200 tasks ran \\
-\texttt{repartition(cols)} & yes & hash of columns & yes: 200 default, coalesced to 46 \\
+\texttt{repartition(cols)} & yes & hash of columns & yes: 200 default, coalesced to 47 \\
 \texttt{repartitionByRange(cols)} & yes, after a sampling job & range of columns & yes (claim --- not tested) \\
 \texttt{coalesce(n)} & no & merges neighbors & not applicable \\
 \texttt{/*+ REBALANCE */} & yes & balances sizes & yes: splits skew, merges small (claim --- not tested) \\
@@ -404,16 +402,16 @@ and written to a no-op sink.
 \toprule
 \textbf{Plan} & \textbf{Scan tasks} & \textbf{Median scan task} & \textbf{Reduce tasks} & \textbf{Shuffle read} \\
 \midrule
-no change & 14 & 1764~ms & --- & --- \\
-\texttt{coalesce(10)} & 10 & 1548~ms & --- & --- \\
-\texttt{repartition(10)} & 14 & 4180~ms & 10 & 990.2~MB \\
+no change & 14 & 1688~ms & --- & --- \\
+\texttt{coalesce(10)} & 10 & 1660~ms & --- & --- \\
+\texttt{repartition(10)} & 14 & 3334~ms & 10 & 1001.2~MB \\
 \bottomrule
 \end{tabular}
-\caption{Fourteen days of \texttt{orders} (465.5~MB read), then 10 output
+\caption{Fourteen days of \texttt{orders} (490.6~MB read), then 10 output
 partitions. \texttt{coalesce} merged the scan itself down to 10 tasks and
 shuffled nothing. \texttt{repartition} kept the scan at 14 tasks, wrote and then
-read 990.2~MB of shuffle data (rows are larger once deserialized), and made each
-scan task more than twice as slow because it now also writes shuffle files.}
+read 1001.2~MB of shuffle data (rows are larger once deserialized), and made each
+scan task about twice as slow because it now also writes shuffle files.}
 \label{tab:pruning-lab-coalesce}
 \end{table}
 
