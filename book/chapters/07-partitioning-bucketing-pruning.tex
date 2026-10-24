@@ -2,181 +2,473 @@
 \label{ch:pruning}
 
 \begin{chapterintro}
-The cheapest data to move is data you never read. Partition pruning skips whole
-directories; dynamic partition pruning does it using values discovered from the
-other side of a join; bucketing lays data out so a join needs no shuffle at
-all. Each of these is easy to defeat --- a function on the partition column, a
-\texttt{CAST}, a stray \texttt{SELECT *} --- and the plan tells you when you
-have. This chapter covers each mechanism and how to confirm it is working.
+The cheapest data to move is data you never read. The specimen asks about one
+week of a month of \texttt{orders}; a plan that reads all 31 days and filters
+afterwards has done four times the work, and no later stage can undo it. This
+chapter covers the ways Spark skips data before it moves any: partition pruning
+skips whole directories, dynamic partition pruning does it using values
+discovered from the other side of a join, bucketing lays data out so a join
+needs no shuffle, and column pruning reads only the columns the query names.
+Each is easy to defeat --- a function on the partition column, a \texttt{CAST},
+a stray \texttt{SELECT *} --- and the plan tells you when you have. Here is how
+to read it.
 \end{chapterintro}
+
+\section{Reading a scan node}
+\label{sec:pruning-scan}
+
+Every pruning mechanism in this chapter reports itself in one place: the scan
+node at the bottom of the plan. Learn its fields first, because the rest of the
+chapter is about making them say the right thing. \Cref{tab:pruning-scan-fields}
+lists them.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.1cm}p{5.4cm}p{5.6cm}@{}}
+\toprule
+\textbf{Field} & \textbf{What it says} & \textbf{An empty value means} \\
+\midrule
+\texttt{PartitionFilters} & predicates resolved against partition values, so whole partitions are skipped & the filter did not resolve against the partition column; every partition is read \\
+\texttt{PushedFilters} & predicates handed to the file reader, which skips row groups by their min/max statistics & nothing was pushed; rows are filtered after they are decoded \\
+\texttt{ReadSchema} & the columns the scan actually reads & (never empty) a schema wider than the query needs is a pruning failure \\
+\texttt{RuntimeFilters} & filters injected at run time, such as dynamic partition pruning's (\Cref{sec:pruning-dpp}) & no runtime filter was added \\
+\bottomrule
+\end{tabular}
+\caption{The scan-node fields that report pruning. An empty list on a
+partitioned table is the first thing to look for when a scan reads too much.}
+\label{tab:pruning-scan-fields}
+\end{table}
+
+The names depend on the reader. A Hive-catalogued Parquet table, read through
+Spark's built-in file source, prints \texttt{PartitionFilters},
+\texttt{PushedFilters}, and \texttt{ReadSchema} on a \texttt{FileScan} node. An
+Iceberg table is read through the DataSource~V2 API, and its \texttt{BatchScan}
+node prints the pushed predicates inside a single \texttt{filters=[\ldots]} list
+instead, with \texttt{RuntimeFilters} beside it. The meaning is the same; the
+spelling differs. (Claim --- verify the exact \texttt{BatchScan} wording on the
+reference cluster.)
+
+\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={The shape of the specimen's Iceberg scan node},captionpos=b,label=lst:pruning-scan-node]
+BatchScan orders[order_ts, product_id, promised_days, delivery_days]
+  (branch=null) [filters=order_ts >= 1772323200000000,
+                         order_ts <  1772928000000000,
+                 groupedBy=]
+  RuntimeFilters: []
+\end{lstlisting}
+% CAPTURE: the BatchScan line from EXPLAIN FORMATTED of the specimen on the reference cluster
+
+Read it field by field. The four columns in brackets are the \texttt{ReadSchema}
+equivalent: the specimen names \texttt{order\_ts}, \texttt{product\_id},
+\texttt{promised\_days}, and \texttt{delivery\_days}, and nothing else, so
+\texttt{order\_id}, \texttt{customer\_id}, and \texttt{order\_total} are never
+read. The two \texttt{order\_ts} comparisons are the week's bounds, already
+converted to microseconds; they are the predicates that decide which partitions
+survive.
 
 \section{Partition pruning and the pushdown killers}
 \label{sec:pruning-static}
 
-A table physically partitioned by a column --- for a Hive-catalogued table,
-one subdirectory per distinct value; for Iceberg, the hidden partitioning
-covered in \Cref{ch:iceberg-layout} --- lets the planner skip whole partitions
-before any file inside them is opened, whenever a filter can be resolved
-against the partition value alone. This shows up in \texttt{EXPLAIN} as a
-non-empty \texttt{PartitionFilters} on the scan (\Cref{sec:c-scan}); an empty
-one on a partitioned table means the filter did not resolve that way.
+A table physically partitioned by a column --- for a Hive-catalogued table, one
+subdirectory per distinct value; for Iceberg, the hidden partitioning covered in
+\Cref{ch:iceberg-layout} --- lets the planner skip whole partitions before any
+file inside them is opened, whenever a filter can be resolved against the
+partition value alone. \Cref{fig:pruning-static} shows the specimen's case:
+\texttt{orders} is partitioned by day, the week's filter matches 7 of the 31
+daily partitions, and the other 24 are discarded at plan time, without opening
+a file or reading a footer.
 
-The most common reason it does not resolve is the filter itself. A function
-applied to the partition column, a \texttt{CAST}, a non-deterministic
-expression, or an \texttt{OR} with a non-pushable branch all defeat this the
-same way they defeat row-group pushdown --- the full catalogue of these
-pushdown killers, with the exact fix for each, is
-\Cref{sec:c-pushdown}. The specimen query's own
-\texttt{order\_ts >= TIMESTAMP '\ldots'} filter works precisely because it is a
-plain comparison against a literal, resolved once at plan time, with nothing
-standing between the column and the value.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{pruning-static.pdf}
+  \caption{A filter that resolves against the partition value keeps 7 of 31
+  daily partitions of \texttt{orders} and skips the other 24 before any file is
+  opened. Green marks what is read; dashed gray marks what is skipped.}
+  \label{fig:pruning-static}
+\end{figure}
+
+Put numbers on it. If a day's partition holds 2~GB, the month is 62~GB, and the
+week reads 14~GB: a filter that fails to prune reads 62~GB to answer the same
+question, 4.4 times the bytes, and every extra byte becomes extra tasks and
+extra shuffle input downstream. At 128~MB per input split
+(\conf{spark.sql.files.maxPartitionBytes}), that is roughly 112 tasks
+versus 496, on a cluster with 40 slots.
+
+The most common reason pruning does not happen is the filter itself. A filter
+resolves against a partition value only when Spark can compare the column to a
+literal as it is stored. \Cref{tab:pruning-killers} lists the usual breakages;
+the full catalogue, with the exact fix for each, is \Cref{sec:c-pushdown}.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{4.6cm}p{4.2cm}p{5.2cm}@{}}
+\toprule
+\textbf{Filter as written} & \textbf{Why it may not prune} & \textbf{Rewrite} \\
+\midrule
+\texttt{WHERE date(order\_ts) = '2026-03-01'} & a function wraps the column & a range on the bare column: \texttt{order\_ts >= \ldots AND order\_ts < \ldots} \\
+\texttt{WHERE CAST(order\_ts AS STRING) LIKE '2026-03\%'} & a cast changes the type being compared & compare the timestamp to timestamp literals \\
+\texttt{WHERE order\_ts + INTERVAL 1 DAY > now()} & arithmetic on the column, plus a non-deterministic function & move the arithmetic to the literal side \\
+\texttt{WHERE order\_ts >= a OR product\_id = b} & an \texttt{OR} branch that is not on the partition column & split into a \texttt{UNION ALL} of two prunable queries \\
+\bottomrule
+\end{tabular}
+\caption{Filters that commonly defeat partition pruning. A plain comparison of
+the bare column to a literal is the shape that always works.}
+\label{tab:pruning-killers}
+\end{table}
+
+\begin{note}
+Whether a given rewrite is \emph{necessary} on an Iceberg table is a question
+for \Cref{ch:iceberg-read}: Iceberg translates some predicates on a source column
+through its partition transform, so a form that fails against a Hive partition
+column may still prune there. Do not assume either way; check the scan node.
+(Claim --- verify each row of \Cref{tab:pruning-killers} on the reference
+cluster.)
+\end{note}
+
+The specimen's own \texttt{order\_ts >= TIMESTAMP '\ldots'} filter works
+precisely because it is the last row's opposite: a plain comparison against a
+literal, resolved once at plan time, with nothing standing between the column
+and the value.
 
 \section{Dynamic partition pruning}
 \label{sec:pruning-dpp}
 
 Static pruning needs a literal known before the query runs. A star-schema join
---- fact table filtered indirectly, through a small dimension --- has no
-literal for the planner to use:
+--- fact table filtered indirectly, through a small dimension --- has no literal
+for the planner to use:
 
-\begin{lstlisting}[language=SQL,caption={A filter on the dimension, not the fact table},captionpos=b]
-SELECT * FROM orders o
-JOIN dim_date d ON o.order_date = d.date
-WHERE d.year = 2026;
+\begin{lstlisting}[language=SQL,caption={A filter on the dimension, not the fact table},captionpos=b,label=lst:pruning-dpp-query]
+SELECT p.category, COUNT(*) AS orders
+FROM orders o
+JOIN dim_date d ON CAST(o.order_ts AS DATE) = d.date
+JOIN dim_product p ON o.product_id = p.product_id
+WHERE d.day_of_week = 'Sat'
+GROUP BY p.category;
 \end{lstlisting}
 
-Without help, Spark scans every partition of \texttt{orders} across all years,
-then joins, then discards everything outside 2026 --- all the pruning happens
-\emph{after} the expensive read. \emph{Dynamic partition pruning} (DPP, on by
-default via
-\conf{spark.sql.optimizer.dynamicPartitionPruning.enabled}) rewrites this: it
-runs the small side first, collects the matching \texttt{date} values, and
-injects them into the fact scan as if the query had been written
+Without help, Spark scans every partition of \texttt{orders}, joins, and discards
+everything that is not a Saturday --- all the pruning happens \emph{after} the
+expensive read. \emph{Dynamic partition pruning} (DPP, on by default via
+\conf{spark.sql.optimizer.dynamicPartitionPruning.enabled}) rewrites this
+(\Cref{fig:dpp-flow}). It runs the dimension side first, collects the matching
+\texttt{date} values, and injects them into the fact scan as if the query had
+been written
 
-\begin{lstlisting}[language=SQL,numbers=none]
-WHERE o.order_date IN (SELECT date FROM dim_date WHERE year = 2026)
+\begin{lstlisting}[language=SQL,numbers=none,caption={The query DPP effectively runs},captionpos=b,label=lst:pruning-dpp-rewrite]
+WHERE CAST(o.order_ts AS DATE) IN (SELECT date FROM dim_date WHERE day_of_week = 'Sat')
 \end{lstlisting}
 
-so the same partition-level skipping from \Cref{sec:pruning-static} applies to
-a filter that, in the query as written, lived on the other table entirely
-(\Cref{fig:dpp-flow}).
+so the same partition-level skipping from \Cref{sec:pruning-static} applies to a
+filter that, in the query as written, lived on the other table entirely. March
+2026 has four Saturdays, so the scan keeps 4 of 31 partitions: 13\% of the
+bytes.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{dpp-flow.pdf}
-  \caption{Without DPP, pruning happens last: the whole fact table is
-  scanned before the join discards most of it. With DPP, the small
-  dimension side runs first and its matching keys are injected as a filter
-  \emph{before} the fact scan, so pruning happens first instead.}
+  \caption{Without DPP, pruning happens last: the whole fact table is scanned
+  before the join discards most of it. With DPP, the small dimension side runs
+  first and its matching keys are injected as a filter \emph{before} the fact
+  scan, so pruning happens first.}
   \label{fig:dpp-flow}
 \end{figure}
 
-DPP has two prerequisites, and missing either one silently disables it: the
-fact table must be partitioned by the join column --- there is nothing to skip
-by directory otherwise --- and the dimension side must be cheap enough to
-execute first (broadcastable, in practice). The reason broadcastability
-specifically is what unlocks DPP, not just "small," is the reuse mechanism
-in \Cref{fig:dpp-flow}: Spark runs the dimension side once, builds the
-broadcast hash table for the join out of it as it would anyway, and reuses
-that \emph{same} in-memory result a second time as the list of matching keys
-for the fact-table filter --- one execution, two consumers. If the dimension
-side is not broadcastable, there is no cheap, already-materialized copy of
-it sitting in memory to reuse this way; Spark would have to run the
-dimension side as its own separate query just to get the pruning values,
-which can cost more than the scan it was supposed to save, so the optimizer
-does not attempt it.
+\subsection{When DPP applies}
+
+DPP is a rewrite with conditions, and missing any one silently disables it.
+\Cref{tab:pruning-dpp-conditions} lists them.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{4.3cm}p{5.0cm}p{4.7cm}@{}}
+\toprule
+\textbf{Condition} & \textbf{Why it is required} & \textbf{How to check} \\
+\midrule
+The fact table is partitioned by the join column & there is nothing to skip by directory otherwise & the table's partition spec \\
+The dimension side has a selective filter & without one, every key matches and nothing is pruned & a \texttt{WHERE} on the dimension \\
+The dimension side can be reused as a broadcast & the keys come free from the broadcast that the join builds anyway (\conf{spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly}, default \texttt{true}) & \texttt{BroadcastHashJoin} in the plan \\
+The join is an equi-join on the partition column & the injected filter is an \texttt{IN} on that column & the join condition \\
+\bottomrule
+\end{tabular}
+\caption{Conditions for dynamic partition pruning. The broadcast-reuse condition
+is the one that most often surprises.}
+\label{tab:pruning-dpp-conditions}
+\end{table}
+
+The broadcast condition deserves its reason. Spark runs the dimension side once,
+builds the broadcast hash table for the join out of it as it would anyway, and
+reuses that \emph{same} in-memory result a second time as the list of matching
+keys for the fact-table filter: one execution, two consumers. If the dimension
+side is not broadcastable, there is no cheap, already-materialized copy to reuse.
+Spark would have to run the dimension side as its own separate query only to get
+the pruning values. With \texttt{reuseBroadcastOnly} set to \texttt{false} it
+will do exactly that, but only when its estimate says the pruning saves more than
+it costs (\conf{spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio},
+default 0.5, and a statistics estimate that Iceberg tables often lack
+(\Cref{sec:joins-forcing})). Leave the default alone unless you have measured.
+
+When DPP fires, the fact scan carries the injected filter:
+
+\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={The shape of a scan with dynamic partition pruning},captionpos=b,label=lst:pruning-dpp-plan]
+BatchScan orders[...]
+  RuntimeFilters: [dynamicpruningexpression(CAST(order_ts AS DATE) IN dynamicpruning#42)]
+  ...
+  +- SubqueryBroadcast dynamicpruning#42
+     +- BroadcastExchange
+        +- Filter (day_of_week = Sat)
+           +- BatchScan dim_date
+\end{lstlisting}
+% CAPTURE: EXPLAIN FORMATTED of lst:pruning-dpp-query; with AQE on, the subquery node may print as SubqueryAdaptiveBroadcast
+
+\begin{warning}
+DPP on an Iceberg table depends on the Iceberg scan advertising runtime
+filtering, and on Iceberg projecting a join on \texttt{CAST(order\_ts AS DATE)}
+onto its hidden \texttt{day(order\_ts)} transform. Both depend on the Iceberg
+version in \Cref{app:refenv}. (Claim --- verify \texttt{RuntimeFilters} is
+non-empty in \Cref{lst:pruning-dpp-plan} on the reference cluster before relying
+on this; \Cref{ch:iceberg-read} covers the Iceberg side.)
+\end{warning}
 
 \section{Bucketing to avoid a shuffle}
 \label{sec:pruning-bucketing}
 
 Partitioning divides a table by directory; \emph{bucketing} divides it further,
-within a partition, by hashing a column into a fixed number of files. Concretely,
-writing with \texttt{bucket(16, customer\_id)} computes
-\texttt{hash(customer\_id) mod 16} for every row and sends it to the file
-for that remainder --- the same \texttt{hash(key) mod N} idea
-\Cref{sec:shuffle-write} used to assign shuffle output partitions, just
-applied at write time to decide which \emph{file} a row lands in instead of
-which in-flight partition. Two tables bucketed on the same column with the
-same bucket count assign every row the same way from the same
-\texttt{customer\_id}, so a row and its join partner always land in the
-file pair with the same bucket number --- which is exactly why they end up
-co-located file-to-file on that column, and exactly the precondition
-\Cref{sec:joins-spj} used for a storage-partitioned join: the shuffle that a
-normal join would pay for is instead paid once, at write time, and every join
-on that key afterward pays nothing.
+within a partition, by hashing a column into a fixed number of files. Writing
+with \texttt{bucket(16, customer\_id)} computes
+\texttt{hash(customer\_id) mod 16} for every row and sends it to the file for
+that remainder. This is the same \texttt{hash(key) mod N} idea
+\Cref{sec:shuffle-write} used to assign shuffle output partitions, applied at
+write time to decide which \emph{file} a row lands in instead of which in-flight
+partition. Two tables bucketed on the same column with the same bucket count
+assign every row the same way from the same \texttt{customer\_id}, so a row and
+its join partner always land in the file pair with the same bucket number.
+
+\Cref{fig:bucketed-join} shows what that buys. An ordinary join pays two
+shuffles every time it runs; a bucketed join pays them once, at write time.
+Each task reads one bucket from each table and joins them directly, which is
+precisely the precondition \Cref{sec:joins-spj} used for a storage-partitioned
+join.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{bucketed-join.pdf}
+  \caption{Without bucketing, a join shuffles both sides to line up the keys.
+  With both tables bucketed on the join key, the matching rows are already in the
+  same-numbered bucket on each side, and each task joins one bucket pair with no
+  \texttt{Exchange}.}
+  \label{fig:bucketed-join}
+\end{figure}
+
+\subsection{Sizing the bucket count}
+
+The bucket count is a design decision with a hard constraint: it fixes the join's
+parallelism and the size of each task's input, and you cannot change it without
+rewriting the table. Size it the way \Cref{sec:shuffle-sizing} sizes shuffle
+partitions. Suppose \texttt{orders} grows to 64~GB for the period you join on.
+Sixteen buckets would put 4~GB in every task, which spills; at a 128~MB target
+you need $64\,\text{GB} / 128\,\text{MB} = 512$ buckets. On 40 slots that is
+about 13 waves, a comfortable number. Too many buckets is the opposite
+failure: thousands of tiny files, and a task per file.
+
+Bucketing has three costs you accept in exchange:
+
+\begin{itemize}
+  \item \textbf{Rigidity.} Both tables need the same transform and the same bucket
+        count on the join column. A join on any other column gets no benefit.
+  \item \textbf{No skew rescue.} A hot key still lands in one bucket. AQE's skew
+        split (\Cref{sec:aqe-skew}) is a rewrite of a shuffle's output, and a
+        bucketed join has no shuffle for it to act on, so a hot key becomes a
+        slow task and stays one. (Claim --- verify on the reference cluster.)
+  \item \textbf{Write cost.} Every write into the table pays the hash and the
+        fan-out to every bucket.
+\end{itemize}
 
 Classic Spark bucketing (\texttt{df.write.bucketBy(n, col)}, for a
-Hive-catalogued table) established the idea but is brittle in practice: the
-two tables must match bucket count exactly, and the bucketing is a Spark-only
-convention invisible to any other engine reading the same files. Iceberg's
-\texttt{bucket(n, col)} partition transform (\Cref{sec:ice-partitioning}) is
-the modern equivalent on this stack --- recorded in the table's own metadata
-rather than inferred from file naming, so any engine reading the table sees
-and can exploit the same layout.
+Hive-catalogued table) established the idea but is brittle: the bucketing is a
+Spark-only convention, recorded in table properties, and invisible to any other
+engine reading the same files. Iceberg's \texttt{bucket(n, col)} partition
+transform (\Cref{sec:ice-partitioning}) is the modern equivalent on this stack,
+recorded in the table's own metadata so any engine reading the table sees and can
+exploit the same layout. Spark still needs to be told to use it:
+\conf{spark.sql.sources.v2.bucketing.enabled} is off by default, and depending on
+the Iceberg version a second Iceberg setting is also required. (Claim --- verify
+the exact keys in the Iceberg Spark documentation for the version in
+\Cref{app:refenv}.)
+
+\begin{lstlisting}[language=text,numbers=none,caption={The shape of a join over two bucketed Iceberg tables: no \texttt{Exchange} under the join},captionpos=b,label=lst:pruning-bucketed-plan]
+SortMergeJoin [customer_id], [customer_id], Inner
+:- Sort [customer_id ASC NULLS FIRST]
+:  +- BatchScan orders[...]  groupedBy=[bucket(512, customer_id)]
++- Sort [customer_id ASC NULLS FIRST]
+   +- BatchScan dim_customer[...]  groupedBy=[bucket(512, customer_id)]
+\end{lstlisting}
+% CAPTURE: EXPLAIN FORMATTED of a join over two tables bucketed on customer_id with v2 bucketing enabled; confirm no Exchange and the groupedBy annotation
 
 \section{\texttt{repartition} versus \texttt{coalesce}}
 \label{sec:repartition-coalesce}
 
 Both change how many partitions a DataFrame has; they get there by opposite
 mechanisms, and \Cref{tab:shape-narrow-wide} already told you which is which.
-\texttt{repartition(n)} is wide: it shuffles, so it can raise \emph{or} lower
-the partition count and it redistributes rows evenly across the new count
-regardless of how they were distributed before. \texttt{coalesce(n)} is
-narrow: it only lowers the count, and it does so by merging existing
-partitions together with no shuffle --- which also means it cannot fix uneven
-input. Coalescing four huge partitions and four empty ones down to four still
-leaves you with four huge partitions; only a shuffle can redistribute the rows
-themselves.
+\texttt{repartition(n)} is wide: it shuffles, so it can raise \emph{or} lower the
+partition count and redistributes rows evenly across the new count regardless of
+how they were distributed before. \texttt{coalesce(n)} is narrow: it only lowers
+the count, by merging existing partitions with no shuffle, which also means it
+cannot fix uneven input. Coalescing four huge partitions and four empty ones down
+to four still leaves four huge partitions; only a shuffle can redistribute the
+rows themselves.
 
-\conf{coalesce(n, shuffle=true)} exists specifically to opt back into a
-shuffle when a plain coalesce would preserve skew that already exists in the
-input --- at that point it costs what \texttt{repartition} costs, and the
-narrow-versus-wide distinction has been given up on purpose.
+\Cref{tab:pruning-repartition} lists every way to ask for a partition count,
+because the DataFrame methods and the SQL hints do not all behave alike.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.6cm}p{3.0cm}p{3.2cm}p{4.2cm}@{}}
+\toprule
+\textbf{Call or hint} & \textbf{Shuffles?} & \textbf{Distributes by} & \textbf{AQE can change it?} \\
+\midrule
+\texttt{repartition(n)} & yes & round-robin & no: the count is honored \\
+\texttt{repartition(cols)} & yes & hash of columns & yes: coalesced like any shuffle \\
+\texttt{repartition(n, cols)} & yes & hash of columns & no: the count is honored \\
+\texttt{repartitionByRange(cols)} & yes, after a sampling job & range of columns & yes \\
+\texttt{coalesce(n)} & no & merges neighbors & not applicable \\
+\texttt{/*+ REBALANCE */} & yes & balances sizes & yes: splits skew, merges small \\
+\bottomrule
+\end{tabular}
+\caption{The ways to set a partition count. Only \texttt{repartition(n)} and
+\texttt{repartition(n, cols)} fix the count against AQE's coalescing. (Claim ---
+verify the AQE column on 3.5.2.)}
+\label{tab:pruning-repartition}
+\end{table}
+
+The \texttt{REBALANCE} hint (Spark 3.2 and later) is the one to reach for before
+a write: AQE measures the shuffle output, splits oversized partitions, and merges
+tiny ones, so the files that come out are close to the advisory size without you
+guessing a count. It is controlled by
+\conf{spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled} (default
+\texttt{true}).
+
+\texttt{coalesce} has a second cost beyond skew that surprises people. Because it
+adds no shuffle, it does not start a new stage: the narrow chain before it is
+folded into the same tasks, and \emph{those} tasks are the only ones that exist.
+If \texttt{orders} scans as 560 splits and you \texttt{coalesce(10)} just before a
+write, the scan and filter run on 10 tasks, each carrying 56 splits, instead of
+560 tasks spread over 40 slots. The scan stage that took 14 waves now takes 56
+split-times in series, using 10 of 40 slots: roughly four times slower, to save
+files. \texttt{repartition(10)} would add a shuffle but keep the scan wide.
+Neither is free; the choice is whether you would rather pay in a shuffle or in a
+slow narrow stage.
+
+\begin{note}
+The \texttt{shuffle} flag in \texttt{coalesce(n, shuffle=true)} belongs to the RDD
+API (\texttt{rdd.coalesce}). The DataFrame method \texttt{df.coalesce(n)} has no
+such flag; the DataFrame equivalent of ``coalesce with a shuffle'' is
+\texttt{df.repartition(n)}.
+\end{note}
 
 \section{Column pruning and \texttt{ReadSchema}}
 \label{sec:pruning-column}
 
 Column pruning --- reading only the columns a query touches --- is one of the
-optimizer's heuristic rules (\Cref{sec:catalyst-rules}) and shows up as the
-scan's \texttt{ReadSchema} (\Cref{sec:c-scan}); a \texttt{ReadSchema} wider
-than the query needs almost always traces back to a \texttt{SELECT *} in a
-view, a CTE, or a UDF's input that the optimizer cannot see through.
+optimizer's heuristic rules (\Cref{sec:catalyst-rules}) and shows up as the scan's
+\texttt{ReadSchema} (\Cref{sec:c-scan}); a \texttt{ReadSchema} wider than the query
+needs almost always traces back to a \texttt{SELECT *} in a view, a CTE, or a
+UDF's input that the optimizer cannot see through. It pays most on a columnar
+format, where each column is stored contiguously and an unread column costs no
+I/O at all (\Cref{sec:refenv-columnar}): the specimen reads 4 of the 7
+\texttt{orders} columns, and \texttt{order\_id} and \texttt{customer\_id}, high
+cardinality strings that compress poorly, are among the three it skips.
 
-It goes one level deeper for a nested (struct) column than the top-level case
-suggests. Parquet and Iceberg both store nested fields independently enough
-that a query touching only \texttt{event.location.city} out of a wide
-\texttt{event STRUCT<\ldots>} column can prune to that one leaf field, without
-reading its siblings --- visible in \texttt{ReadSchema} as the struct type
-narrowed to just the accessed fields, not dropped as a whole column. Whether
-this fires depends on the query actually projecting the leaf field explicitly;
+It goes one level deeper for a nested (struct) column. Parquet and Iceberg store
+nested fields independently enough that a query touching only
+\texttt{event.location.city} out of a wide \texttt{event STRUCT<\ldots>} column can
+prune to that one leaf field, without reading its siblings. This is
+\emph{nested schema pruning}
+(\conf{spark.sql.optimizer.nestedSchemaPruning.enabled}, default \texttt{true}).
+It is visible in \texttt{ReadSchema} as the struct type narrowed to the
+accessed fields, not dropped whole:
+
+\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={\texttt{ReadSchema} before and after nested pruning},captionpos=b,label=lst:pruning-readschema]
+-- query: SELECT event.location.city FROM events
+ReadSchema: struct<event:struct<location:struct<city:string>>>    -- pruned
+
+-- query: SELECT my_udf(event) FROM events      (whole struct passed to a UDF)
+ReadSchema: struct<event:struct<location:struct<city:string,lat:double,lon:double>,user:struct<...>,...>>
+\end{lstlisting}
+% CAPTURE: ReadSchema from both queries against a real nested table on the reference cluster
+
+Whether this fires depends on the query projecting the leaf field explicitly;
 passing the whole struct into a UDF or a later transformation reintroduces the
 full column, the same way a \texttt{SELECT *} does.
+
+\begin{tip}
+To find which pruning layer failed on a slow scan, read the scan node in this
+order: \texttt{PartitionFilters} (or \texttt{filters=}) first, because it is the
+cheapest to fix and the largest saving; then \texttt{ReadSchema}; then
+\texttt{PushedFilters}. A scan that reads too much usually fails the first of the
+three that you check.
+\end{tip}
 
 \section{Summary}
 \label{sec:pruning-summary}
 
-Static partition pruning skips whole directories from a literal filter;
-dynamic partition pruning gets the same skipping for a filter that only exists
-on the other side of a join, by running that side first and reusing its
-result --- provided the fact table is partitioned by the join key and the
-other side is cheap to run early. Bucketing extends pruning-by-layout into
-join cost: two tables bucketed identically need no shuffle to join, which
-Iceberg's \texttt{bucket} transform makes a durable, engine-visible property of
-the table rather than a Spark-only convention. \texttt{coalesce} merges
-partitions without a shuffle and therefore cannot fix skew that already
-exists; \texttt{repartition} can, at the cost of paying for one. And column
-pruning reaches inside a struct, not just across the top-level schema, as long
-as the query actually projects the leaf field it needs.
+Static partition pruning skips whole directories from a literal filter, and
+fails when the filter wraps or converts the column; the scan node's
+\texttt{PartitionFilters} (Iceberg's \texttt{filters=}) is where you see it.
+Dynamic partition pruning gets the same skipping for a filter that lives on the
+other side of a join, by running that side first and reusing its broadcast,
+provided the fact table is partitioned by the join key and the dimension side is
+selective and broadcastable. Bucketing extends pruning-by-layout into join cost:
+two tables bucketed identically on the join key need no shuffle to join, at the
+price of a fixed bucket count and no skew rescue.
+
+\texttt{coalesce} merges
+partitions without a shuffle and therefore cannot fix skew, and it narrows the
+whole stage before it; \texttt{repartition} can fix both, at the cost of a
+shuffle. Column pruning reaches inside a struct, as long as the query projects
+the leaf field it needs. \Cref{tab:pruning-levers} turns each symptom into the
+evidence and the fix.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Fix} & \textbf{Cost} \\
+\midrule
+a scan reads every partition & empty \texttt{PartitionFilters} or \texttt{filters=}; partition count in the SQL tab & rewrite the filter as a bare-column comparison with a literal & none \\
+a star join scans the whole fact table & no \texttt{RuntimeFilters} / \texttt{dynamicpruningexpression} & partition the fact table by the join key; filter the dimension; keep it broadcastable & a layout decision \\
+a repeated join shuffles both sides every run & two \texttt{Exchange} nodes under the join & bucket both tables on the key, same count & write cost; fixed bucket count \\
+a write produces thousands of tiny files or a few huge ones & file sizes in the output & \texttt{REBALANCE} before the write & a shuffle \\
+a stage got slower after \texttt{coalesce} & few tasks in the scan stage & \texttt{repartition(n)} instead & a shuffle \\
+\texttt{ReadSchema} lists unneeded columns & wide \texttt{ReadSchema} on the scan & project columns explicitly; avoid \texttt{SELECT *} in views & none \\
+\bottomrule
+\end{tabular}
+\caption{The pruning and layout levers: each symptom, the evidence in the plan,
+the fix, and what it costs.}
+\label{tab:pruning-levers}
+\end{table}
+
+The rule the chapter repeats is that \textbf{the cheapest byte is the one the plan
+proves it never reads}: every mechanism here is verified in the scan node, not
+assumed from the query. \Cref{ch:caching} turns to the data you must read, and
+to keeping what is expensive to recompute.
 
 \exercisehead
 \begin{exercises}
-\item Write the same filter three ways --- a function on the partition column, a
-      \texttt{CAST}, and a plain literal --- and check which keeps
-      \texttt{PartitionFilters} populated in the scan node.
-\item Run the star-schema query from \Cref{sec:pruning-dpp} with
+\item \textbf{Run and observe.} Write the same one-day filter on \texttt{orders}
+      three ways --- \texttt{date(order\_ts) = \ldots}, a \texttt{CAST} to
+      \texttt{STRING}, and a half-open range on \texttt{order\_ts} --- and
+      \texttt{EXPLAIN FORMATTED} each. Which keep the scan's \texttt{filters=}
+      populated, and how many partitions does each read?
+\item \textbf{Read a plan.} Run \Cref{lst:pruning-dpp-query} with
       \conf{spark.sql.optimizer.dynamicPartitionPruning.enabled} set to
-      \texttt{false}, then \texttt{true}. Compare the partitions read on the
-      fact side in each plan.
-\item Take a DataFrame with visibly uneven partition sizes and run
-      \texttt{coalesce(4)} versus \texttt{repartition(4)}. Compare the
-      resulting task-size distribution in the UI.
+      \texttt{false}, then \texttt{true}. Find the \texttt{RuntimeFilters} in the
+      second plan, and compare the partitions read on the fact side.
+\item \textbf{Predict, then check.} \texttt{orders} scans as 560 splits. Predict
+      the number of tasks and the number of waves on 40 slots for the scan stage
+      with \texttt{coalesce(10)} before a write, and with \texttt{repartition(10)}.
+      Then run both and compare the stage's task count in the \textbf{Stages} tab.
 \end{exercises}

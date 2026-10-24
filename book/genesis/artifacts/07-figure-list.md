@@ -23,7 +23,9 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 | `aqe-skew-split` | 6 | structure | one 3.2 GB partition split into ~50; the small side replicated | 2 | done (redrawn, legible) |
 | `aqe-feedback-loop` | 6 | flow | driver re-plans between stages from measured partition sizes | 2 | done |
 | `pruning-layers` | 7 | structure | partition → manifest → file/row-group → bloom; each layer's input filter form | 1 | spec |
-| `dpp-flow` | 7 | sequence | scan dim first → collect keys → filter fact partitions before scanning | 2 | spec |
+| `dpp-flow` | 7 | sequence | scan dim first → collect keys → filter fact partitions before scanning | 2 | done (redrawn, legible) |
+| `pruning-static` | 7 | structure | 7 of 31 daily partitions read; 24 skipped at plan time | 2 | done |
+| `bucketed-join` | 7 | before/after | two Exchanges vs a bucket-pair join with none | 2 | done |
 | `storage-levels` | 8 | table-figure | MEMORY_AND_DISK / _SER / OFF_HEAP / DISK_ONLY vs GC cost vs read speed | 2 | spec |
 | `iceberg-metadata-tree` | 9 | structure | catalog → metadata file → manifest list → manifests → data/delete files | 1 | spec |
 | `iceberg-commit-swap` | 9 | sequence | write files → write new metadata → catalog swaps pointer atomically | 1 | spec |

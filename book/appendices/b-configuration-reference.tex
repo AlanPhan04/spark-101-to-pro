@@ -112,6 +112,17 @@ value on a table or job you cannot afford to be wrong about.
 \conf{spark.sql.optimizer.dynamicPartitionPruning.enabled} & true & DPP for a
   star-schema join filtered from the dimension side
   (\Cref{sec:pruning-dpp}). \\
+\conf{spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly} & true &
+  Restricts DPP to dimension sides reused as a broadcast
+  (\Cref{sec:pruning-dpp}). \\
+\conf{spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio} & 0.5 &
+  Estimated filter ratio DPP needs without broadcast reuse
+  (\Cref{sec:pruning-dpp}). \\
+\conf{spark.sql.optimizer.nestedSchemaPruning.enabled} & true & Prune struct
+  fields down to the leaf the query reads (\Cref{sec:pruning-column}). \\
+\conf{spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled} & true &
+  Lets the \texttt{REBALANCE} hint split skewed partitions
+  (\Cref{sec:repartition-coalesce}). \\
 \bottomrule
 \end{longtable}
 
