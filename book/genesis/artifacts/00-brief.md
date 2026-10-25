@@ -45,8 +45,8 @@ beyond GCS/GKE; cluster provisioning / IaC; teaching Scala or Java.
 
 ## Reference environment
 
-Spark 3.5.2 · Apache Iceberg format v2 · Hive Metastore + Iceberg REST catalog ·
-Apache Kyuubi · Google Cloud Storage · Kubernetes (GKE) · JVM 17 · Apache
+Spark 3.5.2 · Apache Iceberg format v2 · JVM 17 (Kyuubi, Hive Metastore, GCS, GKE removed from scope) ·
+Kubernetes (executors as pods) · Apache
 Parquet. Every behavioural claim in the book is written against this stack;
 version-dependent behaviour is called out where it differs.
 

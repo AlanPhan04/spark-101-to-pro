@@ -17,11 +17,11 @@
           <mxGeometry x="347.4" y="26.5" width="219.4" height="87.5" as="geometry" />
         </mxCell>
 
-        <mxCell id="rpc" value="&lt;b&gt;RPC (Netty)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;small, latency-sensitive&lt;br&gt;control messages&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+        <mxCell id="rpc" value="&lt;b&gt;RPC (Netty)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;small control&lt;br&gt;messages&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
           <mxGeometry x="347.4" y="167.0" width="100.6" height="87.5" as="geometry" />
         </mxCell>
 
-        <mxCell id="block" value="&lt;b&gt;Block transfer&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;large, throughput-&lt;br&gt;sensitive shuffle bytes&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=13;fontColor=#7d2f38;" vertex="1" parent="1">
+        <mxCell id="block" value="&lt;b&gt;Block transfer&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;large shuffle&lt;br&gt;bytes&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontSize=13;fontColor=#7d2f38;" vertex="1" parent="1">
           <mxGeometry x="466.3" y="167.0" width="100.6" height="87.5" as="geometry" />
         </mxCell>
 
@@ -32,7 +32,7 @@
         <mxCell id="e5" style="edges=1;html=1;endArrow=block;strokeColor=#b5545e;" edge="1" parent="1" source="rpc" target="block"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e6" value="fetch requests /&#10;block-serving" style="edges=1;html=1;endArrow=block;strokeColor=#b5545e;fontSize=13;" edge="1" parent="1" source="mot" target="block"><mxGeometry relative="1" as="geometry" /></mxCell>
 
-        <mxCell id="note" value="Two separate paths on purpose: a busy shuffle fetch on the Block transfer path never blocks the RPC call the Task scheduler needs to reassign a freed slot." style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
+        <mxCell id="note" value="Two separate paths on purpose:&lt;br&gt;a busy shuffle fetch on the Block transfer path&lt;br&gt;never blocks the RPC call the Task scheduler needs to reassign a freed slot." style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
           <mxGeometry x="36.6" y="291.7" width="530.3" height="53.0" as="geometry" />
         </mxCell>
 

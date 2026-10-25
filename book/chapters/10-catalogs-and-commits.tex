@@ -50,8 +50,16 @@ which is why production deployments use a catalog backed by a service
 \section{Service-backed catalogs}
 \label{sec:cat-service}
 
-\emph{Not exercised in the lab, which runs only the file-based catalog; this
-section describes the mechanism, not a measurement.} A service-backed catalog puts
+The lab ran one service-style catalog: Iceberg's JDBC catalog on a SQLite
+database. Its pointer is one row of a table \texttt{iceberg\_tables} with columns
+\texttt{catalog\_name}, \texttt{table\_namespace}, \texttt{table\_name},
+\texttt{metadata\_location} and \texttt{previous\_metadata\_location}; after a
+\texttt{CREATE} and one \texttt{INSERT} the row pointed at \texttt{00001-\ldots.metadata.json}
+and remembered \texttt{00000-\ldots} as its predecessor. A commit is a conditional
+\texttt{UPDATE} that names the old location: replaying a stale writer's update
+(old location as the condition) changed \textbf{0 rows}, which is the lost swap.
+REST and other service catalogs were not run; the description below is the
+mechanism. A service-backed catalog puts
 the pointer in a database or a service instead of a file. The commit is then one
 request carrying the base metadata file's identity alongside the new one, and the
 service rejects it with a conflict if its own record of the current metadata no

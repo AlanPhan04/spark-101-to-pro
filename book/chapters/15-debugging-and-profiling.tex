@@ -57,9 +57,10 @@ event log of 1.02~MB holding 276 events (\Cref{fig:eventlog-anatomy}).
 
 The size rule follows: an event log grows with the number of \emph{tasks}, about
 6.4~KB per task here, so a job with 200,000 tasks writes about 1.3~GB, which is why
-very large jobs need a log rolled over (\conf{spark.eventLog.rolling.enabled}) and
-compressed (\conf{spark.eventLog.compress}) --- claim, from the documentation, not
-tested in the lab.
+very large jobs need a log compressed (\conf{spark.eventLog.compress}) and rolled
+over (\conf{spark.eventLog.rolling.enabled}). The lab ran the same job with
+compression on: the log shrank from 1,021,128 to 70,782 bytes, 14 times smaller.
+Rolling was not tested.
 
 \section{Reading task, shuffle, spill, and GC metrics}
 \label{sec:reading-metrics}

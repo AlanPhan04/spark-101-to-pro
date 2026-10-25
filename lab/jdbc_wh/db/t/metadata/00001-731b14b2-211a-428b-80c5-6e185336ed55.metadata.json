@@ -1,0 +1,76 @@
+{
+  "format-version" : 2,
+  "table-uuid" : "0691cb21-b9cc-45c9-8b21-13caab22738e",
+  "location" : "/lab/jdbc_wh/db/t",
+  "last-sequence-number" : 1,
+  "last-updated-ms" : 1792908877332,
+  "last-column-id" : 1,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "id",
+      "required" : false,
+      "type" : "long"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ ]
+  } ],
+  "last-partition-id" : 999,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "owner" : "root",
+    "write.parquet.compression-codec" : "zstd"
+  },
+  "current-snapshot-id" : 7613173037670914100,
+  "refs" : {
+    "main" : {
+      "snapshot-id" : 7613173037670914100,
+      "type" : "branch"
+    }
+  },
+  "snapshots" : [ {
+    "sequence-number" : 1,
+    "snapshot-id" : 7613173037670914100,
+    "timestamp-ms" : 1792908877332,
+    "summary" : {
+      "operation" : "append",
+      "spark.app.id" : "local-1792908871647",
+      "added-data-files" : "2",
+      "added-records" : "2",
+      "added-files-size" : "838",
+      "changed-partition-count" : "1",
+      "total-records" : "2",
+      "total-files-size" : "838",
+      "total-data-files" : "2",
+      "total-delete-files" : "0",
+      "total-position-deletes" : "0",
+      "total-equality-deletes" : "0",
+      "engine-version" : "3.5.2",
+      "app-id" : "local-1792908871647",
+      "engine-name" : "spark",
+      "iceberg-version" : "Apache Iceberg 1.6.1 (commit 8e9d59d299be42b0bca9461457cd1e95dbaad086)"
+    },
+    "manifest-list" : "/lab/jdbc_wh/db/t/metadata/snap-7613173037670914100-1-e9339815-0029-43a7-bc1a-e53c33ceec33.avro",
+    "schema-id" : 0
+  } ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ {
+    "timestamp-ms" : 1792908877332,
+    "snapshot-id" : 7613173037670914100
+  } ],
+  "metadata-log" : [ {
+    "timestamp-ms" : 1792908874442,
+    "metadata-file" : "/lab/jdbc_wh/db/t/metadata/00000-0f684915-a983-4463-99b4-64c3c1d37cbd.metadata.json"
+  } ]
+}

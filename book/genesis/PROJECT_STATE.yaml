@@ -20,10 +20,9 @@ scope_contract:
   reference_environment:
     spark: "3.5.2"
     iceberg: "v2 (format version 2)"
-    catalog: "Hive Metastore + Iceberg REST"
-    gateway: "Apache Kyuubi"
-    object_store: "Google Cloud Storage"
-    cluster_manager: "Kubernetes (GKE)"
+    # Kyuubi, Hive Metastore, GCS, GKE were removed from the book's scope (author's decision, Oct 2026);
+    # the lab is a single local-mode container with a file-based Iceberg catalog.
+    cluster_manager: "Kubernetes (executors as pods; not exercised in the lab)"
     jvm: "17"
     file_format: "Apache Parquet"
 
@@ -62,3 +61,7 @@ figures:                            # shared renderer: figures/_drawio.py
   - {slug: gc-pause-stall,         chapter: 3, status: rendered}
   - {slug: shuffle-write-read-path, chapter: 4, status: rendered}
   - {slug: partition-sizing,        chapter: 4, status: rendered}  # plain matplotlib, exact formula (not a drawio box diagram)
+
+# Oct 2026 update: Ch 14-19 rewritten from lab experiments (lab/exp_tune_*, exp_stream, exp_dsv2*, exp_tungsten*, exp_sched, exp_debug_*, exp_claims);
+# Ch 2-5 gained measured sections; 17 legacy figures rescaled to >=13px fonts; Kyuubi/HMS/GCS/GKE removed from scope.
+# Still marked "not tested": async-profiler (download blocked), Kubernetes shuffle service, Spark 4 differences, StagingTableCatalog, GCS-specific locality.

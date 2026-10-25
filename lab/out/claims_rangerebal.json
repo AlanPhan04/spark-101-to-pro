@@ -1,0 +1,7 @@
+{
+ "cases": [
+  "repartitionByRange(200, customer_id)",
+  "REBALANCE",
+  "REBALANCE(customer_id)"
+ ]
+}

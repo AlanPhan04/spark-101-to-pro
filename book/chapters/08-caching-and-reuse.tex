@@ -149,7 +149,12 @@ exist to trade that away:
   \item \texttt{OFF\_HEAP} (with \conf{spark.memory.offHeap.enabled}) puts the
         cache outside the JVM heap, the pool from \Cref{sec:mem-model}: zero GC
         overhead for that data, at the cost of the off-heap capacity it consumes.
-        (Claim --- not tested on the lab.)
+        The lab cached 30 million rows (three columns) at \texttt{OFF\_HEAP} with a 1~GB
+off-heap pool: Spark's memory manager showed 1,063~MB of storage in the off-heap pool and
+0.1~MB on-heap, and the pool being full, 310~MB of the cache went to disk (the level
+reported was \emph{disk, memory, offheap}). Off-heap caching therefore keeps the bytes
+out of the heap exactly as claimed, and a pool smaller than the data silently spills
+to disk rather than failing.
 \end{itemize}
 
 \texttt{DISK\_ONLY} is rarely the right answer: reading a cache from disk is close

@@ -340,7 +340,11 @@ Bucketing has three costs you accept in exchange:
   \item \textbf{No skew rescue.} A hot key still lands in one bucket. AQE's skew
         split (\Cref{sec:aqe-skew}) is a rewrite of a shuffle's output, and a
         bucketed join has no shuffle for it to act on, so a hot key becomes a
-        slow task and stays one. (Claim --- not tested on the lab.)
+        slow task and stays one. The lab bucketed \texttt{orders} and \texttt{dim\_product}
+into 16 buckets by \texttt{product\_id}, joined them with storage-partitioned join
+on (no \texttt{Exchange} before the join), and read the join stage's 16 tasks: the
+median took 3.3~s, the task holding the hot product's bucket 8.7~s --- 2.6 times the
+median, and nothing in the plan could split it.
   \item \textbf{Write cost.} Every write into the table pays the hash and the
         fan-out to every bucket.
 \end{itemize}
@@ -380,9 +384,9 @@ column was measured on the lab for the first three rows.
 \texttt{repartition(n)} & yes & round-robin & no: 200 requested, 200 tasks ran \\
 \texttt{repartition(n, cols)} & yes & hash of columns & no: 200 requested, 200 tasks ran \\
 \texttt{repartition(cols)} & yes & hash of columns & yes: 200 default, coalesced to 47 \\
-\texttt{repartitionByRange(cols)} & yes, after a sampling job & range of columns & yes (claim --- not tested) \\
+\texttt{repartitionByRange(cols)} & yes, after a sampling job & range of columns & no: 200 requested, 200 tasks ran \\
 \texttt{coalesce(n)} & no & merges neighbors & not applicable \\
-\texttt{/*+ REBALANCE */} & yes & balances sizes & yes: splits skew, merges small (claim --- not tested) \\
+\texttt{/*+ REBALANCE */} & yes & balances sizes & yes: coalesced to 40 tasks (44 with a column) \\
 \bottomrule
 \end{tabular}
 \caption{The ways to set a partition count. Only the forms that name a count

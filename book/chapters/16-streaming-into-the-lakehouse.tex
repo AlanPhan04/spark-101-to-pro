@@ -200,9 +200,12 @@ added-data-files = 1     added-records = 40000     added-files-size = 65127
 
 The keys are \conf{spark.sql.streaming.queryId} and
 \conf{spark.sql.streaming.epochId}: the query that wrote the snapshot and the
-micro-batch number. (Claim --- from the Iceberg source, not tested here: on a
-retry the sink skips an epoch not greater than the largest already recorded for its
-query id, which is what makes a replay after a crash idempotent.)
+micro-batch number. The lab tested the replay directly: after a query had committed epochs 0 to 8, the
+last commit-log entry (and its checksum file) was deleted, which makes Spark believe
+epoch 8 never committed, and the query was restarted. It re-ran epoch 8, carried on to
+epoch 23, and the table held 79,000 rows, all distinct, with epoch 8 appearing in
+exactly one snapshot. A replayed batch that had already committed was not committed
+twice.
 
 The lab then tested the behaviour end to end. A query writing 2,000 rows per second
 into a fresh table with a 3-second trigger was killed with \texttt{docker kill}

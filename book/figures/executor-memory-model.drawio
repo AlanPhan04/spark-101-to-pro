@@ -37,7 +37,7 @@
           <mxGeometry x="508.5" y="25.1" width="114.2" height="489.1" as="geometry" />
         </mxCell>
 
-        <mxCell id="container" value="container limit  =  heap  +  off-heap pool  +  overhead   =   10 GB     &lt;span style=&quot;font-size:12px&quot;&gt;(enforced by the cluster manager; exceed it and the kernel kills the pod)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=13;fontStyle=1;fontColor=#3f335c;" vertex="1" parent="1">
+        <mxCell id="container" value="container limit = heap + off-heap pool + overhead = 10 GB&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;enforced by the cluster manager: exceed it and the kernel kills the pod&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=13;fontStyle=1;fontColor=#3f335c;" vertex="1" parent="1">
           <mxGeometry x="17.3" y="531.7" width="605.4" height="37.6" as="geometry" />
         </mxCell>
 

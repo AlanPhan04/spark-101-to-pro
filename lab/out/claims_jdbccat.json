@@ -1,0 +1,18 @@
+{
+ "catalog_table_columns": [
+  "catalog_name",
+  "table_namespace",
+  "table_name",
+  "metadata_location",
+  "previous_metadata_location"
+ ],
+ "pointer_row": {
+  "catalog_name": "jd",
+  "table_namespace": "db",
+  "table_name": "t",
+  "metadata_location": "/lab/jdbc_wh/db/t/metadata/00001-731b14b2-211a-428b-80c5-6e185336ed55.metadata.json",
+  "previous_metadata_location": "/lab/jdbc_wh/db/t/metadata/00000-0f684915-a983-4463-99b4-64c3c1d37cbd.metadata.json"
+ },
+ "stale_swap_rows_updated": 0,
+ "files_in_warehouse": 12
+}

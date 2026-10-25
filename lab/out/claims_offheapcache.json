@@ -1,0 +1,14 @@
+{
+ "storage": [
+  [
+   "*(1) Filter (isnotnull(order_total#6) AND (order_total#6 > 10.0))\n+- *(1) ColumnarToRow\n   +- BatchScan lab.db.orders[order_id#0, customer_id#3, order_total#6] lab.db.orders (branch=null) [filters=order_total IS NOT NULL, order_total > 10.0, groupedBy=] RuntimeFilters: []\n",
+   "StorageLevel(disk, memory, offheap, 1 replicas)",
+   "1063165808",
+   "309628675"
+  ]
+ ],
+ "offheap_enabled": "true",
+ "offheap_size": "1g",
+ "offheap_storage_used_mb": 1063.2,
+ "onheap_storage_used_mb": 0.1
+}

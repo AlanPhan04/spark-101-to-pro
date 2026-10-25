@@ -18,8 +18,8 @@ Every value here was inferred, not stated by the user. Correct any that are wron
 - **Sub-genre**: practitioner deep-dive in the O'Reilly / *High Performance
   Spark* tradition.
 - **Reference environment**: the user's production stack — Spark 3.5.2, Iceberg
-  format v2, Kyuubi, Hive Metastore + Iceberg REST catalog, GCS, GKE, Parquet,
-  JVM 17. Assumed from `README.md` / `CLAUDE.md`.
+  format v2, Parquet, JVM 17 (Kyuubi, Hive Metastore, GCS, GKE were removed by
+  the author in Oct 2026). Assumed from `README.md` / `CLAUDE.md`.
 - **Scope IN**: Spark execution model; Catalyst/AQE; the shuffle; joins; skew;
   partitioning/bucketing/pruning; caching; Iceberg spec v2, catalogs, layout,
   read/write/maintenance; resource & config tuning; debugging/profiling;

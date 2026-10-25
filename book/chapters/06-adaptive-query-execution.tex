@@ -269,8 +269,15 @@ application holds \emph{right now} unless you set
 \conf{spark.default.parallelism}. Under dynamic allocation
 (\Cref{ch:tuning}) a query that starts while the application holds few
 executors sees a small $P$, and AQE coalesces harder than the cluster you
-eventually get could use. (Claim --- verify on your cluster by comparing the
-reduce-stage task count across a cold and a warm application.)
+eventually get could use. The lab checked this on a standalone cluster with
+dynamic allocation: the first query ran with a default parallelism of 2, the second,
+eight seconds later, with 4. Both reduce stages ran 5 tasks. The
+probable reason is timing: AQE reads $P$ when the map stage \emph{finishes}, and by
+then the first query's own map tasks had already pulled all four executors in
+(they registered between 3 and 6 seconds after the job started). The lab's first
+query therefore did not see the small $P$; to provoke the effect one would have to
+run a query whose map stage finishes before the executors arrive. Treat the warning
+as a possible effect on short queries against a cold application, not a measured one.
 \end{warning}
 
 When you want AQE to respect the advisory size exactly --- say, you are sizing

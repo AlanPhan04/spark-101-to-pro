@@ -14,7 +14,9 @@ for path in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "
     if os.path.getmtime(path) <= cut:
         continue
     grp, jobs, st = {}, {}, {}
-    with open(path, encoding="utf-8") as f:
+    if path.endswith((".zstd", ".lz4", ".snappy", ".lzf")):
+        continue
+    with open(path, encoding="utf-8", errors="ignore") as f:
         for line in f:
             try:
                 e = json.loads(line)

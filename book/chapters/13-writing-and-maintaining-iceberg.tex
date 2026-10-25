@@ -92,8 +92,11 @@ Two details are easy to miss. A merge-on-read \texttt{UPDATE} is recorded as an
 one added delete file (the old ones), not as a \texttt{delete}. And after
 \texttt{rewrite\_data\_files} rewrote the affected data file, the \texttt{files}
 table still listed the ten delete files: they no longer point at live rows but
-were not removed. (Claim --- the \texttt{remove-dangling-deletes} option of the
-procedure exists in Iceberg 1.6; it was not tested here.) That is why read cost
+were not removed. A follow-up run confirmed it on six deletes: \texttt{rewrite\_data\_files}
+with \texttt{rewrite-all} left one delete file standing, \texttt{rewrite\_position\_delete\_files}
+did not remove it, and the \texttt{remove-dangling-deletes} option was rejected by Iceberg
+1.6.1 (``Cannot use options [remove-dangling-deletes], they are not supported by the
+action or the rewriter BIN-PACK'') --- the option belongs to a later release. That is why read cost
 recovered only from 0.35 to 0.31~s.
 
 \Cref{fig:cow-vs-mor} follows the same \texttt{UPDATE} down both paths to
