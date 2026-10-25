@@ -3,8 +3,8 @@
 #   make build      full build: xelatex -> biber -> xelatex x2  (default)
 #   make quick      one xelatex pass, for text-only edits
 #   make check      report errors / undefined refs from the last build
-#   make clean      remove build artifacts, keep main.pdf
-#   make distclean  also remove main.pdf
+#   make clean      remove build artifacts, keep spark_guide_book.pdf
+#   make distclean  also remove spark_guide_book.pdf
 #   make latexmk    let latexmk work out the pass count itself
 #
 # Font (fontspec, Times New Roman) and the bibliography (biblatex) require

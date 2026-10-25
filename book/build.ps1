@@ -101,8 +101,8 @@ if (Test-Path $log) {
 
 if (Test-Path "$Name.pdf") {
     # The deliverable is named spark_guide_book.pdf; main.pdf is the TeX job name.
-    Copy-Item -Force "$Name.pdf" "spark_guide_book.pdf"
-    Write-Host "Build OK -> $PSScriptRoot\$Name.pdf" -ForegroundColor Green
+    Move-Item -Force "$Name.pdf" "spark_guide_book.pdf"
+    Write-Host "Build OK -> $PSScriptRoot\spark_guide_book.pdf" -ForegroundColor Green
 }
 
 Remove-BuildArtifacts
