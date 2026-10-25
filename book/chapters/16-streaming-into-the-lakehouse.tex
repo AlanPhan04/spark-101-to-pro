@@ -179,8 +179,8 @@ spark.sql.streaming.epochId   = 49
 added-data-files = 1     added-records = 40000     added-files-size = 65127
 \end{lstlisting}
 
-The keys are \texttt{spark.sql.streaming.queryId} and
-\texttt{spark.sql.streaming.epochId}: the query that wrote the snapshot and the
+The keys are \conf{spark.sql.streaming.queryId} and
+\conf{spark.sql.streaming.epochId}: the query that wrote the snapshot and the
 micro-batch number. (Claim --- from the Iceberg source, not tested here: on a
 retry the sink skips an epoch not greater than the largest already recorded for its
 query id, which is what makes a replay after a crash idempotent.)
