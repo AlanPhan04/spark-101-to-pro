@@ -1,10 +1,129 @@
 \chapter{Preface}
 \label{ch:preface}
 
-\tbd
+This book began as a study journal. I run Spark SQL on an Apache Iceberg
+lakehouse every working day --- Spark 3.5.2, Iceberg v2, Kyuubi in front, Hive
+Metastore as the catalog, Google Cloud Storage underneath, all on GKE --- and I
+kept noticing the same thing about how I, and the people around me, fixed slow
+queries. We changed a setting, reran the query, kept the change if it helped, and
+moved on without knowing why it had. That works while a query takes a minute.
+It stops working when each trial takes an hour and costs real money, and it stops
+working entirely when the setting that helped last quarter makes this quarter's
+query slower.
 
-% Intended content: the through-line (04-through-line.md) stated plainly ---
-% performance work is seeing where data moves and deciding to move it
-% differently; the four-minute query from the Chapter 1 strategy as the running
-% specimen; what makes this book different from the comps (the Catalyst-Iceberg
-% seam, mechanism first); and a one-paragraph tour of the five parts.
+The notes that became this book were an attempt to replace that trial loop with a
+model. The model is one sentence, and the rest of the book is its consequences:
+
+\begin{quote}
+\itshape
+Every Spark performance decision is a choice about where and when data moves ---
+between operators, across the network, and between metadata and storage --- and
+you can predict and change those movements once you can see them.
+\end{quote}
+
+A scan reads files; a shuffle moves rows between executors so that rows with the
+same key meet; a join decides which side to move; adaptive execution changes its
+mind once it has seen real sizes; Iceberg's planner reads a few kilobytes of
+metadata so it does not have to read gigabytes of data. These look like separate
+subjects. They are one subject, and once you see them as one, the question you
+ask of a slow query changes from ``which config should I try?'' to ``what is
+moving, how much, and does it have to?''
+
+\section*{What makes this book different}
+
+There are good books on Spark and good material on Iceberg. This one is organized
+around two commitments.
+
+\paragraph{Mechanism before settings.} This is not a list of
+\texttt{spark.sql.*} keys with recommended values. A configuration appears only
+after the mechanism it controls has been explained, and always with what it
+costs. A reader who finishes should be able to derive most of the ``recommended''
+values from first principles, and to recognize the case where the recommendation
+is wrong. When a rule of thumb is useful --- and some are --- the book shows where
+it comes from.
+
+\paragraph{The seam between Catalyst and Iceberg.} Most of the cost of a lakehouse
+query is decided at the boundary between the engine and the table format: what the
+planner can push into the scan, what the manifests let it skip, how the file
+layout written last night shapes the tasks run this morning. Treating Spark and
+Iceberg as two separate subjects hides that boundary. This book is built around
+it: Part~II ends with pruning and bucketing on the Spark side, and Part~III picks
+the same threads up on the Iceberg side.
+
+\section*{A running specimen, and numbers you can reproduce}
+
+The book follows one query, introduced in \Cref{ch:shape}: a week of orders joined
+to a product dimension and aggregated to an on-time delivery rate. On the
+production-sized cluster it takes about four minutes. We do not try to make it
+faster in the first chapter; we learn to \emph{read} it --- the plan, the stages,
+the shuffle, the one task that runs longer than the rest --- and then every
+chapter changes one thing about it and shows the consequence.
+
+Wherever I could, I measured rather than asserted. The experiments run in a local
+Docker container with Spark 3.5.2 and Iceberg 1.6.1 against synthetic data
+generated to the same shape as the production tables (\Cref{sec:refenv-lab}), and
+the scripts live alongside the manuscript. Several times the measurement
+contradicted what I had written from memory: a default that I believed applied
+did not fire, a threshold compared a different quantity than I had assumed, a
+mechanism needed a second setting before it did anything. Those corrections are
+in the text, where they belong, because the gap between what a setting is
+documented to do and what it does on your data is precisely where tuning goes
+wrong.
+
+Some claims I have not tested. These are marked ``claim --- not tested'' (or
+``verify on your cluster'') rather than smoothed over. Treat them as hypotheses.
+
+\section*{How the book is organized}
+
+\textbf{Part~I, How Spark Executes a Query,} builds the machinery that moves data
+and teaches you to see it: the driver, executors, jobs, stages and tasks
+(\Cref{ch:shape}); the Catalyst pipeline from SQL text to physical plan
+(\Cref{ch:catalyst}); and the executor's memory and CPU budget
+(\Cref{ch:execmem}).
+
+\textbf{Part~II, Making Queries Fast,} treats each chapter as one lever on data
+movement: the shuffle (\Cref{ch:shuffle}), joins (\Cref{ch:joins}), adaptive
+query execution (\Cref{ch:aqe}), pruning, partitioning, and bucketing
+(\Cref{ch:pruning}), and caching and reuse (\Cref{ch:caching}).
+
+\textbf{Part~III, The Iceberg Lakehouse,} extends the model below the file:
+metadata is data that moves too. It covers the table format itself
+(\Cref{ch:iceberg-spec}), catalogs and the commit protocol
+(\Cref{ch:catalogs}), partitioning and layout (\Cref{ch:iceberg-layout}), reading
+efficiently (\Cref{ch:iceberg-read}), and writing and maintaining tables
+(\Cref{ch:iceberg-write}).
+
+\textbf{Part~IV, Operating Spark,} applies the model under real constraints:
+sizing and configuration (\Cref{ch:tuning}), debugging and profiling
+(\Cref{ch:debugging}), and streaming into the lakehouse (\Cref{ch:streaming}).
+
+\textbf{Part~V, Internals,} goes one level deeper on the same machinery: Tungsten
+and code generation (\Cref{ch:tungsten}), the shuffle framework and scheduler
+(\Cref{ch:scheduler}), and DataSource~V2 (\Cref{ch:dsv2}). It is optional, and the
+earlier parts do not depend on it.
+
+Five appendices follow: the reference environment and running example
+(\Cref{app:refenv}), a configuration reference (\Cref{app:config}), a guide to
+reading query plans (\Cref{app:plans}), a glossary (\Cref{app:glossary}), and
+suggestions for further reading (\Cref{app:reading}).
+
+\section*{A note on scope}
+
+The book is written against one stack, and it says so every time a claim depends
+on it. Spark and Iceberg both change quickly, and behavior that is true on 3.5.2
+may not be true on 4.0. I would rather give you a model you can re-test against
+your version than a table of values that quietly goes stale.
+
+\section*{Acknowledgments}
+
+This book stands on the Apache Spark and Apache Iceberg projects --- their source
+code, their specifications, and the documentation and talks of the people who
+maintain them. Every number measured here was possible because those projects are
+open and can be run on a laptop. Errors that remain are mine, and corrections are
+welcome through the repository.
+
+\bigskip
+\begin{flushright}
+\textit{Alan Phan}\\
+2026
+\end{flushright}

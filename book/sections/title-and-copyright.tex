@@ -1,0 +1,66 @@
+% Half-title, title page, and copyright page (front matter, unnumbered).
+\newpage
+\thispagestyle{empty}
+\begin{center}
+\vspace*{0.3\textheight}
+{\sffamily\fontsize{24pt}{28pt}\selectfont\bfseries Spark Query Optimization\\and the Iceberg Lakehouse\par}
+\end{center}
+\clearpage
+
+\thispagestyle{empty}
+\begin{center}
+\vspace*{0.14\textheight}
+{\sffamily\fontsize{11pt}{14pt}\selectfont\bfseries\color{bkAmber} A PRACTITIONER'S DEEP DIVE\par}
+\vspace{1.2cm}
+{\sffamily\fontsize{36pt}{40pt}\selectfont\bfseries\color{bkBlueInk} Spark Query\\Optimization\par}
+\vspace{0.3cm}
+{\sffamily\fontsize{22pt}{26pt}\selectfont\bfseries\color{bkBlue} and the Iceberg\\Lakehouse\par}
+\vspace{1.0cm}
+{\color{bkBlue}\rule{0.35\textwidth}{1.2pt}\par}
+\vspace{1.0cm}
+{\normalsize\itshape Why your queries run the way they do\\
+--- from Catalyst to the shuffle to the metadata layer ---\\
+and how to change it\par}
+\vfill
+{\sffamily\fontsize{18pt}{22pt}\selectfont\bfseries Alan Phan\par}
+\vspace{1.5cm}
+\end{center}
+\clearpage
+
+\thispagestyle{empty}
+\vspace*{\fill}
+\begingroup
+\small\linespread{1.15}\selectfont
+\setlength{\parindent}{0pt}\setlength{\parskip}{6pt}
+
+\textbf{Spark Query Optimization and the Iceberg Lakehouse}\\
+A Practitioner's Deep Dive
+
+Copyright \textcopyright{} 2026 Alan Phan. All rights reserved.
+
+\textbf{Edition.} First draft, 2026. Every behavioral claim is written against
+Apache Spark 3.5.2 and Apache Iceberg (format version 2) on the stack described
+in \Cref{app:refenv}. Behavior on other versions may differ; where this book
+knows of a difference, it says so.
+
+\textbf{Source and lab.} The manuscript, the figures, and the lab scripts that
+produced every measured number are kept in one repository,
+\nolinkurl{github.com/AlanPhan04/spark-101-to-pro}. The measurements were taken
+on a single machine (\Cref{sec:refenv-lab}); absolute timings will differ on your
+hardware, and the book says which of its claims are ratios, which are counts,
+and which are only claims.
+
+\textbf{Trademarks.} Apache, Apache Spark, Spark, Apache Iceberg, Iceberg, Apache
+Kyuubi, Apache Hive, and Apache Parquet are trademarks of the Apache Software
+Foundation. Google Cloud, GKE, and GCS are trademarks of Google LLC. All other
+names are the property of their owners. This book is an independent work and is
+not affiliated with or endorsed by any of them.
+
+\textbf{Disclaimer.} The information in this book is provided as is. Test every
+configuration change and every maintenance procedure on a copy of your data
+before you run it against production tables, particularly anything that deletes
+files.
+
+\textbf{Typeset} with XeLaTeX. Figures are vector PDF, drawn for this book.
+\endgroup
+\clearpage

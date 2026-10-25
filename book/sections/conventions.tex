@@ -1,18 +1,76 @@
 \chapter{Conventions Used in This Book}
 \label{ch:conventions}
 
-\tbd
+\section*{One stack, and what ``true'' means}
 
-% From 05-conventions.md. Cover: the version-pinning rule (every behavioural
-% claim is written against Spark 3.5.2 / Iceberg v2; version-dependent behaviour
-% is flagged with a Note); listing conventions (language tags, trimmed query
-% plans with elision comments, \conf{} for inline config keys); the callout
-% taxonomy; the figure policy; and a pointer to App. A for the reference
-% environment and the running example.
+Every behavioral claim is written against the reference stack in \Cref{app:refenv}:
+Spark 3.5.2, Iceberg format version 2, on Hive Metastore, Kyuubi, GCS, and GKE.
+Three rules follow from that.
 
-\bigskip
+\begin{itemize}
+  \item A behavior is stated as fact only if it holds on that stack.
+  \item When behavior changed across versions, a Note names the version (for
+  example, that adaptive coalescing is on by default from Spark 3.2).
+  \item Defaults are quoted as of Spark 3.5.2. A number --- a threshold, a size, a
+  speedup --- always comes with a source, or with ``measured'' and the environment
+  that measured it.
+\end{itemize}
 
-\noindent\textbf{The four callouts look like this:}
+\section*{Measured, derived, and claimed}
+
+The book distinguishes three kinds of statement, because they deserve different
+trust.
+
+\begin{description}[leftmargin=0pt, labelindent=0pt, itemsep=4pt]
+  \item[Measured.] Produced by a lab script and shown with its output. These are
+  the numbers and plans in listings and figures. They are reproducible on the lab
+  setup; on your cluster, expect the same mechanism and a different magnitude.
+  \item[Derived.] Follows from a formula or from the source code of Spark or
+  Iceberg, and is checked against a measurement where one exists.
+  \item[Claimed.] Stated from documentation or experience, but not tested here.
+  These are marked ``claim --- not tested'' or ``claim --- verify on your
+  cluster.''
+\end{description}
+
+\section*{Listings}
+
+Code and output appear in listings with a language tag: \texttt{sql}, \texttt{scala},
+or \texttt{text} for plans, UI excerpts, and shell output. Query plans are lightly
+trimmed; an ellipsis comment such as \texttt{-- ... 3 Filter nodes elided} marks a
+cut. Wide plans use a smaller type and wrap long lines rather than running off the
+page. Configuration keys in running text are typeset as
+\conf{spark.sql.adaptive.enabled}, and may break at the dots.
+
+A listing that produces output is followed by that output, labelled, so you can
+compare what you expect with what happened.
+
+\section*{Terminology}
+
+Each term is defined once, in italics, at its first use, and used plainly after
+that. Where two names circulate for the same thing, the book picks one:
+
+\begin{itemize}
+  \item \emph{stage boundary}, not ``shuffle boundary'';
+  \item \emph{unified memory}, not ``managed memory'';
+  \item \emph{manifest list}, \emph{manifest}, and \emph{data file}, exactly as the
+  Iceberg specification spells them;
+  \item an \emph{executor} is a process, a \emph{task} is a thread, and a
+  \emph{slot} is one core.
+\end{itemize}
+
+The glossary (\Cref{app:glossary}) lists every term with the chapter that defines
+it.
+
+\section*{Figures and cross-references}
+
+Figures are vector graphics, so they stay sharp at any zoom, and share one color
+palette. Figures that show a measured result say so in the caption. Cross-references are links; a reference to a
+chapter, section, figure, or listing is always followed by its number.
+
+\section*{Callouts}
+
+Four callouts mark the text that is not part of the main line of the argument. At
+most one appears on a typical page.
 
 \begin{note}
 Marks a version gotcha, a clarification, or a pointer to a later chapter.
@@ -32,3 +90,9 @@ never a substitute for the mechanism itself, and always pushed only as far as it
 stays accurate. Skippable if it doesn't click for you; the surrounding prose
 never depends on it.
 \end{analogy}
+
+\section*{The running example}
+
+The \texttt{orders} table and its star schema are introduced in \Cref{app:refenv}
+and reused in every chapter. Table and column names are typeset in
+\texttt{monospace}.

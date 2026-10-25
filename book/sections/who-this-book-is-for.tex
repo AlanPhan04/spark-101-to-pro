@@ -1,11 +1,84 @@
 \chapter{Who This Book Is For}
 \label{ch:who-for}
 
-\tbd
+This book is written for a working data engineer or analytics engineer, two to
+six years in, who runs Spark SQL on an Iceberg lakehouse most days and has a
+nagging sense that the optimizer and the table format are black boxes. You may
+recognize some of this:
 
-% From 02-reader-and-promise.md: the working data engineer who runs Spark SQL on
-% an Iceberg lakehouse daily and treats the optimizer and the table format as
-% black boxes. State the assumed background (SQL, relational model, columnar
-% storage at a high level, Kubernetes as an operator) and the explicit
-% non-goals (no Scala/Java teaching, no MLlib/GraphX/streaming-ML, no cluster
-% provisioning). Include the current-level -> target-level table.
+\begin{itemize}
+  \item You own pipelines that are fine until they are not --- a job that doubled
+  in runtime after the data grew, a join that spills to disk, a query that scans
+  the whole table when it should scan a day.
+  \item You have opened the Spark UI, but you read it like a dashboard rather than
+  a diagnostic.
+  \item You treat \texttt{spark.sql.*} settings as spells found on a forum, and you
+  could not say which mechanism a given one touches.
+  \item You know the JVM exists and that garbage collection and memory matter,
+  without a working model of either.
+  \item You think of Iceberg as ``Parquet with time travel.''
+\end{itemize}
+
+If that describes you, the book is aimed at the gap between where you are and
+where \Cref{tab:who-levels} says you can be.
+
+\begin{table}[htbp]
+\centering
+\caption{Where the book starts you and where it takes you}
+\label{tab:who-levels}
+\small
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\toprule
+\textbf{Topic} & \textbf{Today} & \textbf{After the book} \\
+\midrule
+Query plans & ``There is an \texttt{EXPLAIN} somewhere.'' & Predicts the physical plan and its shuffles before running; reads \texttt{EXPLAIN FORMATTED} fluently. \\
+Slowness & Guesses, adds memory, retries. & Localizes the cost to a stage and operator from the UI and metrics. \\
+The shuffle & ``The slow part.'' & Knows the write and read paths, sizes partitions, removes unnecessary exchanges. \\
+Joins & Lets Spark decide. & Predicts the strategy, forces it when statistics are wrong, fixes skew. \\
+Iceberg & ``Parquet with snapshots.'' & Reads the metadata tree and predicts what a query will prune. \\
+Configuration & Copies snippets. & Knows which knob touches which mechanism, and what it costs. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section*{What you should already know}
+
+The book assumes, and does not teach:
+
+\begin{itemize}
+  \item \textbf{SQL}: joins, aggregation, window functions, subqueries.
+  \item \textbf{The relational model} and enough relational algebra to read a plan
+  as a tree of operators.
+  \item \textbf{Columnar versus row storage}, at the level of knowing what Parquet
+  is for. \Cref{app:refenv} adds the background Part~III needs.
+  \item \textbf{Kubernetes as an operator}: pods, resource limits, and why a pod is
+  OOM-killed.
+  \item Reading a stack trace, and basic command-line and Git use.
+\end{itemize}
+
+You do \emph{not} need to know Scala or Java. A few examples use Scala where SQL
+cannot express the idea, and they are short and explained line by line.
+
+\section*{What this book will not teach}
+
+To keep the focus on query performance on a lakehouse, the book leaves out:
+
+\begin{itemize}
+  \item Scala or Java as languages;
+  \item MLlib, GraphX, and machine-learning workloads;
+  \item provisioning a cluster, or administering Kubernetes beyond what the
+  executor sizing chapters require;
+  \item the pandas API on Spark;
+  \item Delta Lake and Apache Hudi, except where a comparison with Iceberg
+  clarifies a design choice.
+\end{itemize}
+
+\section*{Who might want a different book}
+
+If you are brand new to Spark and have never run a query on it, begin with an
+introductory text and come back at \Cref{ch:shape}; the chapter is gentle, but it
+does not teach what a DataFrame is. If you administer the cluster rather than
+query it, Parts~I and~IV will serve you, and Part~III will explain what your
+users' tables are doing to your object store. And if you already read query plans
+for a living, the Iceberg chapters (Part~III) and the measured experiments are
+where this book is most likely to tell you something new.

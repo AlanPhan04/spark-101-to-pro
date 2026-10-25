@@ -1,12 +1,103 @@
 \chapter{How to Use This Book}
 \label{ch:how-to-use}
 
-\tbd
+\section*{Five parts, one dependency order}
 
-% Intended content: the five parts and the reading paths through them ---
-% Part I is mandatory; Parts II and III are the core and can be read in either
-% order after Part I; Part IV applies the model operationally; Part V is
-% optional. The chapter dependency graph (06-outline.md) as a figure. How the
-% running example (App. A, the orders table + star schema) threads through
-% every chapter. How to run the examples against your own cluster, and what to
-% do if your stack differs from the reference environment.
+The book has five parts. Part~I is the foundation and everything else assumes it.
+Parts~II and~III are the core; they can be read in either order after Part~I.
+Part~IV applies the model operationally, and Part~V is optional depth.
+\Cref{fig:how-parts} shows the dependencies.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=0.9cm and 1.1cm,
+  part/.style={draw=#1, fill=#1!12, rounded corners=3pt, line width=1pt,
+               minimum width=3.4cm, minimum height=1.25cm, align=center,
+               font=\sffamily\small, text=bkGrayInk},
+  arr/.style={-{Stealth[length=2.6mm]}, line width=1pt, bkGrayInk!70}]
+  \node[part=bkBlue]   (p1) {\textbf{Part I}\\How Spark executes\\a query};
+  \node[part=bkGreen, above right=0.45cm and 1.2cm of p1] (p2) {\textbf{Part II}\\Making queries\\fast};
+  \node[part=bkPurple, below right=0.45cm and 1.2cm of p1] (p3) {\textbf{Part III}\\The Iceberg\\lakehouse};
+  \node[part=bkAmber,  right=1.2cm of $(p2)!0.5!(p3)$] (p4) {\textbf{Part IV}\\Operating\\Spark};
+  \node[part=bkRose,   right=1.0cm of p4] (p5) {\textbf{Part V}\\Internals\\(optional)};
+  \draw[arr] (p1) -- (p2);
+  \draw[arr] (p1) -- (p3);
+  \draw[arr] (p2) -- (p4);
+  \draw[arr] (p3) -- (p4);
+  \draw[arr, dashed] (p4) -- (p5);
+\end{tikzpicture}
+\caption{Reading order. Part~I first; Parts~II and~III in either order; Part~IV
+once you have the model; Part~V when you want to know how it is built.}
+\label{fig:how-parts}
+\end{figure}
+
+Within a part, chapters build on their predecessors, but each states its
+prerequisites at the start so you can jump in.
+
+\section*{Four ways to read it}
+
+\begin{description}[leftmargin=0pt, labelindent=0pt, itemsep=6pt]
+  \item[Straight through.] The intended path. Each chapter ends with a summary and
+  exercises, and the running specimen carries from one to the next.
+  \item[``My query is slow right now.''] Read \Cref{ch:shape} for the vocabulary,
+  then the \texttt{EXPLAIN} sections of \Cref{ch:catalyst} and \Cref{app:plans} to
+  read the plan, then \Cref{ch:debugging} to localize the cost. Each chapter's
+  symptom table (see below) then points you to the mechanism that explains it.
+  \item[``I run Iceberg and want the lakehouse side first.''] \Cref{ch:shape} and
+  \Cref{ch:pruning} for the Spark-side vocabulary of pruning, then Part~III in
+  order. Return to Part~II when a chapter in Part~III refers back to it.
+  \item[``I size and operate clusters.''] \Cref{ch:execmem}, \Cref{ch:shuffle}, and
+  Part~IV. Skip the join and Iceberg chapters until a symptom sends you there.
+\end{description}
+
+\section*{The shape of a chapter}
+
+The chapters share one pattern, so you know where to look:
+
+\begin{enumerate}
+  \item an \textbf{opening} that states the question the chapter answers, using the
+  running example;
+  \item the \textbf{mechanism}, explained before any setting is mentioned;
+  \item a \textbf{measured demonstration} --- the plan, the metric, or the file
+  listing --- usually from the lab (\Cref{sec:refenv-lab});
+  \item a \textbf{symptom $\rightarrow$ evidence $\rightarrow$ knob $\rightarrow$ cost}
+  table, which is the chapter's field guide: what you will observe, where to see
+  it, what to change, and what the change costs;
+  \item a \textbf{summary and exercises}.
+\end{enumerate}
+
+The tables are deliberately last. If you start with them, you get the configs
+without the model, which is the failure mode this book is written against.
+
+\section*{The running example}
+
+One dataset runs through every chapter: an online marketplace's \texttt{orders}
+table, an Iceberg table partitioned by day, with a small star schema around it
+(\texttt{dim\_product}, \texttt{dim\_customer}, \texttt{dim\_date}). It is
+defined in \Cref{app:refenv}. Using the same tables everywhere means a change in
+one chapter can be seen in the plans of another, and you never have to learn a new
+toy schema.
+
+\section*{Running the examples yourself}
+
+The book does not require a cluster. The \texttt{lab/} directory of the
+repository contains a Docker-based environment with Spark 3.5.2, the Iceberg
+runtime, a generator for the synthetic \texttt{orders} data, and one script per
+experiment; \Cref{sec:refenv-lab} describes the setup and its limits. The lab is
+a single machine, so it reproduces the \emph{mechanisms} and the \emph{ratios}
+reliably and the absolute timings not at all. Where a chapter reports a time, it
+says which environment produced it.
+
+If your stack differs from the reference --- another Spark version, a REST
+catalog instead of Hive Metastore, S3 instead of GCS --- the mechanisms in the
+book still hold, but defaults, config names, and some behaviors will not. The
+text flags the places where it knows the version matters; for everything else,
+re-run the relevant experiment on your stack before you rely on a number.
+
+\section*{Exercises}
+
+Exercises at the end of each chapter ask you to predict first and run second:
+write down the plan you expect, the number of shuffles, the number of files
+scanned, and only then run the query. The learning is in the gap between the
+prediction and the result.
