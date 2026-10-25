@@ -95,34 +95,37 @@
 }
 
 \coverfont
-\noindent
-\begin{minipage}[t][11cm][t]{\textwidth}
-  \vspace{0.3cm}
+% Text blocks share one left edge (1.5 cm from the page edge) and one right
+% edge, so the title, subtitle, author and stack line align with each other.
+\newlength{\cvw}\setlength{\cvw}{\dimexpr\paperwidth-3cm\relax}
+\hspace*{-1.5cm}\begin{minipage}[t][11cm][t]{\cvw}
+  \vspace{-0.2cm}
   {\color{cvSpark}\fontsize{11pt}{14pt}\selectfont\bfseries
    A PRACTITIONER'S DEEP DIVE\par}
+  \vspace{0.7cm}
+  {\color{white}\fontsize{54pt}{56pt}\selectfont\bfseries Spark Query\par}
+  {\color{white}\fontsize{54pt}{56pt}\selectfont\bfseries Optimization\par}
+  \vspace{0.35cm}
+  {\color{cvIce}\fontsize{28pt}{32pt}\selectfont\bfseries and the Iceberg Lakehouse\par}
   \vspace{0.55cm}
-  {\color{white}\fontsize{42pt}{44pt}\selectfont\bfseries
-   Spark Query\\Optimization\par}
-  \vspace{0.15cm}
-  {\color{cvIce}\fontsize{27pt}{30pt}\selectfont\bfseries
-   and the Iceberg\\Lakehouse\par}
-  \vspace{0.55cm}
-  {\color{white}\fontsize{13pt}{17pt}\selectfont\itshape
-   Why your queries run the way they do\\
-   --- from Catalyst to the shuffle to the metadata layer ---\\
-   and how to change it\par}
+  {\color{cvSpark}\rule{2.2cm}{2.5pt}\par}
+  \vspace{0.45cm}
+  \begin{minipage}{0.78\cvw}
+    {\color{white}\fontsize{13.5pt}{18pt}\selectfont\itshape
+     Why your queries run the way they do --- from Catalyst to the shuffle to
+     the metadata layer --- and how to change it\par}
+  \end{minipage}
 \end{minipage}
 
 \vfill
 
-\noindent
-\begin{minipage}[b][2.3cm][c]{\textwidth}
-  \begin{minipage}[c]{0.6\textwidth}
-    {\color{white}\fontsize{20pt}{24pt}\selectfont\bfseries Alan Phan\par}
+\hspace*{-1.5cm}\begin{minipage}[b][2.6cm][c]{\cvw}
+  \begin{minipage}[c]{0.5\cvw}
+    {\color{white}\fontsize{22pt}{26pt}\selectfont\bfseries Alan Phan\par}
   \end{minipage}%
-  \begin{minipage}[c]{0.4\textwidth}
+  \begin{minipage}[c]{0.5\cvw}
     \raggedleft
-    {\color{cvIce}\fontsize{9.5pt}{13pt}\selectfont
+    {\color{cvIce}\fontsize{10pt}{14pt}\selectfont
      Spark 3.5.2 \enspace\textbullet\enspace Iceberg v2\\
      Kyuubi \enspace\textbullet\enspace Hive Metastore \enspace\textbullet\enspace GCS\par}
   \end{minipage}
