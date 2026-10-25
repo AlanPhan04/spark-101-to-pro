@@ -14,7 +14,7 @@ so you can draw the tree from memory.
 \section{From Hive tables to table formats}
 \label{sec:ice-from-hive}
 
-A classic Hive table's truth is the filesystem: the Hive Metastore records a
+A classic Hive table's truth is the filesystem: a metastore records a
 table's schema and its partition-to-directory mapping, but knowing which
 \emph{files} exist inside a partition means listing the directory at query
 time. That listing is slow at scale (\Cref{sec:shape-jobs}'s driver work
@@ -141,7 +141,7 @@ file-based catalog uses as its pointer. The sixth metadata file is worth a
 sentence: \texttt{ALTER TABLE \ldots{} SET TBLPROPERTIES} wrote a new
 \texttt{metadata.json} and no new snapshot, because properties live in the
 metadata file and not in the data tree. The lab's catalog is file-based, so the
-pointer swap is a rename of that hint; a Hive Metastore or REST catalog swaps a
+pointer swap is a rename of that hint; a service-backed catalog swaps a
 different pointer, the subject of \Cref{ch:catalogs}.
 
 \begin{note}

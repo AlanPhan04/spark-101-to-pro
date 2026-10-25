@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="claude">
   <diagram name="gc-pause-stall" id="gcpause">
-    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="402" math="0" shadow="0">
+    <mxGraphModel dx="1000" dy="600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="340" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -17,7 +17,7 @@
         <mxCell id="r2a" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="50.5" y="156.3" width="168.4" height="29.3" as="geometry" /></mxCell>
         <mxCell id="r3a" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="50.5" y="205.1" width="143.2" height="29.3" as="geometry" /></mxCell>
 
-        <mxCell id="gc" value="&lt;b&gt;stop-the-world GC pause&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;every slot frozen&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;strokeWidth=1.6;fontSize=13;fontColor=#7d2f38;" vertex="1" parent="1">
+        <mxCell id="gc" value="&lt;b&gt;stop-the-world&lt;br&gt;GC pause&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;every slot frozen&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;strokeWidth=1.6;fontSize=13;fontColor=#7d2f38;" vertex="1" parent="1">
           <mxGeometry x="252.6" y="53.7" width="126.3" height="185.6" as="geometry" />
         </mxCell>
 
@@ -26,13 +26,13 @@
         <mxCell id="r2b" value="task" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1"><mxGeometry x="387.4" y="156.3" width="101.1" height="29.3" as="geometry" /></mxCell>
 
         <mxCell id="dead" value="&lt;b&gt;heartbeat timeout&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;driver marks the executor lost;&lt;br&gt;its work re-runs elsewhere&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fbeecf;strokeColor=#c9a227;fontSize=13;fontColor=#7a5c0a;" vertex="1" parent="1">
-          <mxGeometry x="395.8" y="183.2" width="227.4" height="56.2" as="geometry" />
+          <mxGeometry x="260" y="270" width="370" height="56" as="geometry" />
         </mxCell>
 
         <mxCell id="axis" value="" style="endArrow=block;html=1;strokeColor=#999999;strokeWidth=1.2;" edge="1" parent="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="50.5" y="256.4" as="sourcePoint" />
-            <mxPoint x="505.3" y="256.4" as="targetPoint" />
+            <mxPoint x="50.5" y="256" as="sourcePoint" />
+            <mxPoint x="505.3" y="256" as="targetPoint" />
           </mxGeometry>
         </mxCell>
 

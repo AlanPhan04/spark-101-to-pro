@@ -63,7 +63,7 @@ verified table; mark unknowns `(claim — verify on your cluster)` or
 
 ## Hard rules
 
-- Pinned stack: **Spark 3.5.2 · Iceberg v2 · HMS · Kyuubi · GKE · GCS · JDK 17 · Parquet**. Spark 4.x differences go in a `note`, never into the main claim.
+- Pinned stack: **Spark 3.5.2 · Iceberg v2 · JDK 17 · Parquet** (the book does not cover Kyuubi, Hive Metastore, GCS or GKE; do not add them back). Spark 4.x differences go in a `note`, never into the main claim.
 - Every config is `\conf{}` with its 3.5.2 default and its cost. No config lists without mechanisms (the anti-through-line).
 - Every figure: palette-only colors, printed text ≥ 7 pt (target 8+), a takeaway caption, `\label{fig:<slug>}` = file stem, `\Cref`'d before it appears.
 - Every listing: `language=`, `caption=`, `label=lst:…`, real output or a `% CAPTURE:` marker.

@@ -1,0 +1,177 @@
+[
+ {
+  "t": 4,
+  "state_rows": 0,
+  "state_bytes": 896,
+  "batch_ms": 3040,
+  "commit_ms": 677
+ },
+ {
+  "t": 6,
+  "state_rows": 60000,
+  "state_bytes": 12327480,
+  "batch_ms": 1933,
+  "commit_ms": 1207
+ },
+ {
+  "t": 8,
+  "state_rows": 72790,
+  "state_bytes": 29225120,
+  "batch_ms": 1088,
+  "commit_ms": 583
+ },
+ {
+  "t": 14,
+  "state_rows": 72790,
+  "state_bytes": 22701840,
+  "batch_ms": 838,
+  "commit_ms": 534
+ },
+ {
+  "t": 18,
+  "state_rows": 112790,
+  "state_bytes": 28176720,
+  "batch_ms": 877,
+  "commit_ms": 579
+ },
+ {
+  "t": 24,
+  "state_rows": 112790,
+  "state_bytes": 48999440,
+  "batch_ms": 841,
+  "commit_ms": 495
+ },
+ {
+  "t": 28,
+  "state_rows": 152790,
+  "state_bytes": 38410184,
+  "batch_ms": 798,
+  "commit_ms": 610
+ },
+ {
+  "t": 34,
+  "state_rows": 152790,
+  "state_bytes": 41418680,
+  "batch_ms": 786,
+  "commit_ms": 680
+ },
+ {
+  "t": 38,
+  "state_rows": 192790,
+  "state_bytes": 49833152,
+  "batch_ms": 805,
+  "commit_ms": 506
+ },
+ {
+  "t": 44,
+  "state_rows": 192790,
+  "state_bytes": 79321640,
+  "batch_ms": 710,
+  "commit_ms": 532
+ },
+ {
+  "t": 48,
+  "state_rows": 232790,
+  "state_bytes": 54276872,
+  "batch_ms": 671,
+  "commit_ms": 435
+ },
+ {
+  "t": 54,
+  "state_rows": 232790,
+  "state_bytes": 58658664,
+  "batch_ms": 645,
+  "commit_ms": 439
+ },
+ {
+  "t": 58,
+  "state_rows": 272790,
+  "state_bytes": 61764024,
+  "batch_ms": 719,
+  "commit_ms": 482
+ },
+ {
+  "t": 64,
+  "state_rows": 272790,
+  "state_bytes": 71341280,
+  "batch_ms": 701,
+  "commit_ms": 441
+ },
+ {
+  "t": 68,
+  "state_rows": 312790,
+  "state_bytes": 78365672,
+  "batch_ms": 629,
+  "commit_ms": 439
+ },
+ {
+  "t": 74,
+  "state_rows": 312790,
+  "state_bytes": 80400448,
+  "batch_ms": 729,
+  "commit_ms": 517
+ },
+ {
+  "t": 78,
+  "state_rows": 352790,
+  "state_bytes": 83462680,
+  "batch_ms": 740,
+  "commit_ms": 466
+ },
+ {
+  "t": 84,
+  "state_rows": 352790,
+  "state_bytes": 145070336,
+  "batch_ms": 756,
+  "commit_ms": 433
+ },
+ {
+  "t": 88,
+  "state_rows": 392790,
+  "state_bytes": 101201096,
+  "batch_ms": 876,
+  "commit_ms": 733
+ },
+ {
+  "t": 93,
+  "state_rows": 392790,
+  "state_bytes": 104849088,
+  "batch_ms": 657,
+  "commit_ms": 404
+ },
+ {
+  "t": 99,
+  "state_rows": 432790,
+  "state_bytes": 115962424,
+  "batch_ms": 818,
+  "commit_ms": 483
+ },
+ {
+  "t": 103,
+  "state_rows": 432790,
+  "state_bytes": 122336400,
+  "batch_ms": 643,
+  "commit_ms": 468
+ },
+ {
+  "t": 109,
+  "state_rows": 472790,
+  "state_bytes": 129507744,
+  "batch_ms": 731,
+  "commit_ms": 552
+ },
+ {
+  "t": 113,
+  "state_rows": 472790,
+  "state_bytes": 137641872,
+  "batch_ms": 660,
+  "commit_ms": 428
+ },
+ {
+  "t": 119,
+  "state_rows": 512790,
+  "state_bytes": 143975176,
+  "batch_ms": 771,
+  "commit_ms": 527
+ }
+]

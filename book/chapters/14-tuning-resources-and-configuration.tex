@@ -9,8 +9,8 @@ executor shapes running the same stage, eight shuffle-partition counts, four
 dynamic-allocation setups, and four layers of configuration. The numbers come
 from the lab in \Cref{sec:refenv-lab} (one JVM on one machine), so read them as
 shapes of curves and thresholds, not as production sizes. The chapter closes with
-a symptom-to-lever table, and with the parts of the stack --- Kyuubi, the
-Kubernetes shuffle story --- that the lab cannot exercise and are marked as such.
+a symptom-to-lever table; the one cluster-manager topic the lab cannot
+exercise, the Kubernetes shuffle story, is marked as such.
 \end{chapterintro}
 
 \section{Executor sizing from the mechanism}
@@ -105,12 +105,11 @@ tasks), because more concurrent tasks hold more live rows in the same heap.
 
 \textbf{Cores per executor} therefore trades two things: tasks run concurrently
 (time falls) against the share each gets of the pool (spill appears) and the heap
-they pollute together (GC grows). On this stack's Kubernetes deployment a commonly
-cited ceiling is about five cores per executor, attributed to contention in the GCS
-connector's per-JVM connection pool; the lab has no GCS, so that explanation is a
-claim --- verify on your cluster by comparing scan-stage time at five and eight
-cores on the same data. The memory-side reason to stop early is the one measured
-above.
+they pollute together (GC grows). Folklore sets a ceiling of about five cores per
+executor for reasons tied to the storage client; the lab has no remote storage, so
+that is untested here --- verify on your cluster by comparing scan-stage time at five
+and eight cores on the same data. The memory-side reason to stop early is the one
+measured above.
 
 \textbf{Executor memory} is sized backward from the largest per-task need. For the
 specimen's reference cluster (4 cores per executor, \Cref{app:refenv}) the lab
@@ -302,47 +301,6 @@ looks ignored is usually overridden from a higher layer than the one you edited,
 \texttt{spark.conf.get(key)} in the running session reports the value actually in
 effect --- faster than re-reading files.
 
-\section{Kyuubi and multi-tenancy}
-\label{sec:tuning-kyuubi}
-
-\emph{Not exercised in the lab: there is no Kyuubi server here, so this section
-describes the design rather than a measurement.} Kyuubi (this stack's gateway) runs
-one Spark application per Kyuubi \emph{engine} rather than one per query, and its
-\emph{share level} decides how engines are pooled and how a new connection finds its
-engine. The server keeps a registry of live engines keyed by a scope derived from the
-share level, backed by Zookeeper (or etcd) so it survives a server restart. A new
-connection computes its key and either attaches to the engine registered under it (a
-\emph{hit}) or launches a fresh Spark application and registers it (a \emph{miss}).
-\Cref{tab:kyuubi-share-levels} lays out the three share levels this stack chooses
-between.
-
-\begin{table}[htbp]
-\centering\footnotesize
-\begin{tabular}{@{}p{2.1cm}p{1.8cm}p{4.6cm}p{4.6cm}@{}}
-\toprule
-\textbf{Share level} & \textbf{Registry key} & \textbf{Isolation} & \textbf{Cold-start cost} \\
-\midrule
-\texttt{CONNECTION} & connection id & one engine per JDBC connection & every connection is a registry miss --- maximum startup latency, maximum isolation \\
-\texttt{USER} & username & one warm engine per user, reused across their connections & only that user's first connection is a miss; every later one is a hit \\
-\texttt{SERVER} & a constant & one engine shared by every user on the instance & almost always a hit, but every user's jobs compete for the same executors \\
-\bottomrule
-\end{tabular}
-\caption{Kyuubi's share levels trade isolation for cold-start cost by changing what
-the registry key is derived from.}
-\label{tab:kyuubi-share-levels}
-\end{table}
-
-Under \texttt{USER} sharing, a user's first connection of the day pays the full cost
-of launching a Spark application; her second connection an hour later computes the
-same key, finds her running engine, and starts planning immediately. Under
-\texttt{CONNECTION} sharing the second connection would compute a fresh key and pay
-the cold start again --- the isolation costs exactly the warm reuse that
-\texttt{USER} gives for free. The dynamic-allocation timeline above is the other half
-of the picture: a warm engine is only cheap to keep if its executors scale down
-between that user's queries. An \emph{engine pool} pre-registers several engines so
-even a first connection is a hit. Each pooled engine is an ordinary Spark
-application, sized as in this chapter's first section.
-
 \section{From symptom to lever}
 \label{sec:tuning-levers}
 
@@ -382,8 +340,7 @@ flat bottom in between. Dynamic allocation is safe only when something protects
 shuffle data; tracking does so by keeping executors, and the lab measured what
 keeping them saves (0.2~s against 25.6~s) and what it holds idle. Configuration
 resolves in a fixed order in which only SQL keys can still change at runtime.
-Kyuubi's engine share level and the Kubernetes shuffle story are design points the
-lab could not measure.
+The Kubernetes shuffle story is a design point the lab could not measure.
 
 \exercisehead
 \begin{exercises}

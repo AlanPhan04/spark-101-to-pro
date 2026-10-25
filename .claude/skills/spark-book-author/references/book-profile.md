@@ -55,12 +55,11 @@ each has a **signature figure** (see `visual-system.md` §6).
 
 ## Reference environment (every behavioral claim is pinned to this)
 
-Spark **3.5.2** · Iceberg **format v2** · Hive Metastore (+ Iceberg REST in
-the genesis brief; App. A currently lists HMS only — reconcile) · Apache
-**Kyuubi** gateway · **GKE** · **GCS** · OpenJDK **17** · Parquet.
+Spark **3.5.2** · Iceberg **format v2** · OpenJDK **17** · Parquet. The book
+does not cover Kyuubi, Hive Metastore, GCS or GKE (removed by the author's decision).
 
 **Cluster shape (App. A):** executors with 4 cores and 16 GB executor memory
-each; 10 executors → **40 task slots**; GCS is remote (no data locality).
+each; 10 executors → **40 task slots**; storage is assumed remote (no data locality).
 
 ## Running example — `orders` star schema
 
@@ -125,7 +124,7 @@ debugging/profiling · Structured Streaming into Iceberg · Tungsten/codegen,
 shuffle framework, DSv2.
 
 **Out:** MLlib, GraphX, SparkR, pandas API · Spark Connect as a subject ·
-Delta/Hudi beyond comparison · cloud services beyond GCS/GKE · cluster
+Delta/Hudi beyond comparison · cloud services · cluster
 provisioning/IaC · teaching Scala/Java.
 
 ## Source material the author named

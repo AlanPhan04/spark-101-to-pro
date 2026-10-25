@@ -1,0 +1,80 @@
+{
+ "cat_0": {
+  "tasks": 291,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 496,
+  "run_ms": 31100,
+  "peak_mem": 86245328,
+  "failed": 0,
+  "shuffle_write": 158625699,
+  "shuffle_read": 158625699,
+  "input_bytes": 101362878,
+  "input_records": 14710479
+ },
+ "cat_1": {
+  "tasks": 291,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 1658,
+  "run_ms": 87707,
+  "peak_mem": 186908528,
+  "failed": 0,
+  "shuffle_write": 1707467574,
+  "shuffle_read": 1707467574,
+  "input_bytes": 842942091,
+  "input_records": 14710479
+ },
+ "cat_2": {
+  "tasks": 375,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 2044,
+  "run_ms": 57277,
+  "peak_mem": 86245328,
+  "failed": 0,
+  "shuffle_write": 158625699,
+  "shuffle_read": 158625699,
+  "input_bytes": 962959080,
+  "input_records": 96000000
+ },
+ "cat_3": {
+  "tasks": 291,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 585,
+  "run_ms": 27219,
+  "peak_mem": 86245328,
+  "failed": 0,
+  "shuffle_write": 158625699,
+  "shuffle_read": 158625699,
+  "input_bytes": 101362878,
+  "input_records": 14710479
+ },
+ "cat_4": {
+  "tasks": 291,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 744,
+  "run_ms": 22923,
+  "peak_mem": 86245328,
+  "failed": 0,
+  "shuffle_write": 158625699,
+  "shuffle_read": 158625699,
+  "input_bytes": 101362878,
+  "input_records": 14710479
+ },
+ "cat_5": {
+  "tasks": 375,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 6199,
+  "run_ms": 206292,
+  "peak_mem": 186908528,
+  "failed": 0,
+  "shuffle_write": 1707467574,
+  "shuffle_read": 1707467574,
+  "input_bytes": 3786938241,
+  "input_records": 96000000
+ }
+}

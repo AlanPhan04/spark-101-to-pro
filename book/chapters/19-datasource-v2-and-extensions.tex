@@ -217,8 +217,35 @@ of Spark's default widths for the columns' types (strings 20 bytes, doubles and
 timestamps 8, integers and dates 4), so the estimate is \emph{rows times a width
 derived from the schema}, not a measurement of Parquet bytes. That is why
 \conf{spark.sql.autoBroadcastJoinThreshold} compares an uncompressed estimate
-(\Cref{ch:aqe}) and why \texttt{dim\_product}, which occupies about 170~MB on disk,
-is reported as 216~MB.
+(\Cref{ch:aqe}) and why \texttt{dim\_product}, which occupies 174~MB on disk, is
+reported as 216~MB while \texttt{orders}, 1.08~GB on disk, is reported as 2.52~GB.
+
+The width is that of the \emph{projected} columns, so column pruning shrinks the
+estimate. The lab asked for the same \texttt{dim\_product} with different
+projections (\Cref{tab:dsv2-projection}): all six columns 216~MB, \texttt{product\_id}
+and \texttt{category} 80~MB, \texttt{product\_id} alone 40~MB, \texttt{list\_price}
+alone 16~MB --- exactly rows times the sum of the columns' default widths. A
+join that needs only a narrow slice of a wide dimension therefore looks smaller to
+the planner than the table does, and can cross under the broadcast threshold
+without any hint.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{6.0cm}rr@{}}
+\toprule
+\textbf{Projection of \texttt{dim\_product} (2 M rows)} & \textbf{Default widths} & \textbf{sizeInBytes} \\
+\midrule
+all 6 columns & 20+20+8+20+20+20 = 108 & 216,000,000 \\
+\texttt{product\_id}, \texttt{category} & 20+20 = 40 & 80,000,000 \\
+\texttt{product\_id} & 20 & 40,000,000 \\
+\texttt{list\_price} & 8 & 16,000,000 \\
+\bottomrule
+\end{tabular}
+\caption{The reported size is rows times the default width of the columns the scan
+projects.}
+\label{tab:dsv2-projection}
+\end{table}
 
 \section{Custom Catalyst rules and SQL extensions}
 \label{sec:dsv2-extensions}

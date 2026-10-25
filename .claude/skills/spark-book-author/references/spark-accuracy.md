@@ -120,3 +120,12 @@ the prose cases automatically.
 - [ ] Spark 4.x differences that touch the chapter are in a `note`
 - [ ] No myth from §5 slipped in through casual phrasing
 - [ ] Terms match `voice-and-style.md` §5
+
+**Measured on the lab, second batch (Oct 2026):** shuffle writer for SQL shuffles is Bypass for <=200 partitions, Serialized above, never the
+sort writer (RDD map-side combine only). Iceberg 1.6.1 implements SupportsPushDownV2Filters/Aggregates/RequiredColumns, SupportsReportStatistics,
+SupportsReportPartitioning, SupportsRuntimeV2Filtering; pushed data-column filters leave a Spark Filter; only a partition-aligned range is fully handled;
+COUNT/MIN/MAX answered from metadata (LocalTableScan). Reported sizeInBytes = rows x sum of Spark default type widths of the projected columns.
+Streaming snapshot summary keys: spark.sql.streaming.queryId / epochId (not spark.batch-id). Unified pool = (heap-300MiB)*0.6 exactly; minimum heap 450 MiB.
+Dynamic allocation needs shuffle tracking/ESS or Spark refuses to start; same DataFrame reuse needed to skip a map stage. Speculative copies are not placed
+on the original's host. Codegen holds to 100 fields; 99-100 columns compiled slowest. Python UDF 32x built-in; pandas UDF 8.6x. Container OOM: exit 137,
+OOMKilled, no OutOfMemoryError; SparkOutOfMemoryError [UNABLE_TO_ACQUIRE_MEMORY] is Spark's own accounting. Hints name the alias, else silently ignored.

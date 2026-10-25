@@ -1,0 +1,48 @@
+== Parsed Logical Plan ==
+'Aggregate ['p.category], ['p.category, 'sum(('o.order_total * ((1 + 0.05) + 0.02))) AS gross#0]
++- 'Filter ((('o.order_ts >= 2026-03-05 00:00:00) AND ('o.order_ts < 2026-03-08 00:00:00)) AND (1 = 1))
+   +- 'Join Inner, ('o.product_id = 'p.product_id)
+      :- 'SubqueryAlias o
+      :  +- 'UnresolvedRelation [orders], [], false
+      +- 'SubqueryAlias p
+         +- 'UnresolvedRelation [dim_product], [], false
+
+== Analyzed Logical Plan ==
+category: string, gross: double
+Aggregate [category#9], [category#9, sum((order_total#7 * cast(((cast(1 as decimal(1,0)) + 0.05) + 0.02) as double))) AS gross#0]
++- Filter (((order_ts#2 >= 2026-03-05 00:00:00) AND (order_ts#2 < 2026-03-08 00:00:00)) AND (1 = 1))
+   +- Join Inner, (product_id#3 = product_id#8)
+      :- SubqueryAlias o
+      :  +- SubqueryAlias lab.db.orders
+      :     +- RelationV2[order_id#1, order_ts#2, product_id#3, customer_id#4, promised_days#5, delivery_days#6, order_total#7] lab.db.orders lab.db.orders
+      +- SubqueryAlias p
+         +- SubqueryAlias lab.db.dim_product
+            +- RelationV2[product_id#8, category#9, list_price#10, title#11, brand#12, description#13] lab.db.dim_product lab.db.dim_product
+
+== Optimized Logical Plan ==
+Aggregate [category#9], [category#9, sum((order_total#7 * 1.07)) AS gross#0]
++- Project [order_total#7, category#9]
+   +- Join Inner, (product_id#3 = product_id#8)
+      :- Project [product_id#3, order_total#7]
+      :  +- Filter isnotnull(product_id#3)
+      :     +- RelationV2[order_ts#2, product_id#3, order_total#7] lab.db.orders
+      +- Filter isnotnull(product_id#8)
+         +- RelationV2[product_id#8, category#9] lab.db.dim_product
+
+== Physical Plan ==
+*(6) HashAggregate(keys=[category#9], functions=[sum((order_total#7 * 1.07))], output=[category#9, gross#0])
++- Exchange hashpartitioning(category#9, 40), ENSURE_REQUIREMENTS, [plan_id=85]
+   +- *(5) HashAggregate(keys=[category#9], functions=[partial_sum((order_total#7 * 1.07))], output=[category#9, sum#33])
+      +- *(5) Project [order_total#7, category#9]
+         +- *(5) SortMergeJoin [product_id#3], [product_id#8], Inner
+            :- *(2) Sort [product_id#3 ASC NULLS FIRST], false, 0
+            :  +- Exchange hashpartitioning(product_id#3, 40), ENSURE_REQUIREMENTS, [plan_id=67]
+            :     +- *(1) Project [product_id#3, order_total#7]
+            :        +- *(1) Filter isnotnull(product_id#3)
+            :           +- *(1) ColumnarToRow
+            :              +- BatchScan lab.db.orders[order_ts#2, product_id#3, order_total#7] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772668800000000, order_ts < 1772928000000000, product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+            +- *(4) Sort [product_id#8 ASC NULLS FIRST], false, 0
+               +- Exchange hashpartitioning(product_id#8, 40), ENSURE_REQUIREMENTS, [plan_id=76]
+                  +- *(3) Filter isnotnull(product_id#8)
+                     +- *(3) ColumnarToRow
+                        +- BatchScan lab.db.dim_product[product_id#8, category#9] lab.db.dim_product (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []

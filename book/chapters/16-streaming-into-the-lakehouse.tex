@@ -116,6 +116,25 @@ files in the background. That structure lets it hold more state than fits in the
 heap, at the cost of occasional compaction pauses and a disk read for state outside
 its block cache.
 
+The lab compared the two providers on a heavier state: 20,000 rows per second into
+10-second windows by 40,000 customer keys, 120 seconds, 2~GB heap
+(\Cref{fig:state-providers}). At about 520,000 state rows the default provider
+reported 144~MB of state memory and the RocksDB provider 22~MB --- 6.5 times less
+memory held by the store --- while the micro-batch took 1.2~s against 0.8~s, with
+the state-store commit at 1.05~s against 0.53~s. RocksDB trades per-batch latency
+for a bounded memory footprint; at this size the lab's heap was not under pressure,
+so the benefit shown is footprint, not avoided GC. The two memory figures are not
+perfectly comparable --- they are each provider's own accounting.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{state-providers.pdf}
+  \caption{Left: reported state memory against state rows for the default and RocksDB
+  providers. Right: micro-batch duration over time. RocksDB held the same rows in
+  one sixth of the reported memory and paid with slower commits.}
+  \label{fig:state-providers}
+\end{figure}
+
 \section{Output modes and triggers}
 \label{sec:stream-modes-triggers}
 

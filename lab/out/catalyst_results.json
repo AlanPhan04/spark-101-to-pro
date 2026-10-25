@@ -1,0 +1,38 @@
+[
+ {
+  "variant": "all rules",
+  "group": "cat_0",
+  "seconds": 1.97,
+  "rows": 20
+ },
+ {
+  "variant": "without ColumnPruning",
+  "group": "cat_1",
+  "seconds": 4.84,
+  "rows": 20
+ },
+ {
+  "variant": "without PushDownPredicates",
+  "group": "cat_2",
+  "seconds": 2.81,
+  "rows": 20
+ },
+ {
+  "variant": "without ConstantFolding",
+  "group": "cat_3",
+  "seconds": 1.77,
+  "rows": 20
+ },
+ {
+  "variant": "without V2 scan pushdown",
+  "group": "cat_4",
+  "seconds": 1.43,
+  "rows": 20
+ },
+ {
+  "variant": "without all four",
+  "group": "cat_5",
+  "seconds": 9.11,
+  "rows": 20
+ }
+]

@@ -47,8 +47,9 @@ plus seven 8-byte slots) and a variable part padded to 8-byte words --- the
 36-character \texttt{order\_id} takes 40 bytes, the 8-character \texttt{product\_id}
 8, the 9-character \texttt{customer\_id} 16 --- about 128 bytes in total (computed
 from the layout, not measured). That is more than the 84 bytes per row the source
-reports to the planner (\Cref{tab:dsv2-stats}) and more than the roughly 50 bytes per
-row the same data occupies in compressed Parquet: three different sizes for the same
+reports to the planner (\Cref{tab:dsv2-stats}) and more than the 36 bytes per
+row the same data occupies in compressed Parquet (1.08~GB of files for 30 million
+rows): three different sizes for the same
 row, one for each place the engine needs a number.
 
 \section{Off-heap memory management}

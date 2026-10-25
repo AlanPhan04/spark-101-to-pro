@@ -99,8 +99,8 @@ type-checked, and \texttt{AVG(\dots)} is bound to the aggregate function. If a
 name does not resolve, this is where the query fails --- before any work is
 scheduled.
 
-In the reference stack the catalog is a Spark \emph{catalog plugin} pointed at an
-Iceberg REST endpoint (backed by the Hive Metastore); \Cref{ch:catalogs} covers
+For Iceberg tables the catalog is a Spark \emph{catalog plugin}
+(\Cref{ch:dsv2}); \Cref{ch:catalogs} covers
 what it stores and how commits move through it. What matters here is that the
 catalog is also where \emph{table statistics} come from --- row counts, column
 value ranges, distinct counts. Spark's cost-based optimizer uses them to order
@@ -152,6 +152,65 @@ reordering are cost-based, and only when statistics exist. When people say
 ``the optimizer is smart,'' they usually mean the heuristic rules, which are
 reliable; the cost-based part is only as good as the catalog's numbers.
 \end{note}
+
+\section{What the rules are worth, measured}
+\label{sec:catalyst-rules-measured}
+
+The lab ran one query --- a three-day filter, a join of \texttt{orders} to
+\texttt{dim\_product}, a constant expression \texttt{(1 + 0.05 + 0.02)} in the
+aggregate --- and printed its plan at every stage with \texttt{EXPLAIN EXTENDED}.
+Three rewrites are visible between the analyzed and the optimized plan:
+
+\begin{lstlisting}[language=text,style=plan,caption={The same query before and after optimization (Spark 3.5.2; lines shortened)},captionpos=b,label=lst:catalyst-before-after]
+== Analyzed Logical Plan ==
+Aggregate [category], [category, sum(order_total * cast((1 + 0.05) + 0.02 as double)) AS gross]
++- Filter (order_ts >= 2026-03-05 AND order_ts < 2026-03-08 AND (1 = 1))
+   +- Join Inner, (product_id = product_id)
+      :- RelationV2[order_id, order_ts, product_id, customer_id, promised_days,
+                    delivery_days, order_total] lab.db.orders
+      +- RelationV2[product_id, category, list_price, title, brand, description] lab.db.dim_product
+
+== Optimized Logical Plan ==
+Aggregate [category], [category, sum(order_total * 1.07) AS gross]
++- Join Inner, (product_id = product_id)
+   :- Filter isnotnull(product_id)
+   :  +- RelationV2[order_ts, product_id, order_total] lab.db.orders
+   +- Filter isnotnull(product_id)
+      +- RelationV2[product_id, category] lab.db.dim_product
+\end{lstlisting}
+
+Read the differences line by line. The constant expression became the literal
+\texttt{1.07} (constant folding), and \texttt{1 = 1} vanished. Both scans shrank from
+seven and six columns to three and two (column pruning). The date predicate left
+the \texttt{Filter} --- it was pushed into the scan, where
+\Cref{sec:dsv2-pushdown} shows it is fully handled because three whole days align
+with the partitions --- and the optimizer added \texttt{isnotnull(product\_id)}
+filters, inferred from the inner-join condition, which cannot change the result and
+let the scan discard null keys early.
+
+To price each rule, the lab re-ran the query with one rule excluded at a time
+through \conf{spark.sql.optimizer.excludedRules}
+(\Cref{fig:optimizer-rules-measured}). The result is identical in every run; only
+the work changes.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{optimizer-rules-measured.pdf}
+  \caption{Bytes read and wall clock with one optimizer rule excluded. Without
+  column pruning the scan read 8$\times$ the bytes (281 against 34~MB); without
+  predicate pushdown it read 321~MB and 32 million rows instead of 4.9 million; with
+  all three rules excluded together, 1,262~MB and 9.1~s against 34~MB and 2.0~s. Excluding constant folding changed neither bytes nor time here: the
+  folded expression was cheap next to the scan.}
+  \label{fig:optimizer-rules-measured}
+\end{figure}
+
+Two cautions from the experiment. Excluding the Iceberg scan-pushdown rule by name
+changed nothing --- bytes and rows were identical to the baseline --- so that rule
+is not removable this way, and its effect is the one measured in
+\Cref{fig:pushdown-rows-by-predicate} instead. And wall-clock times of 1--2 seconds
+carry run-to-run noise of the order of the differences between the
+constant-folding and baseline bars; the byte and row counts are the reliable
+column.
 
 \section{Physical planning and strategies}
 \label{sec:catalyst-physical}

@@ -31,7 +31,7 @@ for path in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "
                 if not g.startswith(prefix):
                     continue
                 m = e.get("Task Metrics") or {}
-                d = res.setdefault(g, {"tasks": 0, "mem_spill": 0, "disk_spill": 0, "gc_ms": 0, "run_ms": 0, "peak_mem": 0, "failed": 0, "shuffle_write": 0, "shuffle_read": 0})
+                d = res.setdefault(g, {"tasks": 0, "mem_spill": 0, "disk_spill": 0, "gc_ms": 0, "run_ms": 0, "peak_mem": 0, "failed": 0, "shuffle_write": 0, "shuffle_read": 0, "input_bytes": 0, "input_records": 0})
                 d["tasks"] += 1
                 d["mem_spill"] += m.get("Memory Bytes Spilled", 0)
                 d["disk_spill"] += m.get("Disk Bytes Spilled", 0)
@@ -40,6 +40,8 @@ for path in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "
                 d["shuffle_write"] += m.get("Shuffle Write Metrics", {}).get("Shuffle Bytes Written", 0)
                 sr = m.get("Shuffle Read Metrics", {})
                 d["shuffle_read"] += sr.get("Remote Bytes Read", 0) + sr.get("Local Bytes Read", 0)
+                d["input_bytes"] += m.get("Input Metrics", {}).get("Bytes Read", 0)
+                d["input_records"] += m.get("Input Metrics", {}).get("Records Read", 0)
                 d["peak_mem"] = max(d["peak_mem"], m.get("Peak Execution Memory", 0))
                 if e["Task End Reason"].get("Reason") != "Success":
                     d["failed"] += 1

@@ -27,7 +27,7 @@ Instead it interprets bytecode at first and watches which methods run often; a
 optimizations --- inlining, loop unrolling, dead-code elimination, escape
 analysis --- that depend on what the method actually did the first few thousand
 times it ran. Two consequences follow. A Spark process is slowest in its first
-seconds, before the JIT has warmed up, which is one reason Kyuubi keeps a driver
+seconds, before the JIT has warmed up, which is one reason interactive sessions keep a driver
 alive rather than starting one per query (\Cref{sec:shape-deploy}) and why a
 micro-benchmark that runs a snippet once tells you almost nothing. And the JIT
 compiles \emph{tight, predictable} code far better than code full of virtual

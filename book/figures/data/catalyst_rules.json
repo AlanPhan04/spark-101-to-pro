@@ -1,0 +1,38 @@
+[
+ {
+  "variant": "all rules",
+  "seconds": 1.97,
+  "mb": 34,
+  "records_m": 4.9
+ },
+ {
+  "variant": "without ColumnPruning",
+  "seconds": 4.84,
+  "mb": 281,
+  "records_m": 4.9
+ },
+ {
+  "variant": "without PushDownPredicates",
+  "seconds": 2.81,
+  "mb": 321,
+  "records_m": 32.0
+ },
+ {
+  "variant": "without ConstantFolding",
+  "seconds": 1.77,
+  "mb": 34,
+  "records_m": 4.9
+ },
+ {
+  "variant": "without V2 scan pushdown",
+  "seconds": 1.43,
+  "mb": 34,
+  "records_m": 4.9
+ },
+ {
+  "variant": "without all four",
+  "seconds": 9.11,
+  "mb": 1262,
+  "records_m": 32.0
+ }
+]

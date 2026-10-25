@@ -34,7 +34,7 @@ Each learning/chat session maps to one Markdown file, capturing:
 | 7 | Streaming (optional) |
 | 8 | Advanced & Internals |
 
-**Stack:** Spark 3.5.2 · Apache Iceberg v2 · Kyuubi · Hive Metastore · GCS · GKE
+**Stack:** Spark 3.5.2 · Apache Iceberg v2
 
 ## 🛠️ Related project
 

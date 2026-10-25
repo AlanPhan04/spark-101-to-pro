@@ -122,7 +122,7 @@ the query from \Cref{lst:shape-query}, step by step
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.78\linewidth]{query-submission-flow.pdf}
+  \includegraphics[width=0.9\linewidth]{query-submission-flow.pdf}
   \caption{The specimen query from submission to result. The driver compiles and
   schedules but never touches the data; executors do all the reading, shuffling,
   and computing; the cluster manager only supplies the pods.}
@@ -130,8 +130,8 @@ the query from \Cref{lst:shape-query}, step by step
 \end{figure}
 
 \begin{enumerate}
-  \item \textbf{Submit.} Your SQL client --- here a connection to the Kyuubi
-        gateway --- sends the query \emph{text} to the driver. Nothing is parsed
+  \item \textbf{Submit.} Your SQL client --- a \texttt{spark-sql} shell or a notebook
+        session --- sends the query \emph{text} to the driver. Nothing is parsed
         on your side.
   \item \textbf{Compile (driver).} The driver parses the text, resolves
         \texttt{orders} and \texttt{dim\_product} against the catalog, runs the
@@ -140,14 +140,14 @@ the query from \Cref{lst:shape-query}, step by step
         \texttt{Exchange} node, and builds a set of tasks for each --- one task
         per input partition.
   \item \textbf{Acquire executors (cluster manager).} If the driver does not
-        already have enough executors, it asks Kubernetes for more pods. Under
-        Kyuubi the pool is usually already warm, so this step does nothing and
-        the query starts at once.
+        already have enough executors, it asks Kubernetes for more pods. In a
+        long-lived session the executors from the previous query are usually
+        still running, so this step does nothing and the query starts at once.
   \item \textbf{Run the map stages (executors).} The driver sends stage~0 and
         stage~1 tasks to free task slots, each task carrying its plan fragment
         and the id of the one partition it must process. Stage~0's roughly 180
         tasks each read one file split of the March \texttt{orders} partitions
-        from GCS, apply the \texttt{order\_ts} filter, and write small files to
+        from storage, apply the \texttt{order\_ts} filter, and write small files to
         the executor's \emph{local} disk, bucketed by \texttt{product\_id}.
         Stage~1 does the same for \texttt{dim\_product}. The two stages run
         concurrently, and every task reports its metrics to the driver as it
@@ -200,12 +200,11 @@ the driver schedules tasks onto executors directly, and the Kubernetes API is
 only involved again when pods are added or removed --- for example under dynamic
 allocation (\Cref{sec:executor-sizing}).
 
-The reference stack does not usually run \texttt{spark-submit} per query.
-\textbf{Kyuubi} runs a long-lived driver (a persistent \texttt{SparkSession},
-one per user or group) and you send SQL to it over a connection, the way you
-would to any database. The engine, stages, and tasks are all still there; Kyuubi
-just keeps the driver warm so you are not paying startup cost on every query and
-so many users can share a pool of executors.
+Interactive work does not usually run \texttt{spark-submit} per query. A
+long-lived driver (a persistent \texttt{SparkSession} in a shell or notebook)
+accepts SQL one statement after another. The engine, stages, and tasks are all
+still there; the session just keeps the driver and its executors warm so you are
+not paying startup cost on every query.
 
 \section{Jobs, stages, and tasks}
 \label{sec:shape-jobs}

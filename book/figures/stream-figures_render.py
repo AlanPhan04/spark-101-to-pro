@@ -70,3 +70,14 @@ ax.set_ylim(0, 23); ax.set_xlabel("epoch (micro-batch) id, one Iceberg snapshot 
 ax.grid(axis="x", visible=False)
 fig.tight_layout()
 save(fig, "kill-restart")
+
+# --- state providers -------------------------------------------------------------------------------------------------------------------------------
+use_book_style(2.7)
+fig, (a, b) = plt.subplots(1, 2, figsize=(6.3, 2.7))
+for key, label, color in (("default", "default provider", C["rose"]), ("rocksdb", "RocksDB provider", C["green"])):
+    s = load(f"stream_big_{key}.json")
+    a.plot([x["state_rows"] / 1e3 for x in s], [x["state_bytes"] / 1e6 for x in s], color=color, marker="o", markersize=3, label=label)
+    b.plot([x["t"] for x in s[2:]], [x["batch_ms"] for x in s[2:]], color=color, marker="o", markersize=3, label=label)
+a.set_xlabel("state rows (thousands)"); a.set_ylabel("memory reported by the state store (MB)"); a.legend(loc="upper left", fontsize=8)
+b.set_xlabel("seconds since the query started"); b.set_ylabel("micro-batch duration (ms)"); b.set_ylim(0, 1800)
+fig.tight_layout(); save(fig, "state-providers")

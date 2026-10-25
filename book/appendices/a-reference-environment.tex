@@ -25,10 +25,7 @@ implicit.
 \midrule
 Apache Spark & 3.5.2 \\
 Table format & Apache Iceberg, format version 2 \\
-Catalog & Hive Metastore (\Cref{sec:cat-hms}) \\
-SQL gateway & Apache Kyuubi (\Cref{sec:tuning-kyuubi}) \\
-Cluster manager & Google Kubernetes Engine (GKE) \\
-Object storage & Google Cloud Storage (GCS) \\
+Cluster manager & Kubernetes (executors as pods) \\
 JVM & OpenJDK 17 \\
 File format & Apache Parquet \\
 \bottomrule
@@ -42,7 +39,7 @@ Worked numbers throughout the book --- executor counts, task-slot arithmetic,
 memory sizing --- assume one concrete shape unless a section says otherwise:
 executors with 4 cores and 16~GB of executor memory each (plus the memory
 overhead \Cref{sec:executor-sizing} derives separately), running as pods on
-GKE with no co-located storage, since GCS is remote object storage rather
+Kubernetes with no co-located storage, on the assumption that table data sits in remote object storage rather
 than node-local disk (\Cref{sec:sched-locality-speculation}'s locality
 discussion depends on exactly this separation). A cluster of 10 such
 executors gives 40 task slots --- the number \Cref{sec:shuffle-sizing}'s
@@ -54,8 +51,8 @@ shuffle-partition-count reasoning starts from.
 The plans, task counts, and timings printed in the book's listings were captured
 on a laptop-sized \emph{lab}, not on the reference cluster. The lab is a single
 Docker container running Spark 3.5.2 on JDK~17 in local mode with eight cores,
-Apache Iceberg 1.6.1, and a file-based Iceberg catalog; it has no Hive Metastore,
-no GCS, and no GKE. Its source lives in the \texttt{lab/} directory of the book's
+Apache Iceberg 1.6.1, and a file-based Iceberg catalog; it has no cluster manager,
+no object storage, and no catalog service. Its source lives in the \texttt{lab/} directory of the book's
 repository, including the data generator and every experiment script, so any
 number can be reproduced.
 

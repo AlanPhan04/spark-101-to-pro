@@ -6,7 +6,7 @@ The catalog is the one component that turns a table name into the location of it
 current metadata --- and the point at which a commit becomes atomic. Writing new
 metadata is not a commit until the catalog's pointer is swapped to it. When two
 writers race, one wins the swap and the other retries. This chapter covers what
-the Hive Metastore and REST catalogs do, how the atomic swap works, and how to
+a catalog does, how the atomic swap works, and how to
 tune retries so a busy table does not fail commits under contention. The
 lab raced twelve writers for one table: 34 of 48 commits lost a swap and won on
 the second attempt, one gave up after four, and not a single row was lost or
@@ -33,8 +33,9 @@ the simplest: a file-based catalog whose pointer is a \texttt{version-hint.text}
 file naming the latest \texttt{vN.metadata.json}, and whose swap is the creation
 of the next numbered file, which fails if that file already exists. That
 works on a filesystem with atomic create or rename; Iceberg's documentation
-advises against a file-based catalog on object stores such as GCS for exactly
-that reason, which is why this stack uses the Hive Metastore.
+advises against a file-based catalog on object stores whose rename is not atomic,
+which is why production deployments use a catalog backed by a service
+(\Cref{sec:cat-service}).
 
 \begin{figure}[htbp]
   \centering
@@ -46,51 +47,29 @@ that reason, which is why this stack uses the Hive Metastore.
   \label{fig:catalog-pointer-types}
 \end{figure}
 
-\section{The Hive Metastore catalog}
-\label{sec:cat-hms}
+\section{Service-backed catalogs}
+\label{sec:cat-service}
 
-On this stack, \texttt{spark.sql.catalog.<name>.type=hive} points Iceberg at
-the same Hive Metastore (HMS) already serving classic Hive tables. Iceberg
-stores the current metadata file's location in the Metastore's own table
-properties (\texttt{metadata\_location}), and the swap is one HMS
-\texttt{alter\_table} call with an expected-old-value check --- HMS itself
-functions as the lock, rejecting the call if \texttt{metadata\_location}
-already differs from what the writer last read. This is why an HMS-catalog
-table can be queried by any engine that already speaks Hive Metastore
-(Kyuubi included, on this stack) without extra configuration: to that engine,
-an Iceberg table's catalog entry looks like any other table, only the
-properties differ.
-
-\section{The REST catalog}
-\label{sec:cat-rest}
-
-A REST catalog (\texttt{spark.sql.catalog.<name>.type=rest}, with a
-\texttt{uri}) puts a dedicated service between every engine and the metadata
-store, instead of each engine's client implementing Metastore's Thrift
-protocol directly. A commit is one HTTP request --- typically a
-\texttt{POST} to that table's endpoint carrying the base metadata file's
-identity (its UUID or version number) alongside the new one --- and the
-service rejects it with a conflict response if its own record of the
-current metadata no longer matches that base, the same expected-old-value
-check HMS does, just enforced by application code and its own backing store
-(a database row, most commonly) instead of by a Thrift call into HMS. Every
-client, regardless of language or engine, calls this same small HTTP API to
-read or commit a table. The practical difference from HMS shows up at the
-edges: a REST catalog can support features HMS's schema was never built for
-(multi-table transactions, credential vending scoped per table --- the
-catalog hands each client short-lived, table-specific storage credentials
-for exactly the table it just asked to read or write, instead of every
-client sharing one long-lived, all-tables-accessible static key) without
-every client needing new Thrift-parsing logic, at the cost of running and
-operating one more service.
+\emph{Not exercised in the lab, which runs only the file-based catalog; this
+section describes the mechanism, not a measurement.} A service-backed catalog puts
+the pointer in a database or a service instead of a file. The commit is then one
+request carrying the base metadata file's identity alongside the new one, and the
+service rejects it with a conflict if its own record of the current metadata no
+longer matches that base --- the same expected-old-value check the file-based
+catalog gets from ``create the next file, fail if it exists,'' enforced by the
+service's own backing store (a database row, most commonly). Every client, whatever
+its language or engine, calls the same small API to read or commit a table, and
+the service can offer what a bare file cannot: multi-table transactions, or
+credential vending, in which the catalog hands each client short-lived storage
+credentials scoped to the one table it asked for. The cost is one more service to
+run. Iceberg ships several such implementations; which one a table uses changes
+where the pointer lives, not the metadata tree beneath it.
 
 \begin{note}
-Both catalog types answer the same two questions from
-\Cref{sec:cat-what}; nothing in \Cref{ch:iceberg-spec} or the rest of this
-book depends on which one a table uses. Pick based on what already exists
-in the platform (HMS is already running on this stack) and what the ecosystem
-around the table needs, not on a claimed metadata-format difference --- there
-is none.
+Every catalog answers the same two questions from \Cref{sec:cat-what}; nothing in
+\Cref{ch:iceberg-spec} or the rest of this book depends on which one a table uses.
+Pick based on what already exists in the platform and what the ecosystem around the
+table needs, not on a claimed metadata-format difference --- there is none.
 \end{note}
 
 \section{The atomic pointer swap}
@@ -244,26 +223,24 @@ resubmitting it would silently lose every commit that happened in between.
 
 A catalog is registered per Spark session under a name of your choosing:
 
-\begin{lstlisting}[language=bash,caption={Registering an Iceberg catalog against the Hive Metastore},captionpos=b,label=lst:cat-register]
-spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog
-spark.sql.catalog.lakehouse.type=hive
-spark.sql.catalog.lakehouse.uri=thrift://hive-metastore:9083
-spark.sql.catalog.lakehouse.warehouse=gs://my-bucket/warehouse
+\begin{lstlisting}[language=bash,caption={Registering the lab's file-based Iceberg catalog},captionpos=b,label=lst:cat-register]
+spark.sql.catalog.lab=org.apache.iceberg.spark.SparkCatalog
+spark.sql.catalog.lab.type=hadoop
+spark.sql.catalog.lab.warehouse=/lab/warehouse
 \end{lstlisting}
 
 Every table reference is then three-part,
-\texttt{lakehouse.analytics.orders}, resolved through that specific catalog ---
-which matters the moment more than one catalog is registered (a Hive-backed
-one for the existing warehouse, a REST-backed one for a newer set of tables):
+\texttt{lab.db.orders}, resolved through that specific catalog ---
+which matters the moment more than one catalog is registered (say, a file-based one
+for experiments and a service-backed one for shared tables):
 the catalog name in the identifier, not any global default, decides which
 metadata store and which commit protocol from this chapter actually apply.
 
 \begin{note}
 \texttt{org.apache.iceberg.spark.SparkCatalog} has to actually be on the
-JVM's classpath for this registration to resolve to anything --- on this
-stack, that means the Iceberg Spark runtime jar is baked into the engine
-image Kyuubi launches (or added via an init container), not something set
-by this config block alone. A catalog name that fails to resolve with a
+JVM's classpath for this registration to resolve to anything --- the lab passes the
+Iceberg Spark runtime jar with \texttt{--jars}; it is not something set by this
+config block alone. A catalog name that fails to resolve with a
 \texttt{ClassNotFoundException} rather than a clear catalog-not-found error
 is almost always this: the config is correct, the jar is missing from the
 engine that tried to honor it.
@@ -273,10 +250,9 @@ engine that tried to honor it.
 \label{sec:cat-summary}
 
 The catalog's whole job is a name-to-current-metadata-file mapping that can be
-swapped atomically; the Hive Metastore catalog does this with a conditional
-\texttt{alter\_table} against the same Metastore serving classic Hive tables,
-a REST catalog does it behind an HTTP API that can support more than HMS's
-schema allows, and neither changes anything about the metadata tree itself.
+swapped atomically; the file-based catalog does this with a create-if-absent of
+the next metadata file, a service-backed catalog with a conditional update behind
+its API, and neither changes anything about the metadata tree itself.
 A commit writes all its new files optimistically, then attempts one
 conditional swap; on conflict it re-reads the real current state, reapplies
 the same change on top of it, and retries within the bounds of

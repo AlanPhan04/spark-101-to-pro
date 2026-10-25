@@ -217,7 +217,7 @@ The table shows what a one-machine lab can show and no more. Scan tasks were
 \texttt{PROCESS\_LOCAL} because the only executor is the one process the data would
 be read into; the shuffle-read split between the two levels reflects blocks written
 by the same JVM or by a different task thread. Claim --- not tested: on the
-reference cluster, scan tasks over GCS have no preferred location (object storage
+cluster with table data in remote object storage, scan tasks have no preferred location (object storage
 has no ``node holding this byte range'') and so never wait for a better level, while
 a stage-2 task placed on the same node as a map-side executor reads over a local hop,
 cheaper than a cross-node one.

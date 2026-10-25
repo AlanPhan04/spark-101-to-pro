@@ -5,7 +5,7 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <mxCell id="s1" value="&lt;b&gt;1. Client&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;sends the SQL text to the driver (your Kyuubi session)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+        <mxCell id="s1" value="&lt;b&gt;1. Client&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;sends the SQL text to the driver (your session)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
           <mxGeometry x="91.4" y="18.3" width="457.1" height="51.2" as="geometry" />
         </mxCell>
 
@@ -13,11 +13,11 @@
           <mxGeometry x="91.4" y="91.4" width="457.1" height="65.8" as="geometry" />
         </mxCell>
 
-        <mxCell id="s3" value="&lt;b&gt;3. Cluster manager (Kubernetes)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;driver acquires executor pods &amp;#8212; or reuses Kyuubi's warm pool&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=13;fontColor=#3f335c;" vertex="1" parent="1">
+        <mxCell id="s3" value="&lt;b&gt;3. Cluster manager (Kubernetes)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;driver acquires executor pods &amp;#8212; or reuses warm ones&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=13;fontColor=#3f335c;" vertex="1" parent="1">
           <mxGeometry x="91.4" y="179.2" width="457.1" height="51.2" as="geometry" />
         </mxCell>
 
-        <mxCell id="s4" value="&lt;b&gt;4. Executors &amp;#8212; stages 0 &amp; 1, in parallel&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;each task reads one partition from GCS &amp;#8594; filters &amp;#8594;&lt;br&gt;writes shuffle files to local disk, keyed by product_id&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
+        <mxCell id="s4" value="&lt;b&gt;4. Executors &amp;#8212; stages 0 &amp; 1, in parallel&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;each task reads one partition from storage &amp;#8594; filters &amp;#8594;&lt;br&gt;writes shuffle files to local disk, keyed by product_id&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
           <mxGeometry x="91.4" y="252.3" width="457.1" height="65.8" as="geometry" />
         </mxCell>
 
