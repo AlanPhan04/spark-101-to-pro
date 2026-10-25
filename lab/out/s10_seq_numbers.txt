@@ -1,0 +1,14 @@
+-- s10_seq_numbers
+-- SELECT status, sequence_number, data_file.content AS content, data_file.record_count AS rows FROM lab.db.t_meta.entries ORDER BY sequence_number DESC, content LIMIT 6
+
++------+---------------+-------+------+
+|status|sequence_number|content|  rows|
++------+---------------+-------+------+
+|     1|              5|      1|     1|
+|     1|              4|      0|967938|
+|     1|              2|      0|969651|
+|     1|              1|      0|967713|
+|     1|              1|      0|967542|
+|     1|              1|      0|968774|
++------+---------------+-------+------+
+

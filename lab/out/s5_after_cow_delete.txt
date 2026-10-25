@@ -1,0 +1,9 @@
+-- s5_after_cow_delete
+-- SELECT snapshot_id, operation, summary['added-data-files'] AS added_files, summary['deleted-data-files'] AS deleted_files, summary['added-files-size'] AS added_bytes, summary['added-delete-files'] AS added_delete_files FROM lab.db.t_meta.snapshots ORDER BY committed_at DESC LIMIT 1
+
++-------------------+---------+-----------+-------------+-----------+------------------+
+|        snapshot_id|operation|added_files|deleted_files|added_bytes|added_delete_files|
++-------------------+---------+-----------+-------------+-----------+------------------+
+|8253682065320300393|overwrite|          1|            1|   34781105|              NULL|
++-------------------+---------+-----------+-------------+-----------+------------------+
+

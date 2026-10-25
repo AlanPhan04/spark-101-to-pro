@@ -1,0 +1,13 @@
+-- s4_entries
+-- SELECT status, sequence_number, file_sequence_number, data_file.record_count AS rows FROM lab.db.t_meta.entries ORDER BY sequence_number, rows
+
++------+---------------+--------------------+------+
+|status|sequence_number|file_sequence_number|  rows|
++------+---------------+--------------------+------+
+|     1|              1|                   1|967542|
+|     1|              1|                   1|967713|
+|     1|              1|                   1|968774|
+|     1|              2|                   2|969651|
+|     1|              3|                   3|967939|
++------+---------------+--------------------+------+
+

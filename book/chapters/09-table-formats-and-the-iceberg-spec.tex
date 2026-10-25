@@ -6,8 +6,9 @@ An Iceberg table is not a directory of Parquet files with a manifest bolted on.
 It is a tree: a catalog pointer to a metadata file, to a manifest list, to
 manifests, to data and delete files --- every level immutable, every commit a
 single atomic pointer swap. Reads consult this tree before touching any data.
-This chapter walks the spec (format version 2) against a real table's metadata
-tables so you can draw the tree from memory.
+This chapter walks the spec (format version 2) against the metadata tables of a
+table the lab of \Cref{sec:refenv-lab} built with three commits and two deletes,
+so you can draw the tree from memory.
 \end{chapterintro}
 
 \section{From Hive tables to table formats}
@@ -81,6 +82,68 @@ written, each read by the layer above it, top to bottom
         \Cref{sec:ice-delete-files}.
 \end{description}
 
+\subsection{The tree, measured}
+\label{sec:ice-tree-measured}
+
+The lab created \texttt{t\_meta} partitioned by day with one \texttt{CREATE TABLE
+AS SELECT} of three days, then two appends of one day each.
+\Cref{fig:metadata-tree-lab} is the tree after the third commit, and
+\Cref{lst:ice-spec-tables} shows the three metadata tables that describe it.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{metadata-tree-lab.pdf}
+  \caption{The metadata tree of \texttt{t\_meta} after three commits, as the
+  lab's metadata tables report it. The catalog points to \texttt{v3.metadata.json};
+  the snapshot-3 manifest list names three manifests, one written by each
+  commit, which list five data files.}
+  \label{fig:metadata-tree-lab}
+\end{figure}
+
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={The snapshots, manifests, and metadata log of \texttt{t\_meta} after three commits (trimmed)},captionpos=b,label=lst:ice-spec-tables]
+snapshot_id          parent_id            operation  manifest_list
+ 3556728392267893512  NULL                 append     snap-3556...-ff6b38d0-3...
+ 4288545161950762915  3556728392267893512  append     snap-4288...-6561136d-3...
+ 6626548609302216676  4288545161950762915  append     snap-6626...-2c4a314e-5...
+
+all_manifests  (snapshot -> manifest, files added by it)
+ snapshot 1 -> m0 (3 files)
+ snapshot 2 -> m0 (3 files, reused),  m0' (1 file)
+ snapshot 3 -> m0 (3 files, reused),  m0' (1, reused),  m0'' (1 file)
+
+metadata_log_entries
+ v1.metadata.json  seq 1
+ v2.metadata.json  seq 2
+ v3.metadata.json  seq 3
+\end{lstlisting}
+
+The tables confirm what the spec says. Each commit wrote exactly one new
+manifest and one new manifest list, and \Cref{fig:manifest-reuse} draws the
+reuse: the snapshot-3 manifest list names the manifests earlier commits wrote,
+byte for byte unchanged, plus the one new manifest. An append never rewrites an
+existing manifest. Each snapshot's manifest list is a complete description of
+the table at that moment, which is why a reader needs only the one it resolved.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{manifest-reuse.pdf}
+  \caption{Three snapshots of one table. Each commit writes one new manifest
+  (orange) and a new manifest list, and the list also names every earlier
+  manifest unchanged (green). Older snapshots keep their own lists, so time
+  travel reads them untouched.}
+  \label{fig:manifest-reuse}
+\end{figure}
+
+On disk the same table, after two further deletes and one property change, holds
+exactly six \texttt{metadata.json} files (\texttt{v1} to \texttt{v6}), five
+manifest lists, and six manifests, plus a \texttt{version-hint.text} that the
+file-based catalog uses as its pointer. The sixth metadata file is worth a
+sentence: \texttt{ALTER TABLE \ldots{} SET TBLPROPERTIES} wrote a new
+\texttt{metadata.json} and no new snapshot, because properties live in the
+metadata file and not in the data tree. The lab's catalog is file-based, so the
+pointer swap is a rename of that hint; a Hive Metastore or REST catalog swaps a
+different pointer, the subject of \Cref{ch:catalogs}.
+
 \begin{note}
 Nothing in this tree is a directory listing. A reader that wants to know
 which files exist reads exactly the metadata file, manifest list, and
@@ -99,23 +162,39 @@ detail that makes format v2 usable for row-level deletes --- a monotonically
 increasing \texttt{sequence-number}. Every file recorded anywhere in the tree
 inherits the sequence number of the snapshot that added it, and that number is
 what lets a reader decide, cheaply, whether a given delete file is even
-relevant to a given data file: a delete only applies to a data file with an
-\emph{older} sequence number, so a data file written after a delete was
-committed is never touched by it. Concretely: data file \texttt{A} is written
-at sequence number 5; a later commit deletes some of its rows, writing a
-delete file at sequence number 8 --- that delete applies to \texttt{A} (5 is
-older than 8) and any reader must apply it when reading \texttt{A}'s rows. A
-still-later commit appends new rows in data file \texttt{B} at sequence
-number 9. Because 9 is \emph{not older} than the delete file's 8, the
-sequence number alone tells a reader that this delete cannot possibly apply
-to \texttt{B} --- no need to even open the delete file and check its
-contents against \texttt{B}'s rows.
+relevant to a given data file: the sequence numbers decide which delete files can
+apply to which data files, and the rule differs by delete type. A
+\emph{position} delete file applies to a data file whose sequence number is less
+than \emph{or equal to} its own, and an \emph{equality} delete applies only to
+data files with a strictly smaller number.
+
+A data file written after a delete was
+committed has a larger number and is never touched by it, so a reader skips the
+delete file without opening it. \Cref{fig:sequence-number-rule} shows the numbers
+the lab recorded: data files were added at sequence numbers 1, 1, 1, 2, and 3;
+a copy-on-write delete replaced one of them with a rewritten file at 4; then a
+merge-on-read delete committed a position delete file at 5. That delete applies
+to every data file numbered 5 or lower, and the next append, at 6, will not be
+checked against it.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{sequence-number-rule.pdf}
+  \caption{A position delete at sequence number 5 applies to the data files at 1,
+  2, and 4 and not to a later append at 6. File \texttt{C} carries number 4
+  because a copy-on-write delete rewrote it; sequence numbers record when a file
+  was \emph{added}, not when its rows were first written.}
+  \label{fig:sequence-number-rule}
+\end{figure}
 
 The table metadata file's \emph{snapshot log} is the ordered history of every
 snapshot the table has ever had, and it is what powers time travel ---
 \texttt{VERSION AS OF} / \texttt{TIMESTAMP AS OF} in Spark SQL resolve to a
 past \texttt{snapshot-id} by walking this log, then read that snapshot's
-manifest list exactly as if it were current. A commit does not delete an
+manifest list exactly as if it were current. The lab confirms it: counting rows
+\texttt{VERSION AS OF} each of the three snapshots returned 2,904,029,
+3,873,680, and 4,841,619, matching the three days, four days, and five days
+committed. A commit does not delete an
 old snapshot's entry from this log; that is a separate, deliberate operation
 (\texttt{expire\_snapshots}, \Cref{ch:iceberg-write}) --- until it runs, the
 old files a superseded snapshot referenced are still reachable, which is
@@ -165,13 +244,54 @@ rewriting the data file itself. Two encodings exist, and they trade off
         compaction gets measurably slower to read from over time.
 \end{description}
 
+Whether a Spark \texttt{DELETE} writes a delete file at all is a table setting, not
+a property of the statement. The lab deleted one row of a 969,000-row day twice:
+once with the default, and once after setting \texttt{write.delete.mode} to
+\texttt{merge-on-read} (\Cref{tab:ice-lab-delete-modes} and
+\Cref{fig:delete-bytes-written}).
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.8cm}p{2.6cm}p{3.1cm}p{3.6cm}@{}}
+\toprule
+\textbf{Mode} & \textbf{Snapshot operation} & \textbf{Data files} & \textbf{Bytes written} \\
+\midrule
+copy-on-write (default) & \texttt{overwrite} & 1 added, 1 deleted & 34,781,105 \\
+merge-on-read & \texttt{delete} & unchanged & 1,492, in one position delete file \\
+\bottomrule
+\end{tabular}
+\caption{Deleting one row, measured. Copy-on-write rewrote the whole 34.8~MB data
+file; merge-on-read wrote a 1.5~KB file that records the file path and the row
+position.}
+\label{tab:ice-lab-delete-modes}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{delete-bytes-written.pdf}
+  \caption{Bytes written to delete a single row: the whole data file under
+  copy-on-write, one tiny delete file under merge-on-read. The log scale spans
+  more than four orders of magnitude.}
+  \label{fig:delete-bytes-written}
+\end{figure}
+
+The price of the small write comes later, at read time: until compaction, every
+scan of that data file must apply the delete. The \texttt{files} table shows the
+shape directly: after the merge-on-read delete the table held five data files
+(content 0) and one delete file (content 1), and the delete file was the only
+newly written file. \Cref{ch:iceberg-write} turns this into a maintenance
+schedule.
+
 \begin{tip}
-A batch \texttt{MERGE INTO} on this stack writes position deletes, because
-the join already located the exact rows; a table only accumulates equality
-deletes if something writes them deliberately (typically a streaming
-upsert). If read performance is degrading on a table you know only runs
-batch merges, the delete files are not why --- look at file count and
-partition pruning instead (\Cref{ch:iceberg-read}).
+A batch \texttt{MERGE INTO}, \texttt{UPDATE}, or \texttt{DELETE} on this stack
+writes position deletes \emph{only if} the table's corresponding
+\texttt{write.*.mode} property is \texttt{merge-on-read}; by default it rewrites
+the affected data files, and the table never accumulates delete files at all. A
+table only accumulates equality deletes if something writes them deliberately,
+typically a streaming upsert; Spark SQL's own row-level statements write position
+deletes. If read performance is degrading on a table you know has no delete
+files, the cause is file count and pruning, not deletes (\Cref{ch:iceberg-read}).
 \end{tip}
 
 \section{Iceberg, Delta Lake, and Hudi}
@@ -227,9 +347,9 @@ how that top-level pointer swap becomes atomic when two writers race for it.
 \item Commit three appends to a table, then inspect \texttt{metadata\_log\_entries},
       \texttt{snapshots}, and \texttt{manifests}. Explain how many metadata files
       and manifests exist and why.
-\item Run one \texttt{MERGE INTO} and, separately, simulate an equality-delete
-      write. Compare the resulting delete files' schema in the
-      \texttt{files} metadata table.
+\item Delete one row from a copy-on-write table and then from the same table
+      set to merge-on-read. Compare the snapshot summaries and the \texttt{files}
+      metadata table, and explain the difference in bytes written.
 \item Query a table with \texttt{VERSION AS OF} an old snapshot after a
       subsequent commit. Confirm from \texttt{metadata\_log\_entries} which
       manifest list that snapshot still points to.

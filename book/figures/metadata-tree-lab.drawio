@@ -1,0 +1,29 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="metadata-tree-lab" id="mtreelab">
+    <mxGraphModel dx="800" dy="400" grid="1" gridSize="20" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="cat" value="&lt;b&gt;catalog&lt;/b&gt;: version-hint.text&lt;br&gt;points to v3.metadata.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontColor=#3f335c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="140" y="10" width="360" height="56" as="geometry" /></mxCell>
+        <mxCell id="ml" value="&lt;b&gt;manifest list&lt;/b&gt; of snapshot 3 (seq 3)&lt;br&gt;lists 3 manifests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="140" y="100" width="360" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="m1" value="&lt;b&gt;manifest 1&lt;/b&gt;&lt;br&gt;written by commit 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="20" y="200" width="180" height="56" as="geometry" /></mxCell>
+        <mxCell id="m2" value="&lt;b&gt;manifest 2&lt;/b&gt;&lt;br&gt;written by commit 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="230" y="200" width="180" height="56" as="geometry" /></mxCell>
+        <mxCell id="m3" value="&lt;b&gt;manifest 3&lt;/b&gt;&lt;br&gt;written by commit 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf1fb;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="440" y="200" width="180" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="d1" value="3 data files&lt;br&gt;Mar 1-3, seq 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="20" y="310" width="180" height="56" as="geometry" /></mxCell>
+        <mxCell id="d2" value="1 data file&lt;br&gt;Mar 4, seq 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="230" y="310" width="180" height="56" as="geometry" /></mxCell>
+        <mxCell id="d3" value="1 data file&lt;br&gt;Mar 5, seq 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="440" y="310" width="180" height="56" as="geometry" /></mxCell>
+
+        <mxCell id="e1" style="endArrow=block;html=1;strokeColor=#6a5a8a;strokeWidth=2;" edge="1" parent="1" source="cat" target="ml"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="ml" target="m1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="ml" target="m2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="ml" target="m3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="m1" target="d1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="m2" target="d2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="m3" target="d3"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

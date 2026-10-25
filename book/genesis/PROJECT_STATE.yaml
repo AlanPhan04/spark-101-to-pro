@@ -46,7 +46,8 @@ chapters:
   - {n: 7, slug: partitioning-bucketing-pruning, status: deepened}  # 3 figs (dpp-flow redrawn, pruning-static, bucketed-join), 5 listings (plans % CAPTURE), 6 tables
   - {n: 12, slug: reading-iceberg-efficiently, status: deepened}  # 3 figs, measured scan counters, lookups on 4 table layouts, adaptive split size finding
   - {n: 8, slug: caching-and-reuse, status: deepened}  # 5 figs, break-even sweep, lazy/eager, levels, eviction, reuse, LRU thrash (all measured)
-  # 5, 9-11, 13-19: drafted thin (see lint_chapter.py --status)
+  - {n: 9, slug: table-formats-and-the-iceberg-spec, status: deepened}  # 5 figs; measured tree, reuse, sequence numbers, CoW vs MoR delete; spec rule corrected (position deletes: <=)
+  # 5, 10-11, 13-19: drafted thin (see lint_chapter.py --status)
 
 figures:                            # shared renderer: figures/_drawio.py
   - {slug: application-topology,   chapter: 1, status: rendered}

@@ -1,0 +1,9 @@
+-- s7_after_mor_delete
+-- SELECT snapshot_id, operation, summary['added-data-files'] AS added_files, summary['added-delete-files'] AS added_delete_files, summary['added-position-delete-files'] AS pos_delete_files, summary['added-position-deletes'] AS pos_deletes, summary['added-files-size'] AS added_bytes FROM lab.db.t_meta.snapshots ORDER BY committed_at DESC LIMIT 1
+
++------------------+---------+-----------+------------------+----------------+-----------+-----------+
+|       snapshot_id|operation|added_files|added_delete_files|pos_delete_files|pos_deletes|added_bytes|
++------------------+---------+-----------+------------------+----------------+-----------+-----------+
+|615633042763457749|   delete|       NULL|                 1|               1|          1|       1492|
++------------------+---------+-----------+------------------+----------------+-----------+-----------+
+

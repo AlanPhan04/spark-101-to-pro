@@ -1,0 +1,11 @@
+-- s3_metadata_log
+-- SELECT regexp_extract(file, '([^/]*)$', 1) AS metadata_file, latest_sequence_number AS seq FROM lab.db.t_meta.metadata_log_entries
+
++----------------+---+
+|   metadata_file|seq|
++----------------+---+
+|v1.metadata.json|  1|
+|v2.metadata.json|  2|
+|v3.metadata.json|  3|
++----------------+---+
+

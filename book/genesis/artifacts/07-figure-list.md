@@ -68,3 +68,7 @@ figure is authored when its chapter is drafted (pass 1 figures first).
 | `cache-eviction-measured` | 8 | stacked bar | a cached month before/after a join: memory vs disk, measured | done |
 | `cache-thrash-lru` | 8 | plot | three caches that do not fit: LRU eviction per partition, measured | done |
 | `reuse-exchange` | 8 | before/after | one exchange read twice vs the same exchange written twice | done |
+| `metadata-tree-lab` | 9 | tree | the 3-commit table: catalog -> v3.metadata.json -> manifest list -> 3 manifests -> 5 files | done |
+| `manifest-reuse` | 9 | reuse | three snapshots; each commit writes one manifest and reuses the rest | done |
+| `sequence-number-rule` | 9 | rule | position delete at seq 5 applies to files at 1, 2, 4; not the later append at 6 | done |
+| `delete-bytes-written` | 9 | plot | 34.8 MB (copy-on-write) vs 1.5 KB (merge-on-read) to delete one row | done |

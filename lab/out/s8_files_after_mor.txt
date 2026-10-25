@@ -1,0 +1,10 @@
+-- s8_files_after_mor
+-- SELECT content, count(*) AS files, round(sum(file_size_in_bytes)/1e6,3) AS mb FROM lab.db.t_meta.files GROUP BY content ORDER BY content
+
++-------+-----+-------+
+|content|files|     mb|
++-------+-----+-------+
+|      0|    5|173.981|
+|      1|    1|  0.001|
++-------+-----+-------+
+
