@@ -1,0 +1,9 @@
+-- sp6_split_offsets
+-- SELECT count(*) AS files, round(avg(size(split_offsets)),1) AS avg_row_groups FROM lab.db.t_plain.files
+
++-----+--------------+
+|files|avg_row_groups|
++-----+--------------+
+|   10|          -1.0|
++-----+--------------+
+

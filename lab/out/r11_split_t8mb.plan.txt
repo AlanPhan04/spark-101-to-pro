@@ -1,0 +1,37 @@
+-- r11_split_t8mb
+-- SELECT sum(order_total) AS s FROM orders
+
+== Physical Plan ==
+* HashAggregate (5)
++- Exchange (4)
+   +- * HashAggregate (3)
+      +- * ColumnarToRow (2)
+         +- BatchScan lab.db.orders (1)
+
+
+(1) BatchScan lab.db.orders
+Output [1]: [order_total#1493]
+lab.db.orders (branch=null) [filters=, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [1]: [order_total#1493]
+
+(3) HashAggregate [codegen id : 1]
+Input [1]: [order_total#1493]
+Keys: []
+Functions [1]: [partial_sum(order_total#1493)]
+Aggregate Attributes [1]: [sum#1502]
+Results [1]: [sum#1503]
+
+(4) Exchange
+Input [1]: [sum#1503]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1441]
+
+(5) HashAggregate [codegen id : 2]
+Input [1]: [sum#1503]
+Keys: []
+Functions [1]: [sum(order_total#1493)]
+Aggregate Attributes [1]: [sum(order_total#1493)#1494]
+Results [1]: [sum(order_total#1493)#1494 AS s#1486]
+
+

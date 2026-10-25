@@ -1,0 +1,9 @@
+-- m1_files_summary
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb, min(record_count) AS min_rows, max(record_count) AS max_rows, sum(record_count) AS rows FROM lab.db.orders.files
+
++-----+------+--------+--------+--------+
+|files|avg_mb|min_rows|max_rows|    rows|
++-----+------+--------+--------+--------+
+|   31|  34.8|  965434|  969651|30000000|
++-----+------+--------+--------+--------+
+

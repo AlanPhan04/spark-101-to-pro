@@ -1,0 +1,9 @@
+-- r5_files_t_sorted
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb FROM lab.db.t_sorted.files
+
++-----+------+
+|files|avg_mb|
++-----+------+
+|  200|   1.7|
++-----+------+
+

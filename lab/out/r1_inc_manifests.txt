@@ -1,0 +1,9 @@
+-- r1_inc_manifests
+-- SELECT count(*) AS manifests, sum(added_data_files_count) AS files FROM lab.db.orders_inc.manifests
+
++---------+-----+
+|manifests|files|
++---------+-----+
+|       31|   31|
++---------+-----+
+

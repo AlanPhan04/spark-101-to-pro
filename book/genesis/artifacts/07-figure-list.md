@@ -33,7 +33,9 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 | `hidden-partitioning` | 11 | flow | `WHERE event_ts > ...` → Iceberg derives the partition predicate on `day(event_ts)` | 2 | spec |
 | `partition-evolution` | 11 | before/after | old data in `day` partitions, new in `hour`, one table, no rewrite | 2 | spec |
 | `pruning-layers-iceberg` | 12 | structure | extends `pruning-layers` with the manifest-list / manifest stats path | 1 | spec |
-| `scan-metrics` | 12 | annotated | an Iceberg scan report with the pruning ratio at each layer marked | 2 | spec |
+| `scan-metrics` | 12 | annotated | an Iceberg scan report with the pruning ratio at each layer marked | 2 | done |
+| `file-stat-ranges` | 12 | quantitative | measured per-file customer_id min/max: unsorted 10/10 files overlap the key, sorted 1/200 | 2 | done |
+| `pruning-layers-funnel` | 12 | funnel | the four pruning layers | 2 | done (redrawn, legible) |
 | `cow-vs-mor` | 13 | structure | update on CoW (rewrite file) vs MoR (add delete file); read-time merge | 1 | spec |
 | `maintenance-order` | 13 | flow | rewrite_data_files → expire_snapshots → remove_orphan_files → rewrite_manifests, and why the order | 2 | spec |
 | `config-precedence` | 14 | structure | SparkConf < spark-defaults < CLI < session `SET` < query hint | 2 | spec |

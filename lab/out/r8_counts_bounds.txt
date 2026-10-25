@@ -1,0 +1,11 @@
+-- r8_counts_bounds
+-- SELECT readable_metrics.customer_id.lower_bound AS lo, readable_metrics.customer_id.value_count AS n FROM lab.db.t_sorted_counts.files LIMIT 3
+
++----+-----+
+|  lo|    n|
++----+-----+
+|NULL|46901|
+|NULL|44695|
+|NULL|48682|
++----+-----+
+

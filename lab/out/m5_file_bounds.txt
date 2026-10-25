@@ -1,0 +1,28 @@
+-- m5_file_bounds
+-- SELECT file_path, record_count, readable_metrics.order_id.lower_bound AS oid_lo, readable_metrics.order_id.upper_bound AS oid_hi, readable_metrics.product_id.lower_bound AS pid_lo, readable_metrics.product_id.upper_bound AS pid_hi, readable_metrics.order_ts.lower_bound AS ts_lo FROM lab.db.orders.files ORDER BY file_path LIMIT 3
+
+-RECORD 0----------------------------------------------------
+ file_path    | /lab/warehouse/db/orders/data/order_ts_da... 
+ record_count | 967542                                       
+ oid_lo       | 000004a2-29b7-4d                             
+ oid_hi       | ffffcf0b-ec3e-4e                             
+ pid_lo       | p0000005                                     
+ pid_hi       | p1999998                                     
+ ts_lo        | 2026-03-01 00:00:00                          
+-RECORD 1----------------------------------------------------
+ file_path    | /lab/warehouse/db/orders/data/order_ts_da... 
+ record_count | 968774                                       
+ oid_lo       | 00000221-2318-41                             
+ oid_hi       | ffffa331-4b9b-4f                             
+ pid_lo       | p0000001                                     
+ pid_hi       | p1999999                                     
+ ts_lo        | 2026-03-02 00:00:00                          
+-RECORD 2----------------------------------------------------
+ file_path    | /lab/warehouse/db/orders/data/order_ts_da... 
+ record_count | 967713                                       
+ oid_lo       | 000003c6-0c3e-41                             
+ oid_hi       | ffffed77-6266-4g                             
+ pid_lo       | p0000004                                     
+ pid_hi       | p1999998                                     
+ ts_lo        | 2026-03-03 00:00:00                          
+

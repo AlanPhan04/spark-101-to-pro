@@ -1,0 +1,13 @@
+-- m2_partitions
+-- SELECT partition, record_count, file_count FROM lab.db.orders.partitions ORDER BY partition LIMIT 5
+
++------------+------------+----------+
+|   partition|record_count|file_count|
++------------+------------+----------+
+|{2026-03-01}|      967542|         1|
+|{2026-03-02}|      968774|         1|
+|{2026-03-03}|      967713|         1|
+|{2026-03-04}|      969651|         1|
+|{2026-03-05}|      967939|         1|
++------------+------------+----------+
+

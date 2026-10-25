@@ -39,3 +39,56 @@ def run(spark, group, sql, show_plan=True, mode="formatted"):
 def set_conf(spark, **kv):
     for k, v in kv.items():
         spark.conf.set(k.replace("__", "."), str(v))
+
+
+def show(spark, name, sql, n=20, truncate=60, vertical=False):
+    """Run a metadata query and save its table-formatted output to out/<name>.txt."""
+    df = spark.sql(sql)
+    text = df._jdf.showString(n, truncate, vertical)
+    os.makedirs(OUT, exist_ok=True)
+    with open(f"{OUT}/{name}.txt", "w", encoding="utf-8") as f:
+        f.write("-- " + name + "\n-- " + " ".join(sql.split()) + "\n\n" + text + "\n")
+    print(f"=== {name}")
+    print(text)
+    return df
+
+
+def enable_scan_reports(spark):
+    """Make Iceberg's LoggingMetricsReporter print each ScanReport (INFO) to the console."""
+    spark.sparkContext.setLogLevel("WARN")
+    jvm = spark._jvm
+    jvm.org.apache.logging.log4j.core.config.Configurator.setLevel(
+        "org.apache.iceberg.metrics.LoggingMetricsReporter", jvm.org.apache.logging.log4j.Level.INFO)
+
+
+def scan_metrics(df):
+    """SQL metrics of every leaf scan node of the executed plan (AQE must be off)."""
+    plan = df._jdf.queryExecution().executedPlan()
+    out = {}
+    leaves = plan.collectLeaves()
+    it = leaves.iterator()
+    jvm = df.sparkSession._jvm
+    while it.hasNext():
+        leaf = it.next()
+        name = leaf.nodeName()
+        mm = jvm.scala.collection.JavaConverters.mapAsJavaMapConverter(leaf.metrics()).asJava()
+        vals = {}
+        for k in mm.keySet():
+            vals[str(k)] = int(mm.get(k).value())
+        out[name + "#" + str(len(out))] = vals
+    return out
+
+
+def run_scan(spark, group, sql):
+    """Like run(), but also writes the scan nodes' SQL metrics (Iceberg's scan report counters)."""
+    df, rows = run(spark, group, sql)
+    m = scan_metrics(df)
+    lines = []
+    for node, vals in m.items():
+        lines.append(node)
+        for k in sorted(vals):
+            lines.append(f"  {k} = {vals[k]}")
+    with open(f"{OUT}/{group}.metrics.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    print("\n".join(lines))
+    return df, rows

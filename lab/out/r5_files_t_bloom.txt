@@ -1,0 +1,9 @@
+-- r5_files_t_bloom
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb FROM lab.db.t_bloom.files
+
++-----+------+
+|files|avg_mb|
++-----+------+
+|   10|  35.8|
++-----+------+
+

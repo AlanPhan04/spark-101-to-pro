@@ -1,0 +1,25 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="scan-metrics" id="scanmetrics">
+    <mxGraphModel dx="800" dy="400" grid="1" gridSize="20" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="380" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="m0" value="&lt;b&gt;totalDataManifest = 31&lt;/b&gt;&lt;br&gt;one manifest per daily commit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontColor=#374151;fontSize=13;" vertex="1" parent="1"><mxGeometry x="20" y="20" width="300" height="60" as="geometry" /></mxCell>
+        <mxCell id="m1" value="&lt;b&gt;skippedDataManifests = 24&lt;/b&gt;&lt;br&gt;never opened" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6b7280;fontColor=#374151;dashed=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="380" y="20" width="240" height="60" as="geometry" /></mxCell>
+        <mxCell id="m2" value="&lt;b&gt;scannedDataManifests = 7&lt;/b&gt;&lt;br&gt;entries read" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="20" y="130" width="300" height="60" as="geometry" /></mxCell>
+        <mxCell id="m3" value="&lt;b&gt;resultDataFiles = 7&lt;/b&gt;&lt;br&gt;243.5 MB, skippedDataFiles = 0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="20" y="240" width="300" height="60" as="geometry" /></mxCell>
+        <mxCell id="m4" value="&lt;b&gt;7 tasks read 46.8 MB&lt;/b&gt;&lt;br&gt;4 of 7 columns" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;strokeWidth=2;fontSize=13;" vertex="1" parent="1"><mxGeometry x="20" y="320" width="300" height="50" as="geometry" /></mxCell>
+
+        <mxCell id="t1" value="layer 1: partition summary in the manifest list" style="text;html=1;fillColor=none;strokeColor=none;align=left;fontColor=#57503f;fontSize=13;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="380" y="140" width="240" height="44" as="geometry" /></mxCell>
+        <mxCell id="t2" value="layer 2: per-file min/max in the manifest entries" style="text;html=1;fillColor=none;strokeColor=none;align=left;fontColor=#57503f;fontSize=13;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="380" y="248" width="240" height="44" as="geometry" /></mxCell>
+        <mxCell id="t3" value="layers 3 and 4: row groups, column pruning" style="text;html=1;fillColor=none;strokeColor=none;align=left;fontColor=#57503f;fontSize=13;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="380" y="322" width="240" height="44" as="geometry" /></mxCell>
+
+        <mxCell id="e0" style="endArrow=block;html=1;strokeColor=#6b7280;strokeWidth=1.5;dashed=1;" edge="1" parent="1" source="m0" target="m1"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e1" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="m0" target="m2"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="m2" target="m3"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="m3" target="m4"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

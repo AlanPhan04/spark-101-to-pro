@@ -1,0 +1,7 @@
+== Physical Plan ==
+*(2) HashAggregate(keys=[], functions=[sum(order_total#1441)])
++- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1374]
+   +- *(1) HashAggregate(keys=[], functions=[partial_sum(order_total#1441)])
+      +- *(1) Project [order_total#1441]
+         +- BatchScan lab.db.t_plain[order_total#1441] lab.db.t_plain (branch=null) [filters=, groupedBy=] RuntimeFilters: []
+

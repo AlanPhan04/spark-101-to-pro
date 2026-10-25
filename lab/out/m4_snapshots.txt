@@ -1,0 +1,11 @@
+-- m4_snapshots
+-- SELECT snapshot_id, operation, summary['added-data-files'] AS added, summary['total-data-files'] AS total FROM lab.db.orders.snapshots
+
++-------------------+---------+-----+-----+
+|        snapshot_id|operation|added|total|
++-------------------+---------+-----+-----+
+|1175845137708569899|   append|   31|   31|
+|2839577540043904323|   append|   31|   31|
+|3101419370228012629|   append|   31|   31|
++-------------------+---------+-----+-----+
+

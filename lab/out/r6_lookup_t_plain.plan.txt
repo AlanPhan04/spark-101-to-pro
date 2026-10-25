@@ -1,0 +1,47 @@
+-- r6_lookup_t_plain
+-- SELECT count(*) AS n, sum(order_total) AS s FROM t_plain WHERE customer_id = 'c01774971'
+
+== Physical Plan ==
+* HashAggregate (7)
++- Exchange (6)
+   +- * HashAggregate (5)
+      +- * Project (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- BatchScan lab.db.t_plain (1)
+
+
+(1) BatchScan lab.db.t_plain
+Output [2]: [customer_id#1237, order_total#1240]
+lab.db.t_plain (branch=null) [filters=customer_id IS NOT NULL, customer_id = 'c01774971', groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [customer_id#1237, order_total#1240]
+
+(3) Filter [codegen id : 1]
+Input [2]: [customer_id#1237, order_total#1240]
+Condition : (isnotnull(customer_id#1237) AND (customer_id#1237 = c01774971))
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#1240]
+Input [2]: [customer_id#1237, order_total#1240]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#1240]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(order_total#1240)]
+Aggregate Attributes [2]: [count#1252L, sum#1253]
+Results [2]: [count#1254L, sum#1255]
+
+(6) Exchange
+Input [2]: [count#1254L, sum#1255]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1159]
+
+(7) HashAggregate [codegen id : 2]
+Input [2]: [count#1254L, sum#1255]
+Keys: []
+Functions [2]: [count(1), sum(order_total#1240)]
+Aggregate Attributes [2]: [count(1)#1241L, sum(order_total#1240)#1242]
+Results [2]: [count(1)#1241L AS n#1232L, sum(order_total#1240)#1242 AS s#1233]
+
+

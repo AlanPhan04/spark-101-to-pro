@@ -1,0 +1,9 @@
+== Physical Plan ==
+*(2) HashAggregate(keys=[], functions=[count(1), sum(order_total#1315)])
++- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1285]
+   +- *(1) HashAggregate(keys=[], functions=[partial_count(1), partial_sum(order_total#1315)])
+      +- *(1) Project [order_total#1315]
+         +- *(1) Filter (isnotnull(customer_id#1312) AND (customer_id#1312 = c01774971))
+            +- *(1) ColumnarToRow
+               +- BatchScan lab.db.t_sorted_counts[customer_id#1312, order_total#1315] lab.db.t_sorted_counts (branch=null) [filters=customer_id IS NOT NULL, customer_id = 'c01774971', groupedBy=] RuntimeFilters: []
+

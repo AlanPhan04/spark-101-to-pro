@@ -1,0 +1,37 @@
+-- sp7_adaptive_off_default128
+-- SELECT sum(order_total) AS s FROM t_plain
+
+== Physical Plan ==
+* HashAggregate (5)
++- Exchange (4)
+   +- * HashAggregate (3)
+      +- * ColumnarToRow (2)
+         +- BatchScan lab.db.t_plain (1)
+
+
+(1) BatchScan lab.db.t_plain
+Output [1]: [order_total#60]
+lab.db.t_plain (branch=null) [filters=, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [1]: [order_total#60]
+
+(3) HashAggregate [codegen id : 1]
+Input [1]: [order_total#60]
+Keys: []
+Functions [1]: [partial_sum(order_total#60)]
+Aggregate Attributes [1]: [sum#69]
+Results [1]: [sum#70]
+
+(4) Exchange
+Input [1]: [sum#70]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=55]
+
+(5) HashAggregate [codegen id : 2]
+Input [1]: [sum#70]
+Keys: []
+Functions [1]: [sum(order_total#60)]
+Aggregate Attributes [1]: [sum(order_total#60)#61]
+Results [1]: [sum(order_total#60)#61 AS s#53]
+
+

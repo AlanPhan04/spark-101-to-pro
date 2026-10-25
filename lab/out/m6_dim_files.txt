@@ -1,0 +1,9 @@
+-- m6_dim_files
+-- SELECT count(*) AS files, round(sum(file_size_in_bytes)/1e6,1) AS mb FROM lab.db.dim_product.files
+
++-----+-----+
+|files|   mb|
++-----+-----+
+|   40|174.2|
++-----+-----+
+

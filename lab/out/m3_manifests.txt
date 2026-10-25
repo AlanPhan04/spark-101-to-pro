@@ -1,0 +1,9 @@
+-- m3_manifests
+-- SELECT path, length, partition_spec_id, added_data_files_count, existing_data_files_count, deleted_data_files_count FROM lab.db.orders.manifests
+
++--------------------------------------------------+------+-----------------+----------------------+-------------------------+------------------------+
+|                                              path|length|partition_spec_id|added_data_files_count|existing_data_files_count|deleted_data_files_count|
++--------------------------------------------------+------+-----------------+----------------------+-------------------------+------------------------+
+|/lab/warehouse/db/orders/metadata/115e8ce3-7ee5...| 10421|                0|                    31|                        0|                       0|
++--------------------------------------------------+------+-----------------+----------------------+-------------------------+------------------------+
+

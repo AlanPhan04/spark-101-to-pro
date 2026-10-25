@@ -1,0 +1,12 @@
+-- r7_sorted_bounds
+-- SELECT readable_metrics.customer_id.lower_bound AS lo, readable_metrics.customer_id.upper_bound AS hi FROM lab.db.t_sorted.files ORDER BY lo LIMIT 4
+
++---------+---------+
+|       lo|       hi|
++---------+---------+
+|c00000000|c00009488|
+|c00009489|c00020129|
+|c00020130|c00029793|
+|c00029794|c00039544|
++---------+---------+
+

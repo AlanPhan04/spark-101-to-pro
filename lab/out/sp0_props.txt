@@ -1,0 +1,13 @@
+-- sp0_props
+-- SHOW TBLPROPERTIES t_plain
+
++----------------------------------+-------------------+
+|                               key|              value|
++----------------------------------+-------------------+
+|               current-snapshot-id|4735116313991109233|
+|                            format|    iceberg/parquet|
+|                    format-version|                  2|
+|read.parquet.vectorization.enabled|               true|
+|   write.parquet.compression-codec|               zstd|
++----------------------------------+-------------------+
+

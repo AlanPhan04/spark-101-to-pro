@@ -1,0 +1,38 @@
+-- r10_vec_off
+-- SELECT sum(order_total) AS s FROM t_plain
+
+== Physical Plan ==
+* HashAggregate (5)
++- Exchange (4)
+   +- * HashAggregate (3)
+      +- * Project (2)
+         +- BatchScan lab.db.t_plain (1)
+
+
+(1) BatchScan lab.db.t_plain
+Output [1]: [order_total#1441]
+lab.db.t_plain (branch=null) [filters=, groupedBy=]
+
+(2) Project [codegen id : 1]
+Output [1]: [order_total#1441]
+Input [1]: [order_total#1441]
+
+(3) HashAggregate [codegen id : 1]
+Input [1]: [order_total#1441]
+Keys: []
+Functions [1]: [partial_sum(order_total#1441)]
+Aggregate Attributes [1]: [sum#1450]
+Results [1]: [sum#1451]
+
+(4) Exchange
+Input [1]: [sum#1451]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1374]
+
+(5) HashAggregate [codegen id : 2]
+Input [1]: [sum#1451]
+Keys: []
+Functions [1]: [sum(order_total#1441)]
+Aggregate Attributes [1]: [sum(order_total#1441)#1442]
+Results [1]: [sum(order_total#1441)#1442 AS s#1434]
+
+
