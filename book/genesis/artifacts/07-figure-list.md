@@ -75,3 +75,8 @@ figure is authored when its chapter is drafted (pass 1 figures first).
 | `commit-attempts` | 10 | plot | attempts per commit, 12 writers x 4 commits, retries 4 vs 0 (measured) | done |
 | `commit-throughput` | 10 | plot | cumulative snapshots over time: one chain regardless of writer count (measured) | done |
 | `catalog-pointer-types` | 10 | comparison | file-based vs HMS vs REST: where the pointer lives and how a loser is rejected | done |
+| `partition-granularity` | 11 | plot | day vs hour: files, average size, files read for a week (measured) | done |
+| `evolution-cost` | 11 | plot | old (month spec) vs new (day spec) data: file size and rows decoded for one day (measured) | done |
+| `sort-vs-zorder` | 11 | plot | files read for customer/product/both lookups on unsorted, sorted, Z-ordered (measured) | done |
+| `distribution-modes` | 11 | plot | files written under none/hash/range (measured) | done |
+| `bucket-hot-key` | 11 | plot | MB per bucket of bucket(16, product_id) with the viral product (measured) | done |

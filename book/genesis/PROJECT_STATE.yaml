@@ -48,7 +48,8 @@ chapters:
   - {n: 8, slug: caching-and-reuse, status: deepened}  # 5 figs, break-even sweep, lazy/eager, levels, eviction, reuse, LRU thrash (all measured)
   - {n: 9, slug: table-formats-and-the-iceberg-spec, status: deepened}  # 5 figs; measured tree, reuse, sequence numbers, CoW vs MoR delete; spec rule corrected (position deletes: <=)
   - {n: 10, slug: catalogs-and-commits, status: deepened}  # 4 figs; 12-writer race measured (attempts, failures, no lost rows); invented v42/v43 example removed
-  # 5, 11, 13-19: drafted thin (see lint_chapter.py --status)
+  - {n: 11, slug: iceberg-partitioning-and-layout, status: deepened}  # 6 figs; granularity, evolution cost, identity trap, sort vs zorder, distribution modes, hot bucket (all measured)
+  # 5, 13-19: drafted thin (see lint_chapter.py --status)
 
 figures:                            # shared renderer: figures/_drawio.py
   - {slug: application-topology,   chapter: 1, status: rendered}

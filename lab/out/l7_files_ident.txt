@@ -1,0 +1,9 @@
+-- l7_files_ident
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e3,1) AS avg_kb, sum(record_count) AS rows FROM lab.db.t_ident.files
+
++-----+------+-----+
+|files|avg_kb| rows|
++-----+------+-----+
+| 3600|   2.8|40582|
++-----+------+-----+
+

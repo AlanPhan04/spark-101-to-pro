@@ -1,0 +1,9 @@
+== Physical Plan ==
+*(2) HashAggregate(keys=[], functions=[sum(order_total#165)])
++- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=135]
+   +- *(1) HashAggregate(keys=[], functions=[partial_sum(order_total#165)])
+      +- *(1) Project [order_total#165]
+         +- *(1) Filter ((order_ts#160 >= 2026-03-05 00:00:00) AND (order_ts#160 < 2026-03-06 00:00:00))
+            +- *(1) ColumnarToRow
+               +- BatchScan lab.db.t_evo[order_ts#160, order_total#165] lab.db.t_evo (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772668800000000, order_ts < 1772755200000000, groupedBy=] RuntimeFilters: []
+

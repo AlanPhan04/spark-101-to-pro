@@ -1,0 +1,9 @@
+-- z1_files_t_zbase
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb FROM lab.db.t_zbase.files
+
++-----+------+
+|files|avg_mb|
++-----+------+
+|   50|   7.2|
++-----+------+
+

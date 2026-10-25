@@ -8,7 +8,10 @@ references a partition column directly and pruning does not break when the
 scheme changes. This chapter covers the partition transforms, evolving a spec
 without rewriting history, sort orders and Z-ordering, target file size, and the
 write-distribution mode --- the choices that decide how much a reader and a
-writer have to move.
+writer have to move. On the lab, hour partitions turned 31 files into 744 for
+no pruning gain, Z-ordering read 3 files for a lookup that a customer sort
+needed 43 for, and one viral product made a bucket seven times its neighbours.
+Every number is a capture from the lab of \Cref{sec:refenv-lab}.
 \end{chapterintro}
 
 \section{Hidden partitioning and partition transforms}
@@ -57,23 +60,54 @@ Prefer \texttt{day} over \texttt{identity} on a raw timestamp: an
 \texttt{identity} partition on \texttt{order\_ts} would create one partition
 \emph{per distinct timestamp value}, which is not partitioning at all --- it is
 one file per row's worth of metadata. Always partition on a transform coarse
-enough to group many rows per partition.
+enough to group many rows per partition. The lab tried it on one hour of orders
+(40,582 rows): an \texttt{identity} partition on \texttt{order\_ts} wrote 3,600
+files of 2.8~KB each, about eleven rows apiece, and took 32.4~s; the same hour
+under \texttt{hour(order\_ts)} wrote one 1.4~MB file in 1.8~s.
 \end{tip}
 
-\paragraph{Choosing the specimen's actual spec.} \texttt{orders} holds a few
-hundred million rows a month (\Cref{app:refenv}); at roughly 70 bytes a row
-once Parquet-encoded, that is on the order of 20~GB a month, or
-$\sim$700~MB a day. \texttt{day(order\_ts)} lands squarely inside the
-128~MB--1~GB per-partition target this chapter's exercises ask you to hit,
-with room to spare before an \texttt{hour} transform would be justified ---
-\texttt{hour} only earns its keep once daily volume grows past roughly
-15--20~GB, the point past which a single day's partition starts exceeding a
-few gigabytes and a query filtering a narrow time window would otherwise
-scan a whole day's files to find a few hours' worth of rows. This is the
-concrete version of the abstract choice \Cref{sec:ice-partitioning}
-describes: pick the coarsest transform that still keeps a typical partition
-in the target band, and re-derive it as volume grows rather than guessing
-once and never revisiting it.
+\paragraph{Choosing the specimen's actual spec.} The right transform is the
+coarsest one that keeps a typical partition's files near the target size, and the
+lab measures what finer costs. It wrote the same 30 million rows twice, once
+partitioned by \texttt{day(order\_ts)} and once by \texttt{hour(order\_ts)}
+(\Cref{fig:partition-granularity}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{partition-granularity.pdf}
+  \caption{The same month of \texttt{orders} at two partition granularities. The
+  hour spec has 24 times the files at one twenty-fourth the size, and a
+  week-long query opens 168 files instead of 7 for the same bytes.}
+  \label{fig:partition-granularity}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Spec} & \textbf{Files} & \textbf{Avg file} & \textbf{Files read (week)} & \textbf{Scan tasks} & \textbf{Planning} \\
+\midrule
+\texttt{day} & 31 & 34.8~MB & 7 & 7 & 48~ms \\
+\texttt{hour} & 744 & 1.43~MB & 168 & 42 & 73~ms \\
+\bottomrule
+\end{tabular}
+\caption{Day against hour for a one-week filter. Both read 6.8 million rows and
+about 47~MB; the hour layout reads 24 times the files and plans 50\% slower, and
+its 1.4~MB files were packed four to a task only because the split planner
+combined them (\Cref{sec:ice-read-splits}).}
+\label{tab:ice-lab-granularity}
+\end{table}
+
+A finer transform buys pruning only for queries narrower than the coarser unit.
+A one-week query gains nothing from hours and pays for them in file opens, task
+overhead, and manifest entries. Too coarse costs on the other side: a
+\texttt{month} partition of the first half of March held a single 517~MB file,
+and a one-day query against it decoded 11.3 million rows
+(\Cref{sec:ice-partition-evolution}). The lab's 35~MB-a-day partitions are
+already below the 128~MB floor this chapter's exercises set, which is the signal
+to stay at \texttt{day}; \texttt{hour} earns its keep only when a day's volume
+passes a few gigabytes and queries routinely ask for a few hours.
 
 \section{Partition evolution}
 \label{sec:ice-partition-evolution}
@@ -105,6 +139,36 @@ new ones, with no explicit migration step and no downtime
   each manifest against its own recorded spec.}
   \label{fig:partition-evolution}
 \end{figure}
+
+The lab built exactly this. A table was partitioned by \texttt{months(order\_ts)}
+and loaded with the first 15 days of March, then evolved with \texttt{ALTER TABLE
+\ldots{} REPLACE PARTITION FIELD months(order\_ts) WITH days(order\_ts)}, and loaded
+with the remaining 16 days. No file was rewritten, and the \texttt{partitions}
+metadata table reports both specs side by side:
+
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={The \texttt{partitions} table of an evolved table (trimmed)},captionpos=b,label=lst:ice-lab-evolved]
+spec_id  partition            record_count  file_count
+0        {674, NULL}          14,514,604    1      -- month 674 since 1970: Mar 1-15
+1        {NULL, 2026-03-16}      968,819    1      -- day partitions from here on
+1        {NULL, 2026-03-17}      969,559    1
+...                                                 -- 16 day partitions, 34.8 MB each
+\end{lstlisting}
+
+A query spans both, but it prunes each at its own granularity.
+\Cref{fig:evolution-cost} measures one-day queries against the old and new data.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{evolution-cost.pdf}
+  \caption{One day of old data lives in the 517~MB month-partition file and
+  decodes 11.3 million rows; one day of new data lives in its own 34.8~MB file
+  and decodes 0.97 million. Evolution kept the old data readable, not as fast.}
+  \label{fig:evolution-cost}
+\end{figure}
+
+Evolution is free of rewrites, and equally free of improvement for history: the
+old data keeps its coarse layout until a compaction rewrites it under the new
+spec (\Cref{ch:iceberg-write}).
 
 \section{Sort orders and Z-ordering}
 \label{sec:ice-sort-order}
@@ -139,6 +203,36 @@ neither column getting the clean front-of-key locality \Cref{sec:c-pushdown}
 described for a plain sort. This is the right trade when queries filter on
 \texttt{category} sometimes and \texttt{customer\_id} other times, rather
 than one column consistently.
+
+The lab measured both on 9.7 million rows in about 45 files, with lookups on
+\texttt{customer\_id}, on \texttt{product\_id}, and on both
+(\Cref{fig:sort-vs-zorder}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{sort-vs-zorder.pdf}
+  \caption{Data files opened by three lookups on three layouts of the same rows.
+  Sorting by \texttt{(customer\_id, product\_id)} makes customer lookups nearly
+  free (1 file) and leaves product lookups reading 43 of 43. Z-ordering gives up
+  the best case for the other lookup: 24 files for a customer, 3 for a product, 2
+  for both.}
+  \label{fig:sort-vs-zorder}
+\end{figure}
+
+The sorted table behaves exactly as described: the leading column prunes
+completely, the second column not at all (43 of 43 files read). Z-order spreads
+the pruning: no lookup is as cheap as the sorted layout's best case, but none is
+as bad as its worst. Use the one that matches how you query; if one column
+dominates, sort by it.
+
+\begin{warning}
+\texttt{rewrite\_data\_files} only rewrites files it considers badly sized. The
+lab's first sort attempt left most files alone, because they were already near
+the 8~MB target, and the customer lookup still skipped just 3 of 44 files.
+Adding \texttt{rewrite-all=true} rewrote every file and the same lookup then read
+one. Check \texttt{skippedDataFiles} after a sort, not just the procedure's
+success message.
+\end{warning}
 
 \section{Target file size and the small-files problem}
 \label{sec:ice-file-size}
@@ -186,12 +280,48 @@ mechanics from \Cref{ch:shuffle}, applied to a write instead of a read.
         extra planning cost this mode carries.
 \end{description}
 
+The modes only differ when the rows reaching the writer are not already grouped by
+partition. The lab loaded ten days of \texttt{orders} through a round-robin
+repartition into ten tasks, so every task held rows from every day, into a
+day-partitioned table under each mode (\Cref{fig:distribution-modes}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{distribution-modes.pdf}
+  \caption{The same ten days written under each distribution mode. With no
+  shuffle, each of the ten tasks wrote one file per day it held, 100 files of
+  3.6~MB; with \texttt{hash} or \texttt{range} each day's rows were gathered
+  first, giving 10 files of 34.8~MB. The inserts took 25.1, 24.3, and 23.8~s.}
+  \label{fig:distribution-modes}
+\end{figure}
+
+The shuffle bought a tenfold reduction in files and cost nothing measurable in
+this run, because the write itself dominated. \texttt{none} also needs the
+fanout writer (\texttt{write.spark.fanout.enabled}), since its input is not
+clustered by partition; without it the write fails. If you control the upstream
+ordering, as a daily partitioned scan does, \texttt{none} is free; otherwise
+\texttt{hash} is the safe default.
+
 For the specimen table, this is the mode that determines what a write does
 with the viral product from \Cref{sec:shape-ui}'s skew: under \texttt{hash}
 distribution, every row for that one \texttt{product\_id} lands in the same
 write task regardless of how many there are, so a write task for that key
 can end up far larger than the others --- the write-side version of the
-same skew, covered in full in \Cref{sec:ice-write-skew}.
+same skew, covered in full in \Cref{sec:ice-write-skew}. The lab shows the
+file-size version on \texttt{bucket(16, product\_id)} with \texttt{hash}
+distribution (\Cref{fig:bucket-hot-key}): the viral product's bucket held 3.33
+million rows in a 110~MB file, while the other fifteen held about 425,000 rows
+and 15.4~MB each. The 7.1-times-larger task that wrote it is the straggler of
+\Cref{ch:aqe} appearing on the write side.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{bucket-hot-key.pdf}
+  \caption{Bytes per bucket for \texttt{bucket(16, product\_id)} on 9.7 million
+  orders. Hashing sends every row of the viral product to the same bucket, so one
+  file and one write task carry 7.1 times the median.}
+  \label{fig:bucket-hot-key}
+\end{figure}
 
 \section{Summary}
 \label{sec:ice-layout-summary}
@@ -207,6 +337,26 @@ sort order or Z-order tightens the per-file statistics that let a reader
 skip whole files inside a kept partition; target file size and the write
 distribution mode are what decide whether a write produces a few
 well-sized files or many small ones in the first place.
+
+\Cref{tab:ice-layout-levers} turns each symptom into the evidence and the lever.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
+\midrule
+thousands of tiny files & \texttt{files} table: small average size, many rows of it & coarser partition transform; \texttt{hash} distribution & coarser pruning; a shuffle \\
+a lookup opens every file & \texttt{skippedDataFiles} is 0 & sort or Z-order by the filter columns & compaction job; small files \\
+history is slower than new data & old spec partitions in \texttt{partitions} & rewrite old files under the new spec & a rewrite \\
+one file or task much larger & skewed row count per bucket & a different bucket column; salt the key & less clean joins \\
+writes produce one file per task per partition & \texttt{none} mode on unclustered input & \texttt{hash} or \texttt{range} distribution & a shuffle \\
+\bottomrule
+\end{tabular}
+\caption{The layout levers: symptom, evidence, lever, and cost.}
+\label{tab:ice-layout-levers}
+\end{table}
 
 \exercisehead
 \begin{exercises}

@@ -1,0 +1,14 @@
+-- l1_evo_partitions
+-- SELECT spec_id, partition, record_count, file_count FROM lab.db.t_evo.partitions ORDER BY spec_id, partition LIMIT 6
+
++-------+------------------+------------+----------+
+|spec_id|         partition|record_count|file_count|
++-------+------------------+------------+----------+
+|      0|       {674, NULL}|    14514604|         1|
+|      1|{NULL, 2026-03-16}|      968819|         1|
+|      1|{NULL, 2026-03-17}|      969559|         1|
+|      1|{NULL, 2026-03-18}|      968705|         1|
+|      1|{NULL, 2026-03-19}|      967458|         1|
+|      1|{NULL, 2026-03-20}|      967436|         1|
++-------+------------------+------------+----------+
+

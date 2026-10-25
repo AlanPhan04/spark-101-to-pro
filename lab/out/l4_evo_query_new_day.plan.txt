@@ -1,0 +1,47 @@
+-- l4_evo_query_new_day
+-- SELECT sum(order_total) AS s FROM t_evo WHERE order_ts >= TIMESTAMP '2026-03-20 00:00:00' AND order_ts < TIMESTAMP '2026-03-21 00:00:00'
+
+== Physical Plan ==
+* HashAggregate (7)
++- Exchange (6)
+   +- * HashAggregate (5)
+      +- * Project (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- BatchScan lab.db.t_evo (1)
+
+
+(1) BatchScan lab.db.t_evo
+Output [2]: [order_ts#180, order_total#185]
+lab.db.t_evo (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1773964800000000, order_ts < 1774051200000000, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [order_ts#180, order_total#185]
+
+(3) Filter [codegen id : 1]
+Input [2]: [order_ts#180, order_total#185]
+Condition : ((order_ts#180 >= 2026-03-20 00:00:00) AND (order_ts#180 < 2026-03-21 00:00:00))
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#185]
+Input [2]: [order_ts#180, order_total#185]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#185]
+Keys: []
+Functions [1]: [partial_sum(order_total#185)]
+Aggregate Attributes [1]: [sum#195]
+Results [1]: [sum#196]
+
+(6) Exchange
+Input [1]: [sum#196]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=177]
+
+(7) HashAggregate [codegen id : 2]
+Input [1]: [sum#196]
+Keys: []
+Functions [1]: [sum(order_total#185)]
+Aggregate Attributes [1]: [sum(order_total#185)#186]
+Results [1]: [sum(order_total#185)#186 AS s#178]
+
+

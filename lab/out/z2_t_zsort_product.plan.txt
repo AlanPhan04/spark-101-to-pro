@@ -1,0 +1,47 @@
+-- z2_t_zsort_product
+-- SELECT count(*) AS n, sum(order_total) AS s FROM t_zsort WHERE product_id = 'p1620526'
+
+== Physical Plan ==
+* HashAggregate (7)
++- Exchange (6)
+   +- * HashAggregate (5)
+      +- * Project (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- BatchScan lab.db.t_zsort (1)
+
+
+(1) BatchScan lab.db.t_zsort
+Output [2]: [product_id#505, order_total#509]
+lab.db.t_zsort (branch=null) [filters=product_id IS NOT NULL, product_id = 'p1620526', groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [product_id#505, order_total#509]
+
+(3) Filter [codegen id : 1]
+Input [2]: [product_id#505, order_total#509]
+Condition : (isnotnull(product_id#505) AND (product_id#505 = p1620526))
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#509]
+Input [2]: [product_id#505, order_total#509]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#509]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(order_total#509)]
+Aggregate Attributes [2]: [count#521L, sum#522]
+Results [2]: [count#523L, sum#524]
+
+(6) Exchange
+Input [2]: [count#523L, sum#524]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=456]
+
+(7) HashAggregate [codegen id : 2]
+Input [2]: [count#523L, sum#524]
+Keys: []
+Functions [2]: [count(1), sum(order_total#509)]
+Aggregate Attributes [2]: [count(1)#510L, sum(order_total#509)#511]
+Results [2]: [count(1)#510L AS n#501L, sum(order_total#509)#511 AS s#502]
+
+

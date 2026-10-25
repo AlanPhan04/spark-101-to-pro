@@ -1,0 +1,9 @@
+-- l5_files_t_day
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,2) AS avg_mb, round(min(file_size_in_bytes)/1e6,2) AS min_mb FROM lab.db.t_day.files
+
++-----+------+------+
+|files|avg_mb|min_mb|
++-----+------+------+
+|   31| 34.78|  34.7|
++-----+------+------+
+

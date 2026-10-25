@@ -1,0 +1,9 @@
+-- l8_files_hour1
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e3,1) AS avg_kb, sum(record_count) AS rows FROM lab.db.t_hour1.files
+
++-----+------+-----+
+|files|avg_kb| rows|
++-----+------+-----+
+|    1|1436.5|40582|
++-----+------+-----+
+

@@ -1,0 +1,9 @@
+-- l5_files_t_hour
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,2) AS avg_mb, round(min(file_size_in_bytes)/1e6,2) AS min_mb FROM lab.db.t_hour.files
+
++-----+------+------+
+|files|avg_mb|min_mb|
++-----+------+------+
+|  744|  1.43|  1.41|
++-----+------+------+
+

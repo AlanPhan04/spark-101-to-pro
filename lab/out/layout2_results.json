@@ -1,0 +1,5 @@
+{
+ "none_insert_s": 25.1,
+ "hash_insert_s": 24.3,
+ "range_insert_s": 23.8
+}

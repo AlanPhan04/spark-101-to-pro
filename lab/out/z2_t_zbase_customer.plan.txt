@@ -1,0 +1,47 @@
+-- z2_t_zbase_customer
+-- SELECT count(*) AS n, sum(order_total) AS s FROM t_zbase WHERE customer_id = 'c00282804'
+
+== Physical Plan ==
+* HashAggregate (7)
++- Exchange (6)
+   +- * HashAggregate (5)
+      +- * Project (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- BatchScan lab.db.t_zbase (1)
+
+
+(1) BatchScan lab.db.t_zbase
+Output [2]: [customer_id#405, order_total#408]
+lab.db.t_zbase (branch=null) [filters=customer_id IS NOT NULL, customer_id = 'c00282804', groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [customer_id#405, order_total#408]
+
+(3) Filter [codegen id : 1]
+Input [2]: [customer_id#405, order_total#408]
+Condition : (isnotnull(customer_id#405) AND (customer_id#405 = c00282804))
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#408]
+Input [2]: [customer_id#405, order_total#408]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#408]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(order_total#408)]
+Aggregate Attributes [2]: [count#420L, sum#421]
+Results [2]: [count#422L, sum#423]
+
+(6) Exchange
+Input [2]: [count#422L, sum#423]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=288]
+
+(7) HashAggregate [codegen id : 2]
+Input [2]: [count#422L, sum#423]
+Keys: []
+Functions [2]: [count(1), sum(order_total#408)]
+Aggregate Attributes [2]: [count(1)#409L, sum(order_total#408)#410]
+Results [2]: [count(1)#409L AS n#400L, sum(order_total#408)#410 AS s#401]
+
+

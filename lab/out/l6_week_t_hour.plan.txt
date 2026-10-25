@@ -1,0 +1,42 @@
+-- l6_week_t_hour
+-- SELECT sum(order_total) AS s FROM t_hour WHERE order_ts >= TIMESTAMP '2026-03-01 00:00:00' AND order_ts < TIMESTAMP '2026-03-08 00:00:00'
+
+== Physical Plan ==
+* HashAggregate (6)
++- Exchange (5)
+   +- * HashAggregate (4)
+      +- * Project (3)
+         +- * ColumnarToRow (2)
+            +- BatchScan lab.db.t_hour (1)
+
+
+(1) BatchScan lab.db.t_hour
+Output [2]: [order_ts#390, order_total#395]
+lab.db.t_hour (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000, order_ts < 1772928000000000, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [order_ts#390, order_total#395]
+
+(3) Project [codegen id : 1]
+Output [1]: [order_total#395]
+Input [2]: [order_ts#390, order_total#395]
+
+(4) HashAggregate [codegen id : 1]
+Input [1]: [order_total#395]
+Keys: []
+Functions [1]: [partial_sum(order_total#395)]
+Aggregate Attributes [1]: [sum#405]
+Results [1]: [sum#406]
+
+(5) Exchange
+Input [1]: [sum#406]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=369]
+
+(6) HashAggregate [codegen id : 2]
+Input [1]: [sum#406]
+Keys: []
+Functions [1]: [sum(order_total#395)]
+Aggregate Attributes [1]: [sum(order_total#395)#396]
+Results [1]: [sum(order_total#395)#396 AS s#388]
+
+

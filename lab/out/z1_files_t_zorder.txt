@@ -1,0 +1,9 @@
+-- z1_files_t_zorder
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb FROM lab.db.t_zorder.files
+
++-----+------+
+|files|avg_mb|
++-----+------+
+|   43|   7.8|
++-----+------+
+

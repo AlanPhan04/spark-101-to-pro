@@ -1,0 +1,47 @@
+-- z2_t_zorder_customer
+-- SELECT count(*) AS n, sum(order_total) AS s FROM t_zorder WHERE customer_id = 'c00282804'
+
+== Physical Plan ==
+* HashAggregate (7)
++- Exchange (6)
+   +- * HashAggregate (5)
+      +- * Project (4)
+         +- * Filter (3)
+            +- * ColumnarToRow (2)
+               +- BatchScan lab.db.t_zorder (1)
+
+
+(1) BatchScan lab.db.t_zorder
+Output [2]: [customer_id#557, order_total#560]
+lab.db.t_zorder (branch=null) [filters=customer_id IS NOT NULL, customer_id = 'c00282804', groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [customer_id#557, order_total#560]
+
+(3) Filter [codegen id : 1]
+Input [2]: [customer_id#557, order_total#560]
+Condition : (isnotnull(customer_id#557) AND (customer_id#557 = c00282804))
+
+(4) Project [codegen id : 1]
+Output [1]: [order_total#560]
+Input [2]: [customer_id#557, order_total#560]
+
+(5) HashAggregate [codegen id : 1]
+Input [1]: [order_total#560]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(order_total#560)]
+Aggregate Attributes [2]: [count#572L, sum#573]
+Results [2]: [count#574L, sum#575]
+
+(6) Exchange
+Input [2]: [count#574L, sum#575]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=540]
+
+(7) HashAggregate [codegen id : 2]
+Input [2]: [count#574L, sum#575]
+Keys: []
+Functions [2]: [count(1), sum(order_total#560)]
+Aggregate Attributes [2]: [count(1)#561L, sum(order_total#560)#562]
+Results [2]: [count(1)#561L AS n#552L, sum(order_total#560)#562 AS s#553]
+
+

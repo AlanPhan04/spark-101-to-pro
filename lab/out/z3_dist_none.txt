@@ -1,0 +1,9 @@
+-- z3_dist_none
+-- SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,2) AS avg_mb, round(min(file_size_in_bytes)/1e6,2) AS min_mb FROM lab.db.t_dist_none.files
+
++-----+------+------+
+|files|avg_mb|min_mb|
++-----+------+------+
+|  100|  3.64|  3.63|
++-----+------+------+
+

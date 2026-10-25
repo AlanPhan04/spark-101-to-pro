@@ -1,0 +1,10 @@
+-- l2_evo_files_by_spec
+-- SELECT spec_id, count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb, round(max(file_size_in_bytes)/1e6,1) AS max_mb FROM lab.db.t_evo.files GROUP BY spec_id ORDER BY spec_id
+
++-------+-----+------+------+
+|spec_id|files|avg_mb|max_mb|
++-------+-----+------+------+
+|      0|    1| 517.0| 517.0|
+|      1|   16|  34.8|  34.8|
++-------+-----+------+------+
+
