@@ -175,6 +175,44 @@ at all if someone first turns \conf{preferSortMergeJoin} off, which is why
 \Cref{sec:joins-shj} described it as the strategy the planner reaches for
 last, not by default.
 
+\section{What the strategies cost, measured}
+\label{sec:joins-measured}
+
+The lab forced each equi-join strategy with a hint on three dimensions of
+different shape and joined each to the 30-million-row \texttt{orders} table, with
+AQE off and automatic broadcast disabled so that only the hint decides
+(\Cref{fig:join-strategy-times}). The plan operator was checked in every run: each
+hint produced the operator it names.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{join-strategy-times.pdf}
+  \caption{Seconds for the same join under each strategy. Broadcast was fastest on
+  all three dimensions (3.8--4.8~s), shuffled hash in between (5.5--7.8~s) and
+  sort-merge slowest (9.3--11.3~s). Each run has two exchanges for broadcast and
+  three for the shuffled strategies.}
+  \label{fig:join-strategy-times}
+\end{figure}
+
+Two readings. First, the ordering follows the work each strategy skips: broadcast
+avoids shuffling the large side; shuffled hash shuffles both sides but builds a hash
+table instead of sorting; sort-merge shuffles and sorts both. Second, broadcast won
+even for the 2-million-row, 170~MB \texttt{dim\_product}, which the default
+planner would \emph{not} broadcast (its estimate of 216~MB exceeds the 10~MB
+threshold, \Cref{tab:dsv2-stats}): the threshold is a safety rail against driver
+and executor memory, not the point where broadcast stops being faster. A
+non-equi condition leaves two choices (\Cref{sec:joins-bnlj}); with a
+\texttt{BROADCAST} hint the plan was a \texttt{BroadcastNestedLoopJoin} (8.1~s for
+200,000 rows against 365), and a \texttt{MERGE} hint on the non-equi condition was
+ignored in favour of a \texttt{CartesianProduct}.
+
+\begin{warning}
+A join hint names the \emph{alias} when the table is aliased. The first lab run wrote
+\texttt{BROADCAST(dim\_date)} against \texttt{JOIN dim\_date d}: no error, no
+warning, and a sort-merge join in every plan. If a hint seems ignored, read the
+operator in \texttt{EXPLAIN} before concluding the optimizer overruled it.
+\end{warning}
+
 \section{Forcing a strategy}
 \label{sec:joins-forcing}
 

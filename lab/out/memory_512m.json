@@ -1,0 +1,6 @@
+{
+ "label": "512m",
+ "jvm_max_mb": 512.0,
+ "unified_mb": 127.2,
+ "formula_mb": 127.2
+}

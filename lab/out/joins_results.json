@@ -1,0 +1,90 @@
+[
+ {
+  "build": "dim_date (365 rows)",
+  "hint": "BROADCAST",
+  "operator": "BroadcastHashJoin",
+  "seconds": 4.62,
+  "group": "j_dim_date_(365_rows)_BROADCAST",
+  "exchanges": 2
+ },
+ {
+  "build": "dim_date (365 rows)",
+  "hint": "SHUFFLE_HASH",
+  "operator": "ShuffledHashJoin",
+  "seconds": 6.13,
+  "group": "j_dim_date_(365_rows)_SHUFFLE_HASH",
+  "exchanges": 3
+ },
+ {
+  "build": "dim_date (365 rows)",
+  "hint": "MERGE",
+  "operator": "SortMergeJoin",
+  "seconds": 11.27,
+  "group": "j_dim_date_(365_rows)_MERGE",
+  "exchanges": 3
+ },
+ {
+  "build": "dim_customer (2M rows)",
+  "hint": "BROADCAST",
+  "operator": "BroadcastHashJoin",
+  "seconds": 4.84,
+  "group": "j_dim_customer_(2M_rows)_BROADCAST",
+  "exchanges": 2
+ },
+ {
+  "build": "dim_customer (2M rows)",
+  "hint": "SHUFFLE_HASH",
+  "operator": "ShuffledHashJoin",
+  "seconds": 7.81,
+  "group": "j_dim_customer_(2M_rows)_SHUFFLE_HASH",
+  "exchanges": 3
+ },
+ {
+  "build": "dim_customer (2M rows)",
+  "hint": "MERGE",
+  "operator": "SortMergeJoin",
+  "seconds": 10.23,
+  "group": "j_dim_customer_(2M_rows)_MERGE",
+  "exchanges": 3
+ },
+ {
+  "build": "dim_product (2M rows, 170 MB)",
+  "hint": "BROADCAST",
+  "operator": "BroadcastHashJoin",
+  "seconds": 3.8,
+  "group": "j_dim_product_(2M_rows,_170_MB)_BROADCAST",
+  "exchanges": 2
+ },
+ {
+  "build": "dim_product (2M rows, 170 MB)",
+  "hint": "SHUFFLE_HASH",
+  "operator": "ShuffledHashJoin",
+  "seconds": 5.47,
+  "group": "j_dim_product_(2M_rows,_170_MB)_SHUFFLE_HASH",
+  "exchanges": 3
+ },
+ {
+  "build": "dim_product (2M rows, 170 MB)",
+  "hint": "MERGE",
+  "operator": "SortMergeJoin",
+  "seconds": 9.25,
+  "group": "j_dim_product_(2M_rows,_170_MB)_MERGE",
+  "exchanges": 3
+ },
+ {
+  "build": "dim_date non-equi (365 rows)",
+  "hint": "BROADCAST",
+  "operator": "BroadcastNestedLoopJoin",
+  "seconds": 8.14,
+  "group": "j_dim_date_non-equi_(365_rows)_BROADCAST",
+  "exchanges": 2
+ },
+ {
+  "build": "dim_date non-equi (365 rows)",
+  "hint": "MERGE",
+  "operator": "CartesianProduct",
+  "seconds": 4.01,
+  "group": "j_dim_date_non-equi_(365_rows)_MERGE",
+  "exchanges": 2
+ }
+]

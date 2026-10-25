@@ -1,0 +1,2 @@
+exit=137 oomkilled=true
+OutOfMemoryError lines in log: 0

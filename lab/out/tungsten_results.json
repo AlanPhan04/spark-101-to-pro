@@ -1,0 +1,57 @@
+{
+ "wholestage": [
+  {
+   "query": "filter + aggregate",
+   "codegen_true": 0.89,
+   "codegen_false": 1.3
+  },
+  {
+   "query": "arithmetic chain",
+   "codegen_true": 0.82,
+   "codegen_false": 1.15
+  },
+  {
+   "query": "group by",
+   "codegen_true": 6.9,
+   "codegen_false": 6.83
+  }
+ ],
+ "codegen_chars": 16378,
+ "wide": [
+  {
+   "columns": 10,
+   "starred_nodes": 4,
+   "seconds": 0.67
+  },
+  {
+   "columns": 50,
+   "starred_nodes": 4,
+   "seconds": 0.69
+  },
+  {
+   "columns": 100,
+   "starred_nodes": 4,
+   "seconds": 0.76
+  },
+  {
+   "columns": 200,
+   "starred_nodes": 4,
+   "seconds": 0.67
+  },
+  {
+   "columns": 400,
+   "starred_nodes": 4,
+   "seconds": 0.72
+  }
+ ],
+ "udf": {
+  "builtin_s": 0.29,
+  "python_udf_s": 9.22,
+  "udf_plan_has_BatchEvalPython": true,
+  "pandas_udf_s": "unavailable: No module named 'pyarrow'"
+ },
+ "radix": {
+  "true": 4.48,
+  "false": 7.56
+ }
+}

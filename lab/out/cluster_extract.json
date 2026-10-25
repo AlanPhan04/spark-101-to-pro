@@ -1,0 +1,223 @@
+{
+ "straggler": [
+  {
+   "speculation": false,
+   "total": 41.311,
+   "tasks": [
+    {
+     "task": 0,
+     "start": 0.0,
+     "end": 4.193,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "1"
+    },
+    {
+     "task": 1,
+     "start": 0.019,
+     "end": 4.203,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "2"
+    },
+    {
+     "task": 2,
+     "start": 0.158,
+     "end": 4.303,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "3"
+    },
+    {
+     "task": 4,
+     "start": 4.185,
+     "end": 7.297,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "1"
+    },
+    {
+     "task": 5,
+     "start": 4.202,
+     "end": 7.321,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "2"
+    },
+    {
+     "task": 6,
+     "start": 4.302,
+     "end": 7.411,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "3"
+    },
+    {
+     "task": 7,
+     "start": 7.297,
+     "end": 10.371,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "1"
+    },
+    {
+     "task": 3,
+     "start": 0.179,
+     "end": 41.311,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "0"
+    }
+   ]
+  },
+  {
+   "speculation": true,
+   "total": 11.177,
+   "tasks": [
+    {
+     "task": 0,
+     "start": 0.0,
+     "end": 4.2,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "0"
+    },
+    {
+     "task": 1,
+     "start": 0.035,
+     "end": 4.247,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "3"
+    },
+    {
+     "task": 2,
+     "start": 0.062,
+     "end": 4.253,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "2"
+    },
+    {
+     "task": 4,
+     "start": 4.195,
+     "end": 7.289,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "0"
+    },
+    {
+     "task": 5,
+     "start": 4.246,
+     "end": 7.331,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "3"
+    },
+    {
+     "task": 6,
+     "start": 4.252,
+     "end": 7.344,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "2"
+    },
+    {
+     "task": 7,
+     "start": 7.289,
+     "end": 10.365,
+     "speculative": false,
+     "killed": false,
+     "reason": "Success",
+     "executor": "0"
+    },
+    {
+     "task": 3,
+     "start": 8.107,
+     "end": 11.177,
+     "speculative": true,
+     "killed": false,
+     "reason": "Success",
+     "executor": "2"
+    }
+   ]
+  }
+ ],
+ "fetchfail": {
+  "stages": [
+   {
+    "stage": 5,
+    "attempt": 0,
+    "tasks": 1,
+    "failed": true,
+    "start": 0.0,
+    "end": 0.05,
+    "failure": "org.apache.spark.shuffle.FetchFailedException\n\tat org.apache.spark.errors.SparkCoreErrors$"
+   },
+   {
+    "stage": 3,
+    "attempt": 0,
+    "tasks": 3,
+    "failed": false,
+    "start": 0.256,
+    "end": 2.551,
+    "failure": ""
+   },
+   {
+    "stage": 4,
+    "attempt": 1,
+    "tasks": 2,
+    "failed": true,
+    "start": 2.553,
+    "end": 3.102,
+    "failure": "org.apache.spark.shuffle.FetchFailedException\n\tat org.apache.spark.errors.SparkCoreErrors$"
+   },
+   {
+    "stage": 3,
+    "attempt": 1,
+    "tasks": 4,
+    "failed": false,
+    "start": 3.304,
+    "end": 5.911,
+    "failure": ""
+   },
+   {
+    "stage": 4,
+    "attempt": 2,
+    "tasks": 4,
+    "failed": false,
+    "start": 5.913,
+    "end": 7.634,
+    "failure": ""
+   },
+   {
+    "stage": 5,
+    "attempt": 1,
+    "tasks": 1,
+    "failed": false,
+    "start": 7.635,
+    "end": 7.714,
+    "failure": ""
+   }
+  ],
+  "fetch_failed_tasks": 3,
+  "locality": {
+   "PROCESS_LOCAL": 18,
+   "NODE_LOCAL": 17
+  }
+ }
+}

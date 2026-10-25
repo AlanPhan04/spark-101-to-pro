@@ -1,0 +1,134 @@
+{
+ "tune_h1c1": {
+  "tasks": 40,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 206,
+  "run_ms": 54566,
+  "peak_mem": 335544128,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h1c2": {
+  "tasks": 40,
+  "mem_spill": 1207957248,
+  "disk_spill": 417058558,
+  "gc_ms": 668,
+  "run_ms": 58226,
+  "peak_mem": 218103520,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h1c4": {
+  "tasks": 40,
+  "mem_spill": 1207954944,
+  "disk_spill": 432343121,
+  "gc_ms": 648,
+  "run_ms": 68080,
+  "peak_mem": 109051616,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h1c8": {
+  "tasks": 40,
+  "mem_spill": 1509937920,
+  "disk_spill": 567669741,
+  "gc_ms": 1822,
+  "run_ms": 102186,
+  "peak_mem": 54525664,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h2c1": {
+  "tasks": 40,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 156,
+  "run_ms": 52973,
+  "peak_mem": 335544272,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h2c2": {
+  "tasks": 40,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 238,
+  "run_ms": 57545,
+  "peak_mem": 335544224,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h2c4": {
+  "tasks": 40,
+  "mem_spill": 1207958400,
+  "disk_spill": 417058558,
+  "gc_ms": 718,
+  "run_ms": 75508,
+  "peak_mem": 218103664,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h2c8": {
+  "tasks": 40,
+  "mem_spill": 1207957248,
+  "disk_spill": 432343121,
+  "gc_ms": 1557,
+  "run_ms": 109367,
+  "peak_mem": 109051760,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h4c1": {
+  "tasks": 40,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 161,
+  "run_ms": 52351,
+  "peak_mem": 335544272,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h4c2": {
+  "tasks": 40,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 241,
+  "run_ms": 56835,
+  "peak_mem": 335544272,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h4c4": {
+  "tasks": 40,
+  "mem_spill": 0,
+  "disk_spill": 0,
+  "gc_ms": 456,
+  "run_ms": 70408,
+  "peak_mem": 335544224,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ },
+ "tune_h4c8": {
+  "tasks": 40,
+  "mem_spill": 1207958400,
+  "disk_spill": 417058558,
+  "gc_ms": 1043,
+  "run_ms": 112751,
+  "peak_mem": 218103664,
+  "failed": 0,
+  "shuffle_write": 679596360,
+  "shuffle_read": 679596360
+ }
+}

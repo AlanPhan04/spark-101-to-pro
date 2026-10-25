@@ -1,0 +1,1 @@
+RESULT n=20000 java_each=5988894 kryo_each=848894 java_array=1169201 kryo_array=828900

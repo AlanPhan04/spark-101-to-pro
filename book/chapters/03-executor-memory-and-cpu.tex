@@ -35,6 +35,19 @@ calls and branches --- which is exactly why Spark's execution engine generates a
 single flat Java method for a chain of operators (\Cref{sec:wholestage-codegen},
 \Cref{ch:tungsten}) instead of walking an operator tree.
 
+The lab measured the warm-up directly: the same filter-and-aggregate query run
+eight times in one fresh JVM took 6.5~s the first time and 0.8--1.6~s from the
+second run on (\Cref{fig:jit-warmup}) --- a factor of about eight, with nothing
+changed but how much of the code the JIT had already compiled.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{jit-warmup.pdf}
+  \caption{One query, eight consecutive runs in a fresh JVM. The first run pays
+  for class loading, interpretation and compilation; later runs run compiled code.}
+  \label{fig:jit-warmup}
+\end{figure}
+
 The second is \emph{automatic memory management}: the program allocates objects
 and never frees them, and a \emph{garbage collector} reclaims what is no longer
 reachable. This is a convenience with a running cost, and for a data engine
@@ -66,7 +79,10 @@ java.lang.Integer
   total           16 bytes   to carry 4 bytes of data
 \end{lstlisting}
 
-\noindent A row represented as an array of boxed Java objects (an
+\noindent Measured with Spark's \texttt{SizeEstimator}, one million integers cost
+4.0~MB as an \texttt{int[]} and 20.6~MB as a \texttt{List<Integer>}: 5.2 times
+more (left panel of \Cref{fig:serialization-size}). A ten-character string
+costs 56 bytes for 10 bytes of text. A row represented as an array of boxed Java objects (an
 \texttt{Integer}, a \texttt{Double}, a \texttt{String} with its own header and
 backing character array) can be several times larger in the heap than the same
 row encoded as raw bytes. This is the amplification you see when a compressed
@@ -159,6 +175,30 @@ margin; it is space that is actually consumed, and its default is frequently too
 small for PySpark or codec-heavy workloads, in which case the container is killed
 with no Spark-level error.
 
+\paragraph{The pool, measured.} The lab read the unified pool from Spark's memory
+manager for four heap sizes (\Cref{tab:mem-pool-measured}); the formula
+$(\text{heap} - 300~\text{MiB}) \times 0.6$ matches to the decimal. The reserved
+300~MiB also sets a floor: asked to start with a 400~MB heap, Spark refused with
+\texttt{[INVALID\_DRIVER\_MEMORY] System memory 405471232 must be at least
+471859200} --- 450~MiB, which is 1.5 times the reserved amount.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}rrr@{}}
+\toprule
+\textbf{Heap (\conf{-Xmx})} & \textbf{Unified pool, measured (MiB)} & \textbf{$(\text{heap} - 300) \times 0.6$ (MiB)} \\
+\midrule
+512 MiB & 127.2 & 127.2 \\
+1 GiB & 434.4 & 434.4 \\
+2 GiB & 1048.8 & 1048.8 \\
+4 GiB & 2277.6 & 2277.6 \\
+\bottomrule
+\end{tabular}
+\caption{The unified pool against the formula, on four heaps (Spark 3.5.2).}
+\label{tab:mem-pool-measured}
+\end{table}
+
 \paragraph{What the cluster manager enforces.} The pod or container is sized as
 the sum of all three pools (\Cref{fig:executor-memory-model}). If the process's
 real usage crosses that limit --- most often because overhead was underestimated
@@ -187,7 +227,8 @@ raise the executor to 8 cores, and each task's share drops to about 512~MB
 --- more parallelism, but less room per task, on the very same heap. The
 number of cores per executor is therefore a memory decision as much as a
 parallelism one, and an executor with too many cores spills on work a
-narrower one finishes in memory (\Cref{sec:executor-sizing}).
+narrower one finishes in memory. \Cref{fig:spill-heatmap} measured exactly this
+on twelve executor shapes (\Cref{sec:executor-sizing}).
 
 \section{Garbage collection: Parallel, G1, ZGC}
 \label{sec:mem-gc}
@@ -259,6 +300,27 @@ ZGC & sub-millisecond & higher constant CPU \& memory & very large heaps where G
   \label{fig:gc-pause-stall}
 \end{figure}
 
+The lab ran the same sort-heavy stage (4~GB heap, 8 cores) under each collector
+(\Cref{fig:gc-collectors-measured}). Wall-clock time was within 1.3 seconds for G1
+and Parallel (22.8 and 23.1~s) and 19\% worse for ZGC (27.2~s). The pauses differ
+sharply: G1 paused 118 times for 574~ms in total, its longest pause 47~ms; Parallel
+paused 38 times for 3.4~s in total, its longest 835~ms. The \emph{GC time} column of
+the task metrics shows something the pause log does not: 1.8~s for G1 but 25.4~s for
+Parallel, because the metric is accumulated \emph{per task}, so one stop-the-world
+pause is counted once for every task that was running through it --- 835~ms across
+eight slots is nearly seven seconds. (ZGC's 34.5~s is concurrent collector work
+charged to tasks; the lab's \texttt{-Xlog:gc} format for ZGC carries no pause
+lines, so its pause column is not available.) On this stage, at a 4~GB heap, G1's
+shorter pauses cost no throughput and ZGC cost throughput.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{gc-collectors-measured.pdf}
+  \caption{One stage under three collectors. Wall clock is close for G1 and
+  Parallel; the longest pause and the per-task GC metric are not.}
+  \label{fig:gc-collectors-measured}
+\end{figure}
+
 The generational hypothesis --- that most objects die young --- underlies all
 three: they collect a small ``young'' area cheaply and often, and the full-heap
 collection rarely. A workload that holds a large amount of long-lived data in
@@ -286,9 +348,24 @@ The two options for arbitrary Java objects differ sharply. The built-in Java
 serializer writes the full class name and every field name and type alongside the
 values, repeated for every object, so most of the output is self-description
 rather than data. \emph{Kryo} writes a compact encoding --- a short numeric class
-identifier and the field values --- and produces output several times smaller,
-which directly reduces shuffle volume, spill size, and broadcast footprint
-(\Cref{ch:tuning}).
+identifier and the field values. The lab serialized 20,000 five-field records
+both ways (right panel of \Cref{fig:serialization-size}): one record at a time,
+Java wrote 299 bytes per record and Kryo 42 --- seven times smaller; as one array
+the gap shrinks to 58 against 41 bytes per record, because the class description is
+written once. The advantage is therefore largest for many small separately
+serialized objects, which is what a shuffle of RDD records is.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{serialization-size.pdf}
+  \caption{Left: one million integers as a primitive array and as boxed objects.
+  Right: bytes per five-field record under Java and Kryo serialization, one record
+  at a time and as one array.}
+  \label{fig:serialization-size}
+\end{figure}
+
+The smaller output directly reduces shuffle volume, spill size and broadcast
+footprint (\Cref{ch:tuning}).
 
 DataFrame and SQL workloads sidestep both serializers for most operations: rows
 already live in the engine's binary format (\Cref{ch:tungsten}), so moving them

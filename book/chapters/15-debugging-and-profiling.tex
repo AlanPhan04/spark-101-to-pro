@@ -2,278 +2,284 @@
 \label{ch:debugging}
 
 \begin{chapterintro}
-A slow job leaves evidence: in the SQL tab, the stages tab, the executor
-metrics, the event log, and --- when you need it --- a flame graph. This chapter
-teaches you to read that evidence in order, so that "the job is slow" becomes
-"stage 4 is skewed" or "the executors are GC-bound" in a few minutes. It also
-catalogs the failure signatures --- OOM and container kills, fetch failures,
-stragglers --- and what each looks like before you reach for a fix.
+A slow job leaves evidence: in the SQL tab, the stages tab, the executor metrics,
+the event log, and --- when you need it --- a flame graph. This chapter teaches you
+to read that evidence in order, so that ``the job is slow'' becomes ``stage 2 has one
+task nine times the median'' in a few minutes. Every failure it describes was
+reproduced on purpose on the lab (\Cref{sec:refenv-lab}): a skewed join, three
+different out-of-memory failures, a straggler with and without speculation, and a
+stage that lost half its shuffle files. The numbers in each section are the real
+output of those runs.
 \end{chapterintro}
 
 \section{The Spark UI as a diagnostic}
 \label{sec:debug-ui}
 
-The UI is organized as a funnel (\Cref{fig:ui-diagnostic-funnel}), and
-reading it in the wrong order is the most common way to waste time on a
-slow job. The \textbf{SQL} tab is the
-right starting point for a SQL/DataFrame job: it shows the physical plan
-with live metrics on every node --- rows produced, time spent, bytes
-shuffled --- so you can see \emph{which operator} is expensive before
-worrying about which stage or task. The \textbf{Stages} tab is next: each
-stage's task-duration distribution (min/median/max, visualized as a
-histogram) is where skew becomes visible as a wide gap between median and
-max, and \Cref{sec:aqe-skew}'s straggler pattern is exactly what a stage
-page with one outlier bar looks like. The \textbf{Executors} tab aggregates
-across the whole application --- GC time, shuffle read/write totals, task
-counts per executor --- and is where an imbalance across executors (rather
-than across tasks within one stage) shows up. Only once the SQL tab has
-named the operator and the Stages tab has named the stage does drilling
-into individual task metrics (\Cref{sec:reading-metrics}) become the right
-next step, rather than the first one.
+The UI is organized as a funnel (\Cref{fig:ui-diagnostic-funnel}), and reading it in
+the wrong order is the most common way to waste time on a slow job. The
+\textbf{SQL} tab shows the physical plan with live metrics on every node, so you can
+see \emph{which operator} is expensive before worrying about which stage or task.
+The \textbf{Stages} tab is next: each stage's task-duration distribution is where
+skew becomes visible as a gap between median and maximum. The \textbf{Executors} tab
+aggregates across the application and shows imbalance between executors rather than
+between tasks. Only once the operator and the stage are named does it pay to open
+individual task metrics (\Cref{sec:reading-metrics}).
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.8\linewidth]{ui-diagnostic-funnel.pdf}
-  \caption{The UI read top to bottom: each tab narrows the search before
-  the next one is worth opening. Starting at task metrics without first
-  naming the operator and the stage is the most common way to waste time
-  reading a plan that turns out not to be the bottleneck.}
+  \includegraphics[width=\linewidth]{ui-diagnostic-funnel.pdf}
+  \caption{The UI read top to bottom: each tab narrows the search before the next
+  is worth opening.}
   \label{fig:ui-diagnostic-funnel}
 \end{figure}
 
 \section{Event logs and the history server}
 \label{sec:debug-history}
 
-Everything the live UI renders is first written to an \emph{event log} ---
-a JSON-lines file of every scheduler event (job/stage/task start and end,
-executor added/removed, SQL execution metrics), one line per event, in the
-order they occurred. The Spark History Server does nothing more exotic than
-replay that file from the top: it feeds each line into the same in-memory
-listener objects that build the live UI's job, stage, and task tables while
-an application is actually running, just fed from a file instead of from
-live scheduler events. By the time it reaches the last line, it holds the
-identical in-memory picture the live UI would have shown at the moment the
-application exited --- and renders that as a normal, browsable UI. This
-matters for exactly the jobs you most need to debug: a job that
-failed or was killed no longer has a live UI to inspect, but its event log
-(if \conf{spark.eventLog.enabled} was on, which it should be by default on
-this stack) survives it. On Kubernetes specifically, the event log is the
-only diagnostic that outlives the executor pods themselves, which are
-usually garbage-collected by the cluster shortly after the application ends.
+Everything the live UI renders is first written to an \emph{event log}: a JSON-lines
+file of every scheduler event, one line per event. The History Server replays that
+file through the same listener objects that build the live UI, so by the last line
+it holds the picture the live UI would have shown at exit --- which matters for the
+jobs you most need to debug, those that failed and no longer have a UI. On
+Kubernetes it is the only diagnostic that outlives the executor pods.
+
+The lab opened one. A single join query (125 tasks over four stages) produced an
+event log of 1.02~MB holding 276 events (\Cref{fig:eventlog-anatomy}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{eventlog-anatomy.pdf}
+  \caption{Bytes in the event log by event type. \texttt{TaskEnd} events, which carry
+  every task's metrics, are 79\% of the file at about 6.4~KB each; the environment
+  snapshot is the second-largest entry at 80~KB.}
+  \label{fig:eventlog-anatomy}
+\end{figure}
+
+The size rule follows: an event log grows with the number of \emph{tasks}, about
+6.4~KB per task here, so a job with 200,000 tasks writes about 1.3~GB, which is why
+very large jobs need a log rolled over (\conf{spark.eventLog.rolling.enabled}) and
+compressed (\conf{spark.eventLog.compress}) --- claim, from the documentation, not
+tested in the lab.
 
 \section{Reading task, shuffle, spill, and GC metrics}
 \label{sec:reading-metrics}
 
-A single task's detail page is the finest-grained evidence the UI offers,
-and four numbers do most of the diagnostic work. Take the specimen's viral,
-heavily-discounted product from \Cref{sec:refenv-orders}: the join stage over
-\texttt{orders} has 200 tasks, and one of them --- the task holding that
-product's rows --- is the one worth opening.
+A single task's detail is the finest-grained evidence the UI offers, and the lab
+produced a real skewed stage to read. A sort-merge join of \texttt{orders} to
+\texttt{dim\_product} on the hot product (30\% of the rows share one
+\texttt{product\_id}), 40 shuffle partitions, a 1~GB heap and four cores, AQE off.
+\Cref{fig:task-durations-skew} sorts the 40 tasks of the join stage by duration: 39
+sit between 0.43 and 1.04~s and one takes 5.44~s.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{task-durations-skew.pdf}
+  \caption{The 40 tasks of the join stage. One task is 9.7 times the median.}
+  \label{fig:task-durations-skew}
+\end{figure}
+
+\Cref{fig:task-four-metrics} compares the median task with the slow one on the five
+numbers that do the diagnostic work.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{task-four-metrics.pdf}
+  \caption{Median task against the slowest task of the same stage.}
+  \label{fig:task-four-metrics}
+\end{figure}
 
 \begin{description}
-  \item[Task duration vs.\ scheduler delay] separates genuine compute time
-        from a task that merely waited for a slot. The skewed task shows a
-        duration of 4 minutes against a scheduler delay under 100ms: almost
-        all of that time is real work, not queueing --- which rules out "not
-        enough executors were free yet" and points straight at "this task has
-        too much to do." A different task showing a short duration but a long
-        scheduler delay would mean the opposite: a parallelism problem, not a
-        per-task one, and no amount of per-task tuning would fix it.
-  \item[Shuffle read/write size] compared across tasks \emph{in the same
-        stage} is the most direct skew signal: the median task in this stage
-        reads about 40MB shuffled in; the skewed task reads 3.2GB --- eighty
-        times the median, because every row for that one product landed in
-        its partition. This is the same imbalance \Cref{sec:aqe-skew} detects
-        and fixes automatically for a join, made visible here for any stage
-        regardless of whether AQE's skew handling applies to it.
-  \item[Spill (memory and disk)] appears when a task's execution memory
-        share (\Cref{sec:mem-model}) was not enough for its sort or hash
-        operation, forcing a spill to disk mid-task. The skewed task shows
-        1.8GB of disk spill where every other task in the stage shows zero:
-        its 3.2GB of input simply did not fit in the same per-task memory
-        slice that comfortably held every other task's 40MB. Non-zero spill
-        appearing on a stage that previously had none, after a data-volume
-        increase, is the direct evidence a memory-based fix
-        (\Cref{sec:executor-sizing}) targets.
-  \item[GC time as a fraction of task time] above roughly 10\% signals a
-        heap doing more collection than the work is worth
-        (\Cref{sec:mem-gc}). The skewed task's GC time is 45 seconds out of
-        its 4-minute duration --- about 19\% --- because holding and spilling
-        3.2GB of rows keeps the heap under sustained pressure the other,
-        lightly-loaded tasks never experience; this is the number
-        \Cref{sec:caching-storage-levels}'s \texttt{\_SER}-level advice and
-        any heap-vs-off-heap decision should be checked against.
+  \item[Task duration against scheduler delay] separates real work from waiting for
+        a slot. The slow task ran 5.44~s with a scheduler delay of 3~ms: all of it
+        was work, not queueing, which rules out ``not enough slots'' and points at
+        ``this task has too much to do.''
+  \item[Records or bytes read in the same stage] is the most direct skew signal. The
+        median task read 0.58~million records (8.2~MB); the slow one read 9.58
+        million (82.2~MB) --- 16.5 times the records for 9.7 times the time.
+  \item[Spill] appears when a task's share of execution memory was too small for its
+        sort. Only the slow task spilled: 327~MB of memory spilled, 72~MB written
+        to disk, where every other task spilled nothing (the share was 456~MB
+        divided by 4 cores, \Cref{ch:tuning}).
+  \item[GC time] was \emph{not} the story here: 50~ms of a 5.4~s task, about 1\%.
+        A common narrative says skew drives GC; this measurement says check before
+        assuming it, and that spill cost, not GC, was what the extra memory pressure
+        bought.
 \end{description}
 
-Read together, these four numbers tell one consistent story rather than four
-separate ones: a task with far more shuffle input than its neighbors, which
-therefore spills, which therefore drives up GC time, which therefore
-dominates the task's own duration while barely touching its scheduler delay.
-That is what data skew looks like from inside a single task's metrics, and
-it is the same underlying cause \Cref{sec:aqe-skew} names from the stage-wide
-view.
+Read together, the four numbers tell one story --- a task with 16 times the input
+that spilled and ran ten times longer --- and it is the same cause
+\Cref{sec:aqe-skew} detects and fixes automatically for a join, made visible here
+for any stage.
 
 \section{Common failure signatures}
 \label{sec:failure-signatures}
 
-A job rarely fails as one incomprehensible error. It fails as one of a small
-number of recognizable signatures, each with its own evidence in the UI and its
-own fix.
+A job rarely fails as one incomprehensible error. It fails as one of a small number
+of recognizable signatures, each with its own evidence.
 
-\paragraph{OOM and container kills.}
+\paragraph{Out of memory: three failures, three traces.} The lab triggered each on
+purpose (\Cref{tab:debug-oom}).
 
-Three distinct failures share the word "OOM," and the fix depends entirely
-on which one occurred. A \textbf{driver OOM} throws
-\texttt{java.lang.OutOfMemoryError} in the driver's own log, and its usual
-cause on this stack is an action that pulls too much data back to one JVM
---- \texttt{collect()} on a large DataFrame, or a broadcast join whose
-broadcast side turned out larger than estimated (\Cref{sec:joins-selection}).
-An \textbf{executor OOM} throws the same exception but on an executor, from a
-task's own operation outrunning its execution-memory share
-(\Cref{sec:mem-model}) with no room left to spill further --- visible as the
-exception in that executor's log, attached to a specific task. A
-\textbf{container OOM kill} shows neither exception: the cluster manager
-(Kubernetes) kills the whole pod because its total memory usage --- heap
-plus everything \Cref{sec:executor-sizing} put under "overhead" --- exceeded
-the pod's limit, and the pod simply disappears with an \texttt{OOMKilled}
-status visible in \texttt{kubectl describe pod}, not in any Spark log at
-all, because the JVM never got the chance to log anything.
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.0cm}p{5.0cm}p{5.8cm}@{}}
+\toprule
+\textbf{How triggered} & \textbf{Evidence} & \textbf{What overflowed} \\
+\midrule
+\texttt{collect()} of 30~M rows, 512~MB heap & \texttt{java.lang.OutOfMemoryError: Java heap space}, logged as \texttt{Executor: Exception in task} & the JVM heap, by an allocation Spark does not track \\
+\texttt{collect\_list} of one hot key, 512~MB heap & \texttt{SparkOutOfMemoryError: [UNABLE\_TO\_ACQUIRE\_MEMORY] Unable to acquire 65536 bytes of memory, got 0} & Spark's own execution-memory accounting: the pool had no 64~KB page to give \\
+off-heap sort in a 1~GB container & exit code 137, \texttt{OOMKilled=true}, \textbf{zero} \texttt{OutOfMemoryError} lines in the log & the container's cgroup limit: heap plus off-heap exceeded what the kernel allowed \\
+\bottomrule
+\end{tabular}
+\caption{Three OOM signatures, reproduced on the lab. The distinguishing evidence is
+the exception class (or its absence), not the words ``out of memory.''}
+\label{tab:debug-oom}
+\end{table}
 
-\begin{tip}
-No exception in any Spark log is itself the diagnostic signal for a
-container kill. If a task's executor simply vanishes with no
-\texttt{OutOfMemoryError} anywhere, check the pod's exit reason before
-assuming a fetch failure or a node eviction --- raising
-\conf{spark.executor.memoryOverhead} is the fix for this signature
-specifically, not for a heap-level executor OOM.
-\end{tip}
+Two observations. First, the exception \emph{class} separates the first two:
+\texttt{java.lang.OutOfMemoryError} is the JVM refusing an allocation;
+\texttt{SparkOutOfMemoryError} is Spark's memory manager (\Cref{sec:mem-model})
+refusing to grant a page, with the byte count it could not get. Second, in local
+mode a driver \texttt{collect()} OOM was logged by an executor thread, because the
+driver and executor share one JVM: on a cluster the same failure would appear in the
+driver's log, and telling the two apart there is part of the diagnosis. The third
+row has no exception at all, which is the signature --- the JVM never got a chance
+to log, and the evidence is the container's exit status. Raising
+\conf{spark.executor.memoryOverhead} is the fix for this one
+(\Cref{sec:executor-sizing}), not the heap.
 
-\paragraph{Stragglers.}
+\paragraph{Stragglers and speculation.} A straggler is one task running far longer
+than the rest with no data-size explanation, usually a node problem. The lab
+simulated one: eight tasks of 3~s, with the first attempt of task 3 sleeping 40~s,
+run on two workers registered under two different host names. Without speculation
+the job took 41.3~s. With \conf{spark.speculation} on (multiplier 1.5, quantile
+0.75) it took 11.2~s (\Cref{fig:speculation-gantt}): once six of eight tasks had
+finished, Spark launched a copy of task 3 on a different executor at 8.1~s, which
+finished 3.1~s later, and the original was killed.
 
-A straggler is one task in a stage running far longer than the rest with no
-corresponding data-size difference to explain it --- distinct from the skew
-signature in \Cref{sec:reading-metrics}, where the slow task really is
-processing more bytes. A straggler with ordinary-sized input usually traces
-to the node it landed on: contended CPU from a noisy neighbor, a slow disk,
-or a transient network issue with GCS specific to that node, none of which
-show up in the shuffle-size or spill metrics because the task's own data
-volume was never the problem. \emph{Speculative execution}
-(\conf{spark.speculation}, off by default) is the direct mitigation: past a
-threshold multiple of the median task duration in a stage
-(\conf{spark.speculation.multiplier}, 1.5 by default), Spark launches a
-duplicate copy of the slow task on a different executor and keeps whichever
-copy finishes first, discarding the other. It trades some duplicated
-compute for tail latency, and is worth enabling exactly when stragglers are
-confirmed to be node-related rather than data-related --- turning it on to
-paper over genuine skew just runs the same oversized task twice.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{speculation-gantt.pdf}
+  \caption{Task attempts without and with speculation. The speculative copy (orange)
+  started at 8.1~s and won; the original (red) was killed when it did.}
+  \label{fig:speculation-gantt}
+\end{figure}
 
-\paragraph{Fetch failures and stage retries.}
+A detail that cost the lab one failed run: on a single worker with four executors all
+on one host, speculation had no effect (41.6~s both ways). Spark does not place a
+speculative copy on the host that already runs the original, so a cluster with one
+host per executor pool cannot speculate. Speculation cuts tail latency for
+node-related stragglers; for genuine skew it would just run the same oversized task
+twice.
 
-Shuffle files are not deleted as soon as they are read --- Spark keeps them in
-case a later stage needs the same shuffle again, and cleans them up in the
-background as the driver's JVM garbage-collects the objects that reference them
-(the \emph{ContextCleaner}). In practice the deciding moment is simpler: that
-storage is local to the executor that wrote it (\Cref{sec:shuffle-write}), and
-on the reference stack it is an \texttt{emptyDir} tied to the executor's pod, so
-losing the pod --- an OOM kill, a node drain, dynamic allocation scaling down
---- deletes its shuffle files immediately, with no way to recover them from that
-executor again.
+\paragraph{Fetch failures and stage retries.} Shuffle files are local to the
+executor that wrote them, so losing the executor --- an OOM kill, a node drain,
+dynamic allocation scaling down --- loses them. The lab reproduced the recovery:
+after a job had run, it deleted 30 of the 57 shuffle files written by one of two
+executors, then ran the same query again (\Cref{fig:fetch-failure-stages}).
 
-A reduce task that tries to fetch from such an executor gets a
-\texttt{FetchFailedException}, visible in the driver log and the stage's tasks
-tab. This is not a generic task failure: the DAG scheduler recognizes it
-specifically, marks that executor's map output as gone in the map output
-tracker, and resubmits only the map tasks that ran on it --- not the whole
-stage, and not the job --- before retrying the reduce stage. You will see this
-in the UI as a stage that appears to run twice, with a smaller second attempt.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{fetch-failure-stages.pdf}
+  \caption{The stage attempts of the second run. The final stage failed at once with
+  a \texttt{FetchFailedException}; the map stage re-ran for the missing output
+  (3 tasks); a middle stage failed with a second \texttt{FetchFailedException}; the
+  map stage ran again (4 tasks); then the middle and final stages succeeded. Three
+  tasks failed with \texttt{FetchFailed}, 7.7~s in all.}
+  \label{fig:fetch-failure-stages}
+\end{figure}
 
-\begin{tip}
-Two different layers retry, and tuning the wrong one does nothing. A fetch that
-fails from a flaky network but a still-live executor is retried by the shuffle
-client itself: \conf{spark.shuffle.io.maxRetries} (3 attempts) and
-\conf{spark.shuffle.io.retryWait} (5s between them). A fetch that fails because
-the executor is genuinely gone is handled by the stage resubmission above,
-bounded by \conf{spark.stage.maxConsecutiveAttempts} (4) and, per task,
-\conf{spark.task.maxFailures} (4) --- raise both on a cluster where executors
-are routinely reclaimed (spot instances, aggressive dynamic allocation) rather
-than let the job fail after only a handful of retries. If the lost executors
-are \emph{voluntary} removals under dynamic allocation
-(\Cref{sec:dynamic-allocation}) rather than crashes,
-\conf{spark.shuffle.service.enabled} avoids the failure entirely by keeping
-shuffle data servable after its executor is gone (\Cref{sec:shuffle-push}).
-Enabling \conf{spark.excludeOnFailure.enabled} keeps subsequent retries from
-landing back on a node that is already causing them.
-\end{tip}
+A fetch failure is not a generic task failure. The scheduler recognizes it,
+invalidates that executor's map outputs in the map output tracker
+(\Cref{sec:sched-map-output-tracker}), and resubmits only the missing map tasks
+before retrying the reduce stage. What the figure adds is that a stage chain can
+fail in \emph{cascade}: the stage downstream of the lost output failed, and when
+that recomputation reached a second exchange it hit missing files again. You see
+this in the UI as stages with several attempts and a task count that varies by
+attempt. Two layers retry, and tuning the wrong one does nothing: the shuffle
+client retries a fetch from a live executor (\conf{spark.shuffle.io.maxRetries},
+\conf{spark.shuffle.io.retryWait}); a genuinely lost executor is handled by stage
+resubmission, bounded by \conf{spark.stage.maxConsecutiveAttempts} (4) and
+\conf{spark.task.maxFailures} (4). Raise both on a cluster where executors are
+routinely reclaimed.
 
 \section{async-profiler and flame graphs}
 \label{sec:debug-profiler}
 
-The UI's metrics answer \emph{which stage and which task}; they do not
-answer \emph{which line of code, or which JIT-compiled method, is actually
-burning CPU} inside a task that is neither spilling nor GC-bound but is
-simply slow. Older Java profilers worked by \emph{instrumentation}: rewriting every
-method's bytecode to insert a timing call at entry and exit, so the overhead
-scales with how often a method is called --- exactly the methods you most
-want to profile are the ones this slows down the most. \texttt{async-profiler}
-instead uses \emph{sampling}: it interrupts the JVM at a fixed interval (say,
-every 10ms) and simply reads whatever call stack every thread happens to be
-running at that instant, using the OS's own \texttt{perf\_events} rather than
-any JVM-level instrumentation. The cost is fixed per interrupt, independent
-of how hot the code is, which is why it can be left attached to a production
-executor with negligible overhead. Sampled over enough intervals, the
-fraction of samples landing in a given method converges on the fraction of
-wall-clock time it actually consumes --- and that is the whole flame graph:
-one
-horizontal bar per stack frame, width proportional to time spent, stacked by
-call depth. A wide bar low in the stack under a Spark-internal frame usually
-means the bottleneck is in a UDF or an expensive expression the generated
-code calls into, not in Spark's own execution machinery
-(\Cref{ch:tungsten}) --- the distinction that decides whether the fix is
-rewriting a UDF or tuning Spark configuration.
+The UI's metrics answer \emph{which stage and which task}; they do not answer
+\emph{which method is burning CPU} in a task that is neither spilling nor GC-bound.
+Instrumenting profilers rewrite every method to time it, so their overhead scales
+with call frequency. \texttt{async-profiler} samples instead: it interrupts the JVM
+at a fixed interval and reads the call stacks, so the cost is fixed per interrupt
+and independent of how hot the code is. The fraction of samples in a method
+converges on the fraction of time it consumes, and a flame graph draws exactly that:
+one bar per stack frame, width proportional to samples. A wide bar under a
+Spark-internal frame usually means the bottleneck is in a UDF or expression the
+generated code calls (\Cref{ch:tungsten}, where a Python UDF cost 32 times a
+built-in), not in Spark's execution machinery. (Claim --- not exercised in the
+lab, which has no profiler installed: the sampling mechanism and its low overhead
+are as documented by the project.)
 
 \section{Debugging query plans}
 \label{sec:debug-plans}
 
-A plan that does not do what you expect is diagnosed the same way
-\Cref{ch:catalyst} taught you to read one, just applied adversarially: compare
-the \emph{analyzed} plan against what you intended to express (a wrong join
-condition or an unexpected implicit cast usually shows up here, before any
-optimization has had a chance to help or hurt); check the \emph{optimized}
-plan for whether pushdown and pruning rules actually fired
-(\Cref{sec:c-pushdown}'s killer catalogue is the first thing to check when
-they did not); and compare the \emph{physical} plan's join and exchange
-nodes against what \Cref{ch:joins} and \Cref{ch:shuffle} predict from the
-table sizes and partitioning involved. \texttt{EXPLAIN FORMATTED}'s numbered
-node list plus per-node detail block is almost always more useful for this
-than the tree-only default mode, because it lets you cross-reference a
-specific node's detail (its exact \texttt{PartitionFilters}, its exact join
-build side) rather than inferring it from the tree shape alone.
+A plan that does not do what you expect is diagnosed the way \Cref{ch:catalyst}
+taught you to read one, applied adversarially: compare the \emph{analyzed} plan
+with what you intended (a wrong join condition or an implicit cast shows up here);
+check the \emph{optimized} plan for whether pushdown and pruning fired
+(\Cref{fig:pushdown-rows-by-predicate} is the catalogue of what defeats them); and
+compare the \emph{physical} plan's joins and exchanges with what \Cref{ch:joins} and
+\Cref{ch:shuffle} predict. \texttt{EXPLAIN FORMATTED}'s numbered node list plus
+per-node detail is almost always more useful than the tree alone, because you can
+cross-reference a node's exact filters and build side. A hint that appears ignored
+is checked the same way: read the operator (\Cref{sec:joins-measured}).
+
+\section{From symptom to lever}
+\label{sec:debug-levers}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.1cm}p{3.9cm}p{4.0cm}p{3.1cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
+\midrule
+one task far slower than the rest & max/median duration 9.7$\times$; records read 16$\times$ & skew handling (\Cref{ch:aqe}) or repartition by a better key & shuffle cost \\
+one slow task, ordinary input & records read near the median; scheduler delay low & \conf{spark.speculation} (and only if node-related) & duplicate compute; needs more than one host \\
+\texttt{java.lang.OutOfMemoryError} & exception class names the JVM heap & raise executor heap, or shrink what the task holds & memory per executor \\
+\texttt{SparkOutOfMemoryError} & ``Unable to acquire \dots\ got 0'' & raise unified pool per task: more heap or fewer cores (\Cref{fig:spill-vs-share}) & memory, or slots \\
+executor vanishes, no exception & exit code 137, \texttt{OOMKilled} & raise \conf{spark.executor.memoryOverhead} & pod size \\
+stage runs several times & \texttt{FetchFailedException}, attempts $>$ 1 & shuffle service, tracking timeout, retries (\Cref{ch:tuning}) & held executors \\
+event log is huge & about 6.4~KB per task & roll and compress the log & history-server CPU \\
+\bottomrule
+\end{tabular}
+\caption{The debugging levers: symptom, evidence, lever, cost.}
+\label{tab:debug-levers}
+\end{table}
 
 \section{Summary}
 \label{sec:debug-summary}
 
-Diagnose top-down: the SQL tab names the expensive operator, the Stages tab
-names the stage and shows skew as a task-duration outlier, and only then do
-individual task metrics --- shuffle size, spill, GC time --- confirm the
-specific mechanism. Event logs and the history server are what make this
-possible after a job has already exited, which is exactly when you need it
-most. The three OOM signatures --- driver, executor, container --- point at
-different fixes and are distinguished by where (or whether) an exception
-appears at all; a straggler with no data-size explanation is a node problem
-that speculative execution mitigates, not a skew problem that
-repartitioning fixes. When metrics alone do not localize a CPU-bound
-slowdown, a flame graph does; when a plan does not match what you expected,
-re-read it stage by stage --- analyzed, optimized, physical --- the same way
-\Cref{ch:catalyst} taught, just with suspicion.
+Diagnose top-down: the SQL tab names the expensive operator, the Stages tab names the
+stage and shows skew as a task-duration outlier, and only then do individual task
+metrics confirm the mechanism. In the lab's skewed stage one task read 16.5 times the
+records, spilled while its 39 neighbours did not, and took 9.7 times as long, with GC
+at 1\% --- a reminder to read the numbers before telling the textbook story. The event
+log makes this possible after the job has exited and costs about 6.4~KB per task. Three
+OOM failures leave three different traces, told apart by the exception class or its
+absence. A straggler on a separate host is cut from 41.3 to 11.2~s by speculation,
+which cannot act on a single host. A lost executor's shuffle files trigger a cascade
+of stage attempts, not a single retry.
 
 \exercisehead
 \begin{exercises}
-\item Given three anonymized stage summaries, diagnose each as skew,
-      under-partitioned, or GC-bound, and name the evidence.
-\item Trigger each of the three OOM signatures deliberately (a driver
-      \texttt{collect()}, an undersized executor heap, an undersized
-      container overhead) and confirm each leaves a different trace.
-\item Take a job with a confirmed straggler and enable
-      \conf{spark.speculation}. Confirm from the Stages tab that a
-      duplicate task attempt was launched and which copy won.
+\item Take a stage summary of your own and compute the max-to-median ratio of
+      duration and of records read. If the ratios differ by a large factor, what does
+      that say about the cause?
+\item Trigger each of the three OOM signatures on a test cluster and record the
+      exception class (or the absence of one) and the exit status.
+\item Reproduce \Cref{fig:fetch-failure-stages} by deleting one executor's shuffle
+      files between two runs of the same DataFrame, then count the stage attempts and
+      \texttt{FetchFailed} tasks in the event log.
 \end{exercises}

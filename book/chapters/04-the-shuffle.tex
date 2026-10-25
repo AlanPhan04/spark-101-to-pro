@@ -241,6 +241,31 @@ for itself (\Cref{ch:iceberg-layout}). Using the same codec for both because
 ``it worked for storage'' is a common way to leave shuffle performance on the
 table.
 
+The lab measured the claim instead of assuming it. It shuffled four columns of all
+30~million \texttt{orders} rows by \texttt{customer\_id} under each codec and with
+compression off (\Cref{fig:shuffle-codecs}); the codec is a launch-time setting,
+and \texttt{spark.conf.set} at runtime is rejected.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{shuffle-codecs.pdf}
+  \caption{Shuffle bytes and wall clock by codec. Compression cut the bytes
+  written from 1,080~MB to 119--259~MB and the time from 10.6~s to 7.4--8.1~s,
+  on a local disk. \texttt{zstd} wrote half the bytes of \texttt{lz4} and was not
+  slower.}
+  \label{fig:shuffle-codecs}
+\end{figure}
+
+Compression is clearly worth its CPU --- 4.2$\times$ fewer bytes with \texttt{lz4}
+and a 24\% shorter run, even before any network is involved. The more surprising
+result is that \texttt{zstd} was not slower than \texttt{lz4} here (7.9 against
+8.1~s) while writing 9$\times$ fewer bytes than the uncompressed shuffle: on this
+stage the time went to other work, so the denser codec's extra CPU did not show.
+That does not make \texttt{zstd} the default recommendation --- the stage was not
+CPU-saturated, and a CPU-bound one would see the codec's cost --- but it weakens the
+folklore that only the fastest codec is acceptable for a shuffle. Where the
+network or disk is the bottleneck, bytes saved matter more than in this lab.
+
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
@@ -250,7 +275,7 @@ table.
 \midrule
 lz4 & low--medium & very fast & very fast & shuffle (the default) \\
 snappy & low--medium & very fast & very fast & shuffle, an alternative to lz4 \\
-zstd & high & medium & fast & Parquet storage on Iceberg \\
+zstd & high (9$\times$ in the lab) & medium & fast & Parquet storage; worth testing for shuffle \\
 gzip & highest & slow & slow & archival only --- avoid for shuffle \\
 \bottomrule
 \end{tabular}

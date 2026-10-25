@@ -1,0 +1,7 @@
+{
+ "spark.sql.extensions": "",
+ "CALL rewrite_data_files": "[PARSE_SYNTAX_ERROR] Syntax error at or near 'CALL'.(line 1, pos 0)",
+ "ADD PARTITION FIELD": "[PARSE_SYNTAX_ERROR] Syntax error at or near 'FIELD': missing '('.(line 1, pos 33)",
+ "plain SELECT": "ok",
+ "metadata table": "ok"
+}

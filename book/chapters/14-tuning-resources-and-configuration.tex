@@ -199,7 +199,10 @@ configuring spark.shuffle.sort.io.plugin.class ...
 (\conf{spark.dynamicAllocation.shuffleTracking.enabled}, on the lab cluster set
 explicitly) does in practice. The lab ran a standalone master and one four-core
 worker, executors of one core each, a maximum of four, and a 5-second idle timeout.
-Each run executes a job, idles for 25~s, and runs a second job.
+Each run executes a job, idles for 25~s, and then runs the \emph{same} DataFrame
+again, so that a surviving shuffle can be reused. (A first version of this
+experiment built a new DataFrame for the second job; Spark then recomputed the map
+stage whatever happened to the executors, and the comparison measured nothing.)
 
 \begin{figure}[htbp]
   \centering
@@ -219,14 +222,14 @@ Each run executes a job, idles for 25~s, and runs a second job.
 \toprule
 \textbf{Setup} & \textbf{Executors in the idle period} & \textbf{Job 2 duration} & \textbf{Why} \\
 \midrule
-tracking on, shuffle files exist & 4 (held) & 9.1~s & the map stage is skipped; its output is still on the executors \\
-tracking on, timeout 8~s & 0 after about 13~s & 20.5~s & executors re-requested; map stage recomputed \\
+tracking on, shuffle files exist & 4 (held) & 0.2~s & the map stage is skipped; its output is still on the executors \\
+tracking on, timeout 8~s & 0 after about 13~s & 25.6~s & executors re-requested; map stage recomputed \\
 no shuffle files left & 0 & (no shuffle stage) & nothing to protect; released at the idle timeout \\
 tracking off, no external service & --- & --- & application refuses to start (\Cref{lst:tuning-da-error}) \\
 \bottomrule
 \end{tabular}
 \caption{What dynamic allocation did in each lab setup. The first two rows run the
-same job; the 11~s difference is the price of letting shuffle-holding executors go.}
+same job; the difference, 0.2~s against 25.6~s, is the price of letting shuffle-holding executors go.}
 \label{tab:tuning-da}
 \end{table}
 
@@ -234,8 +237,9 @@ Tracking makes scale-down conservative: Spark keeps an executor while it holds
 shuffle output that a live job or a re-run could use, and drops it only after
 \conf{spark.dynamicAllocation.shuffleTracking.timeout} (infinite by default). The
 price is visible in the left panel: four executors sit idle for 25~seconds because
-their files might be needed again --- and the benefit is the 9.1~s second job
-compared to 20.5~s when they are let go. An external shuffle service removes the
+their files might be needed again --- and the benefit is a second job that
+finishes in 0.2~s because its map stage is skipped, compared to 25.6~s when the
+executors are let go and the stage recomputed on freshly requested ones. An external shuffle service removes the
 price by keeping the files servable without the executor; the lab ran no external
 service, so that statement rests on the Spark documentation and the mechanism in
 \Cref{sec:shuffle-external}, not on a measurement.
@@ -376,7 +380,7 @@ local disk cost far less than the cores returned. The shuffle partition count ha
 lower boundary set by the slot count and an upper one set by task overhead, with a
 flat bottom in between. Dynamic allocation is safe only when something protects
 shuffle data; tracking does so by keeping executors, and the lab measured what
-keeping them saves (9.1~s against 20.5~s) and what it holds idle. Configuration
+keeping them saves (0.2~s against 25.6~s) and what it holds idle. Configuration
 resolves in a fixed order in which only SQL keys can still change at runtime.
 Kyuubi's engine share level and the Kubernetes shuffle story are design points the
 lab could not measure.

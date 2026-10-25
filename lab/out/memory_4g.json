@@ -1,0 +1,12 @@
+{
+ "label": "4g",
+ "jvm_max_mb": 4096.0,
+ "unified_mb": 2277.6,
+ "formula_mb": 2277.6,
+ "objects": {
+  "int[1M] bytes": 4000016,
+  "List<Integer>(1M) bytes": 20613640,
+  "overhead_x": 5.2,
+  "String(10 chars) bytes": 56
+ }
+}

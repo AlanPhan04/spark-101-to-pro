@@ -1,0 +1,38 @@
+{
+ "table_class": "SparkTable",
+ "table_interfaces": [
+  "SupportsDeleteV2",
+  "SupportsMetadataColumns",
+  "SupportsRead",
+  "SupportsRowLevelOperations",
+  "SupportsWrite",
+  "Table",
+  "TruncatableTable"
+ ],
+ "scan_builder_class": "SparkScanBuilder",
+ "scan_builder_interfaces": [
+  "Scan",
+  "ScanBuilder",
+  "SupportsPushDownAggregates",
+  "SupportsPushDownRequiredColumns",
+  "SupportsPushDownV2Filters",
+  "SupportsReportStatistics"
+ ],
+ "scan_class": "SparkBatchQueryScan",
+ "scan_interfaces": [
+  "Scan",
+  "SupportsReportPartitioning",
+  "SupportsReportStatistics",
+  "SupportsRuntimeV2Filtering"
+ ],
+ "catalog_class": "org.apache.iceberg.spark.SparkCatalog",
+ "catalog_interfaces": [
+  "CatalogPlugin",
+  "FunctionCatalog",
+  "ProcedureCatalog",
+  "StagingTableCatalog",
+  "SupportsNamespaces",
+  "TableCatalog",
+  "ViewCatalog"
+ ]
+}

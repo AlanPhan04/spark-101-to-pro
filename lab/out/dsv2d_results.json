@@ -1,0 +1,127 @@
+[
+ {
+  "scan": "dim_product, all 6 columns",
+  "sizeInBytes": 216000000,
+  "rowCount": "Some(2000000)"
+ },
+ {
+  "scan": "dim_product, product_id",
+  "sizeInBytes": 40000000,
+  "rowCount": "Some(2000000)"
+ },
+ {
+  "scan": "dim_product, product_id + category",
+  "sizeInBytes": 80000000,
+  "rowCount": "Some(2000000)"
+ },
+ {
+  "scan": "dim_product, list_price",
+  "sizeInBytes": 16000000,
+  "rowCount": "Some(2000000)"
+ },
+ {
+  "scan": "orders, order_total",
+  "sizeInBytes": 240000000,
+  "rowCount": "Some(30000000)"
+ },
+ {
+  "scan": "orders, all 7 columns",
+  "sizeInBytes": 2520000000,
+  "rowCount": "Some(30000000)"
+ },
+ {
+  "table": "orders",
+  "schema_default_sizes": [
+   [
+    "order_id",
+    20
+   ],
+   [
+    "order_ts",
+    8
+   ],
+   [
+    "product_id",
+    20
+   ],
+   [
+    "customer_id",
+    20
+   ],
+   [
+    "promised_days",
+    4
+   ],
+   [
+    "delivery_days",
+    4
+   ],
+   [
+    "order_total",
+    8
+   ]
+  ]
+ },
+ {
+  "table": "dim_product",
+  "schema_default_sizes": [
+   [
+    "product_id",
+    20
+   ],
+   [
+    "category",
+    20
+   ],
+   [
+    "list_price",
+    8
+   ],
+   [
+    "title",
+    20
+   ],
+   [
+    "brand",
+    20
+   ],
+   [
+    "description",
+    20
+   ]
+  ]
+ },
+ {
+  "table": "dim_date",
+  "schema_default_sizes": [
+   [
+    "date",
+    4
+   ],
+   [
+    "year",
+    4
+   ],
+   [
+    "month",
+    4
+   ],
+   [
+    "day_of_week",
+    20
+   ]
+  ]
+ },
+ {
+  "table_files_bytes": "orders",
+  "bytes": 1077919594
+ },
+ {
+  "table_files_bytes": "dim_product",
+  "bytes": 174221291
+ },
+ {
+  "table_files_bytes": "dim_date",
+  "bytes": 52417
+ }
+]

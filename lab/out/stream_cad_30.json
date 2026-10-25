@@ -1,0 +1,28 @@
+{
+ "trigger_s": 30,
+ "duration_s": 100,
+ "snapshots": 4,
+ "files": 3,
+ "avg_file_kb": 1158.5,
+ "manifests": 3,
+ "rows": 1400000,
+ "summary_keys": {
+  "engine-version": "3.5.2",
+  "added-data-files": "1",
+  "total-equality-deletes": "0",
+  "app-id": "local-1792905555657",
+  "added-records": "600000",
+  "spark.sql.streaming.queryId": "136b8e2a-cd37-4204-8b8e-a757ac61193c",
+  "total-records": "1400000",
+  "spark.app.id": "local-1792905555657",
+  "changed-partition-count": "1",
+  "engine-name": "spark",
+  "total-position-deletes": "0",
+  "added-files-size": "1492321",
+  "total-delete-files": "0",
+  "iceberg-version": "Apache Iceberg 1.6.1 (commit 8e9d59d299be42b0bca9461457cd1e95dbaad086)",
+  "spark.sql.streaming.epochId": "3",
+  "total-files-size": "3475472",
+  "total-data-files": "3"
+ }
+}

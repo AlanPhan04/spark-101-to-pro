@@ -1,0 +1,153 @@
+{
+ "rows": 176000,
+ "distinct": 176000,
+ "lo": 0,
+ "hi": 175999,
+ "snapshots": [
+  {
+   "epoch": "0",
+   "query": "16f4880c",
+   "records": null
+  },
+  {
+   "epoch": "1",
+   "query": "16f4880c",
+   "records": "4000"
+  },
+  {
+   "epoch": "2",
+   "query": "16f4880c",
+   "records": "4000"
+  },
+  {
+   "epoch": "3",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "4",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "5",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "6",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "7",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "8",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "9",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "10",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "11",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "12",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "13",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "14",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "15",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "16",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "17",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "18",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "19",
+   "query": "16f4880c",
+   "records": "20000"
+  },
+  {
+   "epoch": "20",
+   "query": "16f4880c",
+   "records": "8000"
+  },
+  {
+   "epoch": "21",
+   "query": "16f4880c",
+   "records": "4000"
+  },
+  {
+   "epoch": "22",
+   "query": "16f4880c",
+   "records": "4000"
+  },
+  {
+   "epoch": "23",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "24",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "25",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "26",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "27",
+   "query": "16f4880c",
+   "records": "6000"
+  },
+  {
+   "epoch": "28",
+   "query": "16f4880c",
+   "records": "6000"
+  }
+ ]
+}

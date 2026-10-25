@@ -1,0 +1,1 @@
+RESULT java_total=5091651 kryo_total=4189631 java_one=5091651 kryo_one=4189631 rows=100000

@@ -51,19 +51,32 @@ combine, so it never needs this; a \texttt{GROUP BY} always does.
 \end{tabular}
 \end{table}
 
-The specimen's stage-2 shuffle read (\Cref{sec:shape-jobs}) is a
-\texttt{SortMergeJoin} over 200 partitions --- at exactly the bypass
-threshold rather than under it, and sort-merge join needs its input sorted
-by key regardless, so both map-side stages (0 and 1) get
-\texttt{UnsafeShuffleWriter}: no map-side aggregation, Kryo in play, and
-the serialized-sort path is strictly cheaper than a full deserialized sort
-for a plain shuffle-then-join. A \texttt{GROUP BY} feeding a
-\texttt{HashAggregate} instead would disqualify both the bypass and
-serialized writers (aggregation needs the writer to combine values by key
-as it sorts) and fall to \texttt{SortShuffleWriter} regardless of partition
-count. The upshot: a shuffle you did not particularly optimize is not
-necessarily running the expensive general path --- Spark already picks the
-cheapest writer whose preconditions hold for that specific shuffle.
+The lab did not take the table on faith: it read the shuffle handle of every
+exchange in five query shapes at four partition counts, by walking the dependency
+graph of the executed plan (\Cref{fig:shuffle-writer-grid}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{shuffle-writer-grid.pdf}
+  \caption{The writer each SQL shuffle got, in Spark 3.5.2. The choice flips at
+  exactly 200 partitions: up to the bypass threshold every shuffle used the bypass
+  writer; at 201 and above, the serialized (\texttt{UnsafeShuffleWriter}) path. The
+  sort-merge join's third exchange, the single-partition one under the final
+  count, stayed on bypass. No SQL shuffle used the general sort writer.}
+  \label{fig:shuffle-writer-grid}
+\end{figure}
+
+Two findings correct earlier drafts of this book. At 200 partitions --- the default
+and the specimen's count --- the writer is the \emph{bypass} writer, not the
+serialized one: the precondition is \texttt{partitions $\le$ 200}, and the check
+comes first. And a \texttt{GROUP BY} does not fall to the general sort writer: in
+Spark SQL the aggregation happens in \texttt{HashAggregate} operators on either side
+of the exchange, so the shuffle itself has no map-side combine and qualifies for
+bypass or serialized. The sort-based fallback is reached by RDD code that asks for
+map-side aggregation, not by DataFrame queries. A shuffle you did not optimize is
+therefore not running the expensive path; the one knob that moves it between the
+two cheap ones is the partition count, and \Cref{fig:partitions-vs-slots} showed
+that count matters for other reasons.
 
 \section{The map output tracker}
 \label{sec:sched-map-output-tracker}
@@ -103,6 +116,25 @@ scheduler look similar from the UI but are two different components acting
 at two different granularities --- one re-running a whole stage's missing
 map output, the other re-running one task that failed for a reason
 narrower than a lost executor.
+
+\Cref{fig:fetch-failure-stages} in \Cref{ch:debugging} is the DAG scheduler at
+work: after a lost output, the same stages appear with attempts 0, 1 and 2, each
+with only the tasks whose output was missing. The lab also measured what the task
+scheduler costs per task, by running a stage of empty tasks at four sizes on the
+8-slot lab (\Cref{fig:task-scheduling-cost}): about 0.04~ms per task from 5,000 to
+20,000 tasks, 0.09~ms for the first 1,000 (start-up included), and 0.23~ms per
+task at 80,000 --- 18~s for the stage. Scheduling is cheap until the task count is
+in the tens of thousands, then it is not; the cause was not isolated (the driver also
+records an event per task, \Cref{fig:eventlog-anatomy}). This is the per-task cost
+behind the right-hand end of \Cref{fig:partitions-vs-slots}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{task-scheduling-cost.pdf}
+  \caption{Driver-side cost of a stage of empty tasks. Per-task cost is flat at about
+  0.04~ms up to 20,000 tasks and rises sixfold at 80,000.}
+  \label{fig:task-scheduling-cost}
+\end{figure}
 
 \section{RPC and block transfer}
 \label{sec:sched-rpc-transfer}
@@ -160,14 +192,35 @@ one; and \texttt{ANY} means no locality preference at all, the level every
 task can always fall back to. The scheduler will wait briefly
 (\conf{spark.locality.wait}, 3s by default) for a better-locality slot to
 free up before falling back to a worse one. The
-specimen's stage-0 tasks, reading \texttt{orders} directly from GCS, never
-see anything better than \texttt{ANY}: GCS is remote object storage with no
-notion of "the node this byte range lives on," so there is no better level
-for the scheduler to wait for, and it falls straight through. Locality
-still does its job for stage~2's shuffle read, though --- a stage-2 task
-scheduled on the same node as one of its map-side executors reads that
-executor's block over a local network hop rather than a cross-node one,
-still cheaper even though it is not \texttt{PROCESS\_LOCAL}.
+lab counted the level of every task in its event logs (\Cref{tab:sched-locality}).
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}p{6.3cm}rr@{}}
+\toprule
+\textbf{Kind of task (lab, single JVM)} & \textbf{PROCESS\_LOCAL} & \textbf{NODE\_LOCAL} \\
+\midrule
+Iceberg scan (input bytes, no shuffle read) & 7,073 & 0 \\
+shuffle read & 30,616 & 6,610 \\
+shuffle read in cache-heavy applications & 0 & 17,322 \\
+two-host cluster, fetch-failure run (35 tasks) & 18 & 17 \\
+\bottomrule
+\end{tabular}
+\caption{Locality level of tasks recorded in the lab's event logs. No task was
+\texttt{RACK\_LOCAL} or \texttt{ANY}: the lab has one machine, so the cross-node
+levels cannot occur.}
+\label{tab:sched-locality}
+\end{table}
+
+The table shows what a one-machine lab can show and no more. Scan tasks were
+\texttt{PROCESS\_LOCAL} because the only executor is the one process the data would
+be read into; the shuffle-read split between the two levels reflects blocks written
+by the same JVM or by a different task thread. Claim --- not tested: on the
+reference cluster, scan tasks over GCS have no preferred location (object storage
+has no ``node holding this byte range'') and so never wait for a better level, while
+a stage-2 task placed on the same node as a map-side executor reads over a local hop,
+cheaper than a cross-node one.
 
 Speculation (already introduced as a symptom-level fix in
 \Cref{sec:failure-signatures}) is that same task scheduler's mechanism
@@ -179,7 +232,32 @@ at: this is a decision the task scheduler makes about one task, with no
 visibility into or coordination from the DAG scheduler's stage-level view
 --- consistent with the split above, since a straggler is a single task
 problem the task scheduler already owns, not a stage problem that would
-need the DAG scheduler involved at all.
+need the DAG scheduler involved at all. The lab confirmed the one placement rule
+the mechanism implies: a speculative copy is never placed on the host that runs the
+original. With four executors on a single host, \conf{spark.speculation} changed
+nothing (41.6~s both ways); with executors under two host names it cut a 40-second
+straggler to 11.2~s (\Cref{fig:speculation-gantt}).
+
+\section{From symptom to lever}
+\label{sec:sched-levers}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
+\midrule
+want the cheapest shuffle writer & partitions above 200 use the serialized writer & nothing to do: both are cheap; do not size partitions for this & --- \\
+a stage with tens of thousands of tasks is slow to schedule & driver cost per task rises (0.04 to 0.23~ms at 80,000) & fewer, larger partitions (\Cref{fig:partitions-vs-slots}) & less parallelism per stage \\
+stage appears several times in the UI & attempts $>$ 0 with \texttt{FetchFailed} tasks & protect or replicate shuffle output (\Cref{ch:tuning}) & held executors \\
+speculation does nothing & all executors on one host & run executors on several hosts & placement constraints \\
+a tail task keeps the stage open & one task of a stage long after its peers & \conf{spark.speculation} for node stragglers & duplicate compute \\
+\bottomrule
+\end{tabular}
+\caption{The scheduler levers: symptom, evidence, lever, cost.}
+\label{tab:sched-levers}
+\end{table}
 
 \section{Summary}
 \label{sec:sched-summary}

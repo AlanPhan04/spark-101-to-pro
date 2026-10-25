@@ -1,0 +1,1 @@
+{"G1": {"wall": 22.8, "ui_gc_s": 1.8, "pauses": 118, "pause_total_ms": 574, "pause_max_ms": 47}, "Parallel": {"wall": 23.1, "ui_gc_s": 25.4, "pauses": 38, "pause_total_ms": 3407, "pause_max_ms": 835}, "ZGC": {"wall": 27.2, "ui_gc_s": 34.5, "pauses": null, "pause_total_ms": null, "pause_max_ms": null}}
