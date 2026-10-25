@@ -1,1 +1,0 @@
-RESULT {"mode": "plain", "initial": "222", "after_runtime_set": "400", "static_set": "rejected", "executor_memory_in_sparkconf": "5g"}

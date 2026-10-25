@@ -1,0 +1,36 @@
+# Local-only Claude skill (book-genesis) — not part of this repo
+/.claude/skills/book-genesis/
+CLAUDE.md
+spark_memory_tuning.md
+
+# PDFs: only the compiled book and the figure PDFs it embeds are published
+*.pdf
+!book/spark_guide_book.pdf
+!book/images/*.pdf
+
+# Python / editor / LaTeX build leftovers
+__pycache__/
+.vscode/
+book/main.pdf
+book/*.aux
+book/*.log
+book/*.toc
+book/*.bbl
+book/*.bcf
+book/*.blg
+book/*.run.xml
+
+# Lab run state and raw output (the scripts and the JSON/CSV results stay)
+lab/ckpt/
+lab/stream_in/
+lab/jdbc_wh/
+lab/jdbc_catalog.db
+lab/prof/
+lab/events/
+lab/jars/
+lab/warehouse/
+lab/out/*.txt
+lab/out/*_marker
+book/main_pages.txt
+book/cover-concept.html
+lab/out/*.log.*
