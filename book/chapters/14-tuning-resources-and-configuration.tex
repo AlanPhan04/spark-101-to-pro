@@ -2,50 +2,94 @@
 \label{ch:tuning}
 
 \begin{chapterintro}
-This chapter does not hand you a table of recommended settings. It derives an
-executor shape from the memory map in \Cref{ch:execmem} and the shuffle in
-\Cref{ch:shuffle}, and then checks each derivation against a measurement: twelve
-executor shapes running the same stage, eight shuffle-partition counts, four
-dynamic-allocation setups, and four layers of configuration. The numbers come
-from the lab in \Cref{sec:refenv-lab} (one JVM on one machine), so read them as
-shapes of curves and thresholds, not as production sizes. The chapter closes with
-a symptom-to-lever table; the one cluster-manager topic the lab cannot
-exercise, the Kubernetes shuffle story, is marked as such.
+Your job runs, but it is slow, or it writes temporary files to disk, or it dies
+with an out-of-memory error. This chapter shows how to decide how big each worker
+should be and how many pieces to cut the work into. It does not give you a list of
+magic numbers. It gives you a way to work the numbers out, and then shows the
+measurement that proves each one.
+
+All measurements come from the book's lab: one machine, one Spark process
+(\Cref{sec:refenv-lab}). Read them as the \emph{shape} of a curve, such as ``it gets
+faster, then flattens'', not as sizes to copy into production.
 \end{chapterintro}
 
-\section{Executor sizing from the mechanism}
+\section{Five words you need first}
+\label{sec:tuning-words}
+
+Everything in this chapter uses five words. If you know them, skip ahead.
+
+\begin{description}[leftmargin=1.2cm,style=nextline]
+\item[Executor] A worker process that runs part of your job. A cluster has many.
+\item[Core (or slot)] One executor can run several tasks at the same moment. Each
+      \emph{core} is one place where a task can run.
+\item[Task] The smallest unit of work. One task processes one partition.
+\item[Partition] One slice of your data. Ten partitions means ten tasks.
+\item[Spill] When a task needs more memory than it has, it writes temporary data to
+      disk and reads it back later. The job still finishes, but it does extra work.
+\end{description}
+
+\begin{analogy}
+Think of a kitchen. An executor is one kitchen. A core is one cook. The memory is the
+counter space, shared by all the cooks. A partition is one order ticket. If four
+cooks share a small counter, each has little room, and they keep putting half-made
+dishes in the fridge (a spill). Two choices fix that: a bigger counter, or fewer
+cooks. Choosing between them is what \Cref{sec:executor-sizing} is about.
+\end{analogy}
+
+\section{How big should an executor be?}
 \label{sec:executor-sizing}
 
-Sizing an executor is choosing three numbers --- \conf{spark.executor.cores},
-\conf{spark.executor.memory}, \conf{spark.executor.memoryOverhead} --- and each one
-is bounded by a mechanism from an earlier chapter. The cleanest way to see the
-bounds is to hold the work constant and change only the shape.
+You choose three numbers for each executor:
+\conf{spark.executor.cores} (how many cooks),
+\conf{spark.executor.memory} (how big the counter is), and
+\conf{spark.executor.memoryOverhead} (extra space outside the counter that Spark
+does not manage). The memory chapter (\Cref{ch:execmem}) explained what the counter
+is made of. Here we see how it behaves when we change the numbers.
 
-\paragraph{The experiment.}
-One stage, twelve shapes. The stage hash-partitions the 30-million-row
-\texttt{orders} table by \texttt{customer\_id} into 8 shuffle partitions and sorts
-each partition by \texttt{order\_ts} for a window function; with AQE off, every
-partition holds about 3.75 million rows. The lab runs Spark in local mode, so the
-single JVM \emph{is} the executor: the heap is the executor heap and the core count
-is the slot count. The grid is heap $\in \{1, 2, 4\}$~GB by cores $\in \{1, 2, 4,
-8\}$. \Cref{fig:spill-heatmap} shows what happened.
+\subsection*{The experiment}
+
+We took one stage and ran it twelve times, each time with a different executor
+shape. The stage is a window function over the 30-million-row \texttt{orders}
+table. Spark splits the rows by \texttt{customer\_id} into 8 partitions and sorts
+each partition by \texttt{order\_ts}, so each partition holds about 3.75 million rows.
+
+The shapes are every combination of three heap sizes (1, 2 and 4~GB) and four core
+counts (1, 2, 4 and 8). In the lab, Spark runs as a single process, so that
+process is the executor. \Cref{fig:spill-heatmap} shows the result.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{spill-heatmap.pdf}
-  \caption{The same stage under twelve executor shapes. The spill pattern follows
-  a diagonal: it appears whenever the execution memory per concurrent task falls
-  below a threshold, whichever of heap or cores moved it there. Each cell is one
-  run.}
+  \caption{The same stage under twelve executor shapes. Green means no spill, red
+  means spill. The red cells form a diagonal: a bigger heap or fewer cores moves
+  you out of it. Each cell is one run.}
   \label{fig:spill-heatmap}
 \end{figure}
 
-The diagonal is the memory model from \Cref{sec:mem-model} made visible. The
-unified pool is $(\text{heap} - 300~\text{MiB}) \times 0.6$ (\conf{spark.memory.fraction}),
-and the lab confirms the formula on all three heaps (\Cref{tab:tuning-pools}). That
-pool is shared by the tasks running at the same moment, so each task's fair share is
-the pool divided by the core count --- and that, not the heap on its own, is what a
-sort or a hash table runs into.
+Read the picture first. More memory removes spills. More cores brings them back. So
+the thing that matters is not the memory alone, and not the cores alone. It is the
+memory \emph{each running task gets}.
+
+\subsection*{Why: the memory each task gets}
+
+Spark does not let a task use the whole heap. It sets aside a shared pool for
+sorting, joining and aggregating. The size of that pool is
+
+\[
+\text{pool} = (\text{heap} - 300~\text{MiB}) \times 0.6 .
+\]
+
+The 0.6 is \conf{spark.memory.fraction}. The lab read the pool size from Spark at
+start-up, and the formula matched on all three heaps
+(\Cref{tab:tuning-pools}, second column).
+
+All tasks that run at the same moment share this pool. So each task's fair share is
+
+\[
+\text{share per task} = \text{pool} \div \text{cores}.
+\]
+
+\Cref{tab:tuning-pools} computes it for all twelve shapes.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -61,128 +105,172 @@ sort or a hash table runs into.
 4 GB & 2388 MB & 2388 & 1194 & 597 & 298 \\
 \bottomrule
 \end{tabular}
-\caption{The unified pool read from Spark's memory manager at start-up (it equals
-$(\text{heap} - 300~\text{MiB}) \times 0.6$), and the share each concurrent task
-gets. Spilling cells in \Cref{fig:spill-heatmap} are exactly the ones below
-roughly 300--450~MB.}
+\caption{The memory pool Spark reported at start-up, and the share each running
+task gets. The cells that spilled in \Cref{fig:spill-heatmap} are exactly the ones
+below roughly 300--450~MB.}
 \label{tab:tuning-pools}
 \end{table}
 
-\Cref{fig:spill-vs-share} replots the twelve runs against that share. Every shape
-with 298~MB per task or less spilled; every shape with 456~MB or more did not. The
-stage's largest tasks therefore need somewhere between 300 and 450~MB of execution
-memory --- the figure that a sizing exercise has to find, and the reason the
-heap alone is the wrong thing to tune.
+Now plot the twelve runs against that share (\Cref{fig:spill-vs-share}). They
+separate cleanly. Every run with 298~MB per task or less spilled. Every run with
+456~MB or more did not.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.9\linewidth]{spill-vs-share.pdf}
-  \caption{Spill against execution memory per task. The twelve runs separate cleanly
-  at a single threshold, not by heap size and not by core count.}
+  \caption{Disk spill against memory per task. Red dots spilled, green dots did not.
+  One threshold, between 298 and 456~MB, splits all twelve runs. It does not depend
+  on heap size or on core count separately.}
   \label{fig:spill-vs-share}
 \end{figure}
 
-\paragraph{What did the spilling cost?} Less than the cores bought.
-\Cref{fig:cores-time-gc} shows wall-clock time falling from 55--57 seconds on one
-core to 15.6--16.9 seconds on eight, almost independent of the heap, even though the
-small heaps spilled 0.4--0.6~GB to disk along the way. The 2~GB heap at four cores
-spilled and took 21.9~s; the 4~GB heap at four cores did not and took 20.3~s, an
-8\% difference from one run each. On a laptop SSD with the operating system's page
-cache absorbing the spill files, a spill is cheap; on a cluster with network-attached
-local disks it may not be, and this lab cannot say. What does grow steadily with
-cores is garbage-collection time (right panel: 0.16~s to 1.0--1.8~s summed over all
-tasks), because more concurrent tasks hold more live rows in the same heap.
+So this stage needs somewhere between 300 and 450~MB for its biggest task. That is
+the number a sizing exercise looks for. It is also why ``give it more heap'' is
+often the wrong first move: if you also add cores, the share per task does not move.
+
+\begin{note}
+\textbf{In one sentence:} a task spills when
+\texttt{(heap $-$ 300 MiB) $\times$ 0.6 $\div$ cores} is smaller than what its
+biggest piece of work needs.
+\end{note}
+
+\subsection*{What did spilling cost?}
+
+Less than you might fear, and less than the cores bought.
+\Cref{fig:cores-time-gc} shows the run time falling from 55--57 seconds on one core
+to 15.6--16.9 seconds on eight. The three heap sizes lie almost on top of each
+other, even though the small heaps spilled 0.4--0.6~GB to disk.
+
+A direct comparison: the 2~GB heap with four cores spilled and took 21.9~s. The
+4~GB heap with four cores did not spill and took 20.3~s. That is an 8\% difference
+from one run each, which is within normal noise.
+
+Be careful with this result. The lab uses a laptop SSD, and the operating system
+caches the spill files in memory, so spilling is cheap here. On a cluster whose
+local disks sit across a network, it may not be cheap. This lab cannot tell you.
+
+One cost \emph{does} grow steadily with cores: garbage collection (GC). GC is Java
+cleaning up memory it no longer needs, and it pauses your tasks while it works. The
+right panel shows total GC time growing from 0.16~s to 1.0--1.8~s as cores go from 1
+to 8. More tasks running at once means more live data in the same heap, so the
+cleaner has more to do.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{cores-time-gc.pdf}
-  \caption{More slots buy time; more slots in the same heap cost GC. The rings mark
-  runs that spilled. The three heaps lie almost on top of each other in the left
-  panel: for this stage, spilling to a fast disk cost less than the run-to-run noise
-  one would expect between single runs.}
+  \caption{Left: more cores make the stage faster, and the three heap sizes behave
+  almost the same. Right: more cores also mean more GC time. Rings mark runs that
+  spilled. For this stage, spilling to a fast disk cost less than the noise between
+  single runs.}
   \label{fig:cores-time-gc}
 \end{figure}
 
-\textbf{Cores per executor} therefore trades two things: tasks run concurrently
-(time falls) against the share each gets of the pool (spill appears) and the heap
-they pollute together (GC grows). Folklore sets a ceiling of about five cores per
-executor for reasons tied to the storage client; the lab has no remote storage, so
-that is untested here --- verify on your cluster by comparing scan-stage time at five
-and eight cores on the same data. The memory-side reason to stop early is the one
-measured above.
+\subsection*{Putting it together: three rules}
 
-\textbf{Executor memory} is sized backward from the largest per-task need. For the
-specimen's reference cluster (4 cores per executor, \Cref{app:refenv}) the lab
-stage's 300--450~MB per task means a unified pool of $4 \times (300\ \text{to}\ 450)
-= 1.2\ \text{to}\ 1.8$~GB, hence a heap of $1.2/0.6 + 0.3 \approx 2.3$ to $3.3$~GB.
-\conf{spark.executor.memory}\,=\,\texttt{4g} sits above that range with headroom for
-the storage side of the unified pool (\Cref{ch:caching}) and is the defensible first
-choice; it is a prediction for the \emph{reference} data, and the same arithmetic
-with your own largest-task need replaces the 300--450 figure.
+\textbf{1. Cores.} More cores make the job faster, until memory per task runs short
+or GC grows too much. You are trading three things: speed, the share each task gets,
+and GC. A common rule of thumb says ``use at most five cores per executor'' because
+of how storage clients behave. The lab has no remote storage, so we did not test it.
+Check on your own cluster by comparing the scan time at five and at eight cores on
+the same data.
 
-\textbf{Memory overhead} (\conf{spark.executor.memoryOverhead}, the greater of 10\%
-of executor memory or 384~MB) covers everything outside the heap: Tungsten off-heap
-pages if enabled, thread stacks, metaspace, and PySpark's worker processes. The
-formula is a floor, not a measurement of \emph{your} workload. When a container is
-killed with no Java exception anywhere, the overhead was the number that was too
-small; \Cref{sec:failure-signatures} reproduces that failure on purpose.
+\textbf{2. Memory.} Work backwards from the biggest task's need. For the book's
+reference cluster (4 cores per executor, \Cref{app:refenv}), the lab stage needs
+300--450~MB per task:
+\begin{enumerate}[nosep]
+\item Pool needed: $4 \times (300 \text{ to } 450) = 1.2$ to $1.8$~GB.
+\item Heap needed: $1.2 \div 0.6 + 0.3 \approx 2.3$~GB, up to $1.8 \div 0.6 + 0.3 = 3.3$~GB.
+\item So \conf{spark.executor.memory}\,=\,\texttt{4g} sits above the range, with
+      room left for caching (\Cref{ch:caching}). It is a sensible first guess.
+\end{enumerate}
+This is a prediction for the \emph{reference} data. For your job, replace
+``300 to 450'' with your own biggest-task need.
+
+\textbf{3. Overhead.} \conf{spark.executor.memoryOverhead} is the extra memory
+outside the heap. Its default is the larger of 10\% of executor memory or 384~MB. It
+covers thread stacks, class metadata, off-heap memory if you turned it on, and
+PySpark's worker processes. The default is a floor, not a measurement of your job.
+If a container is killed and \emph{no Java error appears anywhere}, the overhead was
+too small. \Cref{sec:failure-signatures} reproduces that failure on purpose.
 
 \begin{tip}
-On Kubernetes the pod's memory limit is executor memory plus overhead plus any
-off-heap size. Exceeding it kills the pod from outside the JVM, so the Spark log
-shows nothing --- the evidence is in the pod's status, not in the executor's.
+On Kubernetes the pod's memory limit is executor memory, plus overhead, plus any
+off-heap size. If the process goes over, the operating system kills the whole pod
+from outside Java, so the Spark log says nothing. Look at the pod's status, not at
+the executor's log.
 \end{tip}
 
-\section{Parallelism: partitions against slots}
+\section{How many partitions?}
 \label{sec:tuning-parallelism}
 
-\conf{spark.default.parallelism} governs RDD operations with no other hint
-(defaulting to the total core count); for DataFrame and SQL workloads
-\conf{spark.sql.shuffle.partitions} (\Cref{sec:shuffle-sizing},
-\Cref{sec:aqe-coalesce}) is the number that matters. It is also a resource-sizing
-lever, because it decides how many of the executors' task slots a reduce stage can
-fill. \Cref{fig:partitions-vs-slots} sweeps it from 2 to 5000 on the lab's 8 slots,
-with AQE off, for two stages with opposite bottlenecks.
+Executors give you slots. Partitions give you the work to put in them. If there are
+fewer partitions than slots, some slots sit idle. If there are far more partitions
+than slots, you waste time starting tiny tasks.
+
+For DataFrame and SQL jobs, the setting that matters is
+\conf{spark.sql.shuffle.partitions} (see \Cref{sec:shuffle-sizing} and
+\Cref{sec:aqe-coalesce}). It sets how many partitions Spark creates after a shuffle.
+(\conf{spark.default.parallelism} is the similar setting for the older RDD API; it
+defaults to the total core count.)
+
+We tested it from 2 to 5000 partitions on the lab's 8 slots, with AQE off, on two
+different stages (\Cref{fig:partitions-vs-slots}). The left stage is limited by
+reading input. The right stage is limited by the shuffle.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{partitions-vs-slots.pdf}
-  \caption{The same sweep on two stages. When the scan dominates (left) the
-  shuffle partition count is nearly invisible until it reaches the thousands. When
-  the shuffle stage does the work (right) too few partitions leave slots idle and
-  too many pay a per-task cost: a hyperbola with a flat bottom.}
+  \caption{The same sweep on two stages. Left: when reading dominates, the partition
+  count hardly matters until it reaches the thousands. Right: when the shuffle does
+  the work, too few partitions leave slots idle and too many add per-task cost. The
+  curve drops, flattens, then rises.}
   \label{fig:partitions-vs-slots}
 \end{figure}
 
-On the right, 2 partitions leave six of eight slots idle and take 35.9~s; 8
-partitions (one wave) take 10.3~s; the bottom of the curve is 8.8~s at 40, and
-the stage slows again to 15.7~s at 5000 --- the same time as 4 partitions, for the
-opposite reason. On the left the scan stage (about 32 input tasks) does most of
-the work, so the shuffle partition count hardly matters until 1000 and 5000
-partitions add scheduling cost. The practical rule is the one \Cref{ch:shuffle}
-derived from bytes, now with its other boundary: a partition count at or above the
-slot count, and small enough that per-task overhead stays negligible. AQE's
-coalescing (\Cref{ch:aqe}) automates the upper boundary; nothing automates the lower
-one if the input to the shuffle is genuinely small.
+On the right-hand stage:
+\begin{itemize}[nosep]
+\item \textbf{2 partitions:} six of the eight slots do nothing. 35.9~s.
+\item \textbf{8 partitions} (one task per slot): 10.3~s.
+\item \textbf{40 partitions:} 8.8~s, the best result.
+\item \textbf{5000 partitions:} 15.7~s, as slow as 4 partitions, but for the opposite
+      reason: Spark spends its time starting tasks.
+\end{itemize}
+
+On the left-hand stage, the input scan (about 32 tasks) does most of the work, so the
+shuffle count barely matters until 1000 and 5000, where scheduling cost shows up.
+
+\textbf{The rule:} use at least as many partitions as slots, and not so many that
+each task is tiny. AQE (\Cref{ch:aqe}) can merge small partitions for you, which
+protects the upper side. Nothing protects the lower side if the data going into the
+shuffle is truly small.
 
 \section{Dynamic allocation}
 \label{sec:dynamic-allocation}
 
-A fixed executor count is either wasted (idle executors between jobs in a long-lived
-session) or insufficient (a burst of work with no room to grow).
-\conf{spark.dynamicAllocation.enabled} lets Spark request and release executors
-against the cluster manager as work arrives and drains: it adds executors when the
-scheduler's pending-task backlog persists past
-\conf{spark.dynamicAllocation.schedulerBacklogTimeout} (1~s default), and removes an
-executor once it has been idle past
-\conf{spark.dynamicAllocation.executorIdleTimeout} (60~s default), bounded by
-\conf{spark.dynamicAllocation.minExecutors} and \texttt{.maxExecutors}.
+A fixed number of executors has two problems. In a long-lived session, executors sit
+idle between jobs and waste money. In a burst of work, there is no room to grow.
 
-The one condition that makes this safe is the failure mode of
-\Cref{sec:failure-signatures}: an executor holding shuffle files that a later stage
-still needs cannot be released. Spark refuses to start otherwise. With
-dynamic allocation on and nothing protecting shuffle data, the lab's application
-died at start-up:
+\conf{spark.dynamicAllocation.enabled} lets Spark rent more executors when work
+piles up and give them back when it is quiet:
+\begin{itemize}[nosep]
+\item It \textbf{adds} executors when tasks have been waiting for more than
+      \conf{spark.dynamicAllocation.schedulerBacklogTimeout} (1~s by default).
+\item It \textbf{removes} an executor that has been idle longer than
+      \conf{spark.dynamicAllocation.executorIdleTimeout} (60~s by default).
+\item It stays between \conf{spark.dynamicAllocation.minExecutors} and
+      \texttt{.maxExecutors}.
+\end{itemize}
+
+\subsection*{The one danger: shuffle files}
+
+After a shuffle, the data sits in files on the executors that wrote it. Later stages
+read those files. If Spark gives such an executor back, the files go with it, and the
+next stage fails or has to recompute everything.
+
+So Spark will not start dynamic allocation unless you tell it how to protect that
+data. In the lab, we turned dynamic allocation on without doing so, and the
+application refused to start (\Cref{lst:tuning-da-error}). The message lists the
+options: an external shuffle service, shuffle tracking, or decommissioning.
 
 \begin{lstlisting}[language=text,style=plan,caption={Dynamic allocation without a plan for shuffle data (Spark 3.5.2, standalone cluster)},captionpos=b,label=lst:tuning-da-error]
 org.apache.spark.SparkException: Dynamic allocation of executors requires
@@ -194,23 +282,38 @@ spark.storage.decommission.shuffleBlocks.enabled. 4) (Experimental)
 configuring spark.shuffle.sort.io.plugin.class ...
 \end{lstlisting}
 
-\Cref{fig:dynalloc-timeline} shows what shuffle tracking
-(\conf{spark.dynamicAllocation.shuffleTracking.enabled}, on the lab cluster set
-explicitly) does in practice. The lab ran a standalone master and one four-core
-worker, executors of one core each, a maximum of four, and a 5-second idle timeout.
-Each run executes a job, idles for 25~s, and then runs the \emph{same} DataFrame
-again, so that a surviving shuffle can be reused. (A first version of this
-experiment built a new DataFrame for the second job; Spark then recomputed the map
-stage whatever happened to the executors, and the comparison measured nothing.)
+\subsection*{What shuffle tracking does}
+
+Shuffle tracking (\conf{spark.dynamicAllocation.shuffleTracking.enabled}) is the
+simplest option. Spark keeps any executor that still holds shuffle files that a
+later job might use.
+
+We tested it on a small standalone cluster: one worker with four cores, executors
+of one core each, a maximum of four executors, and a 5-second idle timeout. Each run
+did the same three steps: run a job, wait 25~seconds, then run the \emph{same}
+DataFrame again, so that the first job's shuffle files could be reused.
+\Cref{fig:dynalloc-timeline} shows the number of executors over time.
+
+\begin{lstlisting}[language=text,style=plan,caption={The shape of the dynamic-allocation test},captionpos=b,label=lst:tuning-da-steps]
+job 1:  run the query                   -> leaves shuffle files
+wait:   25 seconds, no work             -> executors may be released
+job 2:  run the SAME DataFrame again    -> reuse files, or recompute?
+\end{lstlisting}
+
+\begin{note}
+Our first version of this test built a \emph{new} DataFrame for job 2. Spark then
+recomputed the first stage no matter what happened to the executors, so the test
+measured nothing. Reusing the same DataFrame is what makes the comparison fair.
+\end{note}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{dynalloc-timeline.pdf}
-  \caption{Executors over time, three configurations. Left: job~1 leaves shuffle
-  files, and tracking keeps all four executors through the idle period. Middle: the
-  same, with a tracking timeout of 8~s; the executors holding the files are
-  released and the second job has to ask for them again. Right: a job that leaves
-  no shuffle files, so every executor is released after its idle timeout.}
+  \caption{Number of executors over time, in three setups. Left: job~1 leaves
+  shuffle files, and tracking keeps all four executors during the wait. Middle: the
+  same, but the tracking timeout is 8~s, so the executors are released and job~2
+  has to request them again. Right: job~1 leaves no shuffle files, so each executor
+  is released after its idle timeout.}
   \label{fig:dynalloc-timeline}
 \end{figure}
 
@@ -219,58 +322,63 @@ stage whatever happened to the executors, and the comparison measured nothing.)
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{@{}P{4.4cm}P{3.4cm}P{3.1cm}P{3.1cm}@{}}
 \toprule
-\textbf{Setup} & \textbf{Executors in the idle period} & \textbf{Job 2 duration} & \textbf{Why} \\
+\textbf{Setup} & \textbf{Executors during the wait} & \textbf{Job 2 duration} & \textbf{Why} \\
 \midrule
-tracking on, shuffle files exist & 4 (held) & 0.2~s & the map stage is skipped; its output is still on the executors \\
-tracking on, timeout 8~s & 0 after about 13~s & 25.6~s & executors re-requested; map stage recomputed \\
+tracking on, shuffle files exist & 4 (held) & 0.2~s & the first stage is skipped; its output is still on the executors \\
+tracking on, timeout 8~s & 0 after about 13~s & 25.6~s & executors requested again; first stage recomputed \\
 no shuffle files left & 0 & (no shuffle stage) & nothing to protect; released at the idle timeout \\
 tracking off, no external service & --- & --- & application refuses to start (\Cref{lst:tuning-da-error}) \\
 \bottomrule
 \end{tabular}
-\caption{What dynamic allocation did in each lab setup. The first two rows run the
-same job; the difference, 0.2~s against 25.6~s, is the price of letting shuffle-holding executors go.}
+\caption{What dynamic allocation did in each setup. The first two rows run the same
+job. The difference, 0.2~s against 25.6~s, is the price of letting go of the
+executors that hold shuffle files.}
 \label{tab:tuning-da}
 \end{table}
 
-Tracking makes scale-down conservative: Spark keeps an executor while it holds
-shuffle output that a live job or a re-run could use, and drops it only after
-\conf{spark.dynamicAllocation.shuffleTracking.timeout} (infinite by default). The
-price is visible in the left panel: four executors sit idle for 25~seconds because
-their files might be needed again --- and the benefit is a second job that
-finishes in 0.2~s because its map stage is skipped, compared to 25.6~s when the
-executors are let go and the stage recomputed on freshly requested ones. An external shuffle service removes the
-price by keeping the files servable without the executor; the lab ran no external
-service, so that statement rests on the Spark documentation and the mechanism in
+There is a trade here. With tracking, four executors sit idle for 25~seconds
+because their files might be needed again. In exchange, job~2 finishes in 0.2~s,
+because its first stage is skipped. Without tracking, the executors are released and
+job~2 takes 25.6~s to rebuild everything. By default the tracking timeout is
+infinite (\conf{spark.dynamicAllocation.shuffleTracking.timeout}), which is the
+safest and the most wasteful setting.
+
+An \emph{external shuffle service} avoids the trade: it serves shuffle files
+without the executor, so the executor can leave. The lab did not run one, so that
+claim rests on the Spark documentation and the mechanism in
 \Cref{sec:shuffle-external}, not on a measurement.
 
 \section{The external and push-based shuffle service}
 \label{sec:shuffle-external}
 
-Without an external shuffle service, a reduce task fetches shuffle blocks directly
-from the executor that wrote them (\Cref{sec:shuffle-write}) --- the dependency that
-dynamic allocation has to work around, and the one that turns a premature executor
-removal into a \conf{FetchFailedException}. \conf{spark.shuffle.service.enabled}
-moves block serving out of the executor JVM into a separate long-lived process, so
-shuffle data stays servable after the executor that wrote it is gone and scale-down
-carries no data-loss risk. Push-based shuffle (\Cref{sec:shuffle-push}) builds on
-the same external service to merge blocks on the reduce side.
+Normally a reduce task fetches shuffle files directly from the executor that wrote
+them (\Cref{sec:shuffle-write}). That is the dependency dynamic allocation has to
+work around. If the executor is removed too early, the fetch fails with a
+\conf{FetchFailedException}.
+
+\conf{spark.shuffle.service.enabled} moves file serving into a separate, long-lived
+process. The shuffle data stays available after the executor that wrote it is gone,
+so scaling down no longer risks losing data. Push-based shuffle
+(\Cref{sec:shuffle-push}) builds on the same service to merge blocks before the
+reduce side asks for them.
 
 \begin{warning}
-Claim --- from the Spark documentation, not tested in the lab: on YARN the external
-shuffle service is a NodeManager auxiliary service; on Kubernetes there is no such
-service, and dynamic allocation there relies on shuffle tracking (above) or on
-decommissioning. Before relying on \conf{spark.shuffle.service.enabled} on a
-Kubernetes cluster, confirm from the executor logs that a shuffle service endpoint
-exists. Setting the key with nothing listening produces fetch failures that look
-exactly like the problem it was meant to prevent.
+This is from the Spark documentation and was \emph{not tested} in the lab. On YARN
+the external shuffle service runs inside the NodeManager. On Kubernetes there is no
+such service, and dynamic allocation relies on shuffle tracking (above) or on
+decommissioning. Before you set \conf{spark.shuffle.service.enabled} on Kubernetes,
+confirm from the executor logs that a shuffle service is there. If you set
+the key and nothing is listening, you get fetch failures that look exactly like the
+problem you were trying to avoid.
 \end{warning}
 
-\section{Configuration precedence and profiles}
+\section{Where a setting comes from}
 \label{sec:tuning-precedence}
 
-A key can be set in more than one place, and Spark resolves a conflict by a fixed
-order. The lab set the same key --- \conf{spark.sql.shuffle.partitions} --- in every
-layer and asked the live session which value it saw (\Cref{tab:tuning-precedence}).
+Have you ever changed a setting and seen no effect? A setting can be given in
+several places, and Spark follows a fixed order when they disagree. We set the same
+key, \conf{spark.sql.shuffle.partitions}, in every place, one after another, and
+asked the running session which value it saw (\Cref{tab:tuning-precedence}).
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -286,26 +394,34 @@ the above, then \texttt{spark.conf.set} on the running session & 400 & --- \\
 \texttt{spark.conf.set("spark.executor.memory", ...)} on the running session & rejected & --- \\
 \bottomrule
 \end{tabular}
-\caption{The value a session reported after each layer was added. Each layer
-overrides the one above it in the table; static settings such as executor memory
-cannot be changed once the application has started.}
+\caption{The value the session reported after each place was added. Each row
+overrides the one above it. Settings fixed at start-up, such as executor memory,
+cannot be changed once the application is running.}
 \label{tab:tuning-precedence}
 \end{table}
 
-The order is therefore: a runtime \texttt{SET} for SQL settings, then values set in
-application code, then \texttt{--conf} flags, then \conf{spark-defaults.conf},
-then the built-in default. The code layer in the experiment set only the SQL key,
-so the memory column carries the \texttt{--conf} value forward unchanged. The rejected last row is
-the practical rule: only SQL configuration is changeable mid-session. A value that
-looks ignored is usually overridden from a higher layer than the one you edited, and
-\conf{spark.conf.get(key)} in the running session reports the value actually in
-effect --- faster than re-reading files.
+From strongest to weakest, the order is:
+\begin{enumerate}[nosep]
+\item \texttt{spark.conf.set} or \texttt{SET} on the running session (SQL settings only),
+\item values set in your application code,
+\item \texttt{--conf} flags on \texttt{spark-submit},
+\item \conf{spark-defaults.conf},
+\item Spark's built-in default.
+\end{enumerate}
+
+The code layer in our test set only the SQL key, so the memory column carries the
+\texttt{--conf} value forward.
+
+The last row of the table is the practical lesson: only SQL settings can change
+while the application runs. If a value looks ignored, something stronger in the list
+is probably overriding the one you edited. To see which value is really in effect,
+ask the session: \conf{spark.conf.get(key)}. That is faster than re-reading files.
 
 \section{From symptom to lever}
 \label{sec:tuning-levers}
 
-\Cref{tab:tuning-levers} collects the chapter's levers with the evidence that tells
-you which one applies and what it costs.
+\Cref{tab:tuning-levers} puts the chapter's advice in one place. Start from what you
+see (the symptom), check the evidence, then use the lever, knowing its cost.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -314,45 +430,51 @@ you which one applies and what it costs.
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
-sort or hash spills & \emph{Spill} columns in the stage page, only on some tasks & unified pool $\div$ cores below the largest per-task need: raise heap or lower cores (\Cref{fig:spill-vs-share}) & memory per executor, or fewer slots \\
+sort or hash spills & \emph{Spill} columns in the stage page, only on some tasks & pool $\div$ cores is below the biggest task's need: raise heap or lower cores (\Cref{fig:spill-vs-share}) & memory per executor, or fewer slots \\
 many idle slots in a shuffle stage & stage has fewer tasks than slots (2 partitions on 8 slots took 3.5$\times$ longer than 8) & raise shuffle partitions to at least the slot count & scheduling cost beyond a few thousand \\
-GC time grows with cores & GC column in the executors summary & fewer cores per executor, or more heap & slower per-executor parallelism \\
+GC time grows with cores & GC column in the executors summary & fewer cores per executor, or more heap & less parallelism per executor \\
 idle executors held for minutes & timeline of executors vs jobs (\Cref{fig:dynalloc-timeline}) & lower \conf{shuffleTracking.timeout} & recompute if the files are needed \\
 application will not start with dynamic allocation & the exception in \Cref{lst:tuning-da-error} & enable shuffle tracking, or an external service & held executors \\
-a setting seems ignored & \texttt{spark.conf.get} differs from the file & find the higher layer (\Cref{tab:tuning-precedence}) & none \\
+a setting seems ignored & \texttt{spark.conf.get} differs from the file & find the stronger place (\Cref{tab:tuning-precedence}) & none \\
 \bottomrule
 \end{tabular}
 \caption{The tuning levers of this chapter: symptom, evidence, lever, cost.}
 \label{tab:tuning-levers}
 \end{table}
 
-\section{Summary}
+\section{What to remember}
 \label{sec:tuning-summary}
 
-An executor's three sizes each trace to a mechanism: the heap bounds the unified
-pool as $(\text{heap} - 300~\text{MiB}) \times 0.6$; that pool divided by the cores is
-the share each concurrent task spills against, and in the lab the threshold sat
-between 298 and 456~MB per task; the overhead covers everything outside the heap.
-Cores bought time (55~s to 16~s from one to eight) and cost GC; spilling to a fast
-local disk cost far less than the cores returned. The shuffle partition count has a
-lower boundary set by the slot count and an upper one set by task overhead, with a
-flat bottom in between. Dynamic allocation is safe only when something protects
-shuffle data; tracking does so by keeping executors, and the lab measured what
-keeping them saves (0.2~s against 25.6~s) and what it holds idle. Configuration
-resolves in a fixed order in which only SQL keys can still change at runtime.
-The Kubernetes shuffle story is a design point the lab could not measure.
+\begin{itemize}
+\item \textbf{Memory per task is what matters.} Pool $= (\text{heap} - 300~\text{MiB})
+      \times 0.6$; share $=$ pool $\div$ cores. In the lab, tasks spilled below about
+      300--450~MB.
+\item \textbf{Cores buy speed and cost GC.} From one to eight cores the stage went
+      from 55~s to 16~s. Spilling to a fast local disk cost much less than the cores
+      returned.
+\item \textbf{Partitions need a floor and a ceiling.} At least the slot count, and not
+      so many that task start-up dominates. The best point was a flat range in the
+      middle.
+\item \textbf{Dynamic allocation needs shuffle protection.} Tracking keeps executors
+      alive: 0.2~s for job~2 against 25.6~s when they were released, at the price of
+      holding idle executors.
+\item \textbf{Settings come from several places.} Only SQL settings can change at
+      runtime. When in doubt, ask \conf{spark.conf.get}.
+\item \textbf{Not measured here:} the Kubernetes shuffle story. It is a design point
+      we could not test on one machine.
+\end{itemize}
 
 \exercisehead
 \begin{exercises}
-\item Pick a stage of your own that spills. From its task-level metrics
-      (\Cref{sec:reading-metrics}) read the largest task's memory use, compute the
-      unified pool per concurrent task, and predict whether halving the cores or
-      doubling the heap removes the spill. Then test the prediction.
-\item Repeat the shuffle-partition sweep of \Cref{fig:partitions-vs-slots} on a
-      stage of your own with AQE off. Where is the bottom of your curve relative to
-      the slot count?
-\item Run a job, idle for longer than \conf{spark.dynamicAllocation.executorIdleTimeout},
-      and run a second job that reuses the first job's shuffle. Compare the second
-      job's duration with shuffle tracking on, with a short tracking timeout, and
-      (on a cluster that has one) with an external shuffle service.
+\item Pick a stage of your own that spills. In the stage page, find the biggest
+      task's memory use (\Cref{sec:reading-metrics}). Work out the pool per running
+      task, and predict whether halving the cores or doubling the heap removes the
+      spill. Then try it.
+\item Repeat the partition sweep of \Cref{fig:partitions-vs-slots} on one of your
+      stages with AQE off. Where is the bottom of your curve compared to your slot
+      count?
+\item Run a job, wait longer than \conf{spark.dynamicAllocation.executorIdleTimeout},
+      then run a second job that reuses the first job's shuffle. Compare job~2's
+      time with shuffle tracking on, with a short tracking timeout, and (if your
+      cluster has one) with an external shuffle service.
 \end{exercises}
