@@ -50,7 +50,7 @@ instead, the columns it reads in square brackets after the table name, and
 \texttt{RuntimeFilters} beside them. The meaning is the same; the spelling
 differs.
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={The specimen's Iceberg scan node (\texttt{EXPLAIN}, one line wrapped)},captionpos=b,label=lst:pruning-scan-node]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={The specimen's Iceberg scan node (\texttt{EXPLAIN}, one line wrapped)},captionpos=b,label=lst:pruning-scan-node]
 BatchScan lab.db.orders[order_ts, product_id, promised_days, delivery_days]
   lab.db.orders (branch=null)
   [filters=order_ts IS NOT NULL, order_ts >= 1772323200000000,
@@ -299,7 +299,7 @@ read. The settings the lab turned on were
 \conf{spark.sql.requireAllClusterKeysForCoPartition} set to \texttt{false}; the
 lab did not test which of the three can be left at its default.
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={A join over two bucketed Iceberg tables: no \texttt{Exchange} under the join (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:pruning-bucketed-plan]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={A join over two bucketed Iceberg tables: no \texttt{Exchange} under the join (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:pruning-bucketed-plan]
 +- SortMergeJoin [customer_id], [customer_id], Inner
    :- Sort [customer_id ASC NULLS FIRST]
    :  +- BatchScan lab.db.orders_b[customer_id]
@@ -451,12 +451,13 @@ prune to that one leaf field, without reading its siblings. This is
 It is visible in the scan's schema as the struct type narrowed to the accessed
 fields, not dropped whole:
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={The read schema before and after nested pruning (shape only)},captionpos=b,label=lst:pruning-readschema]
--- query: SELECT event.location.city FROM events
-ReadSchema: struct<event:struct<location:struct<city:string>>>    -- pruned
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={The read schema before and after nested pruning (shape only)},captionpos=b,label=lst:pruning-readschema]
+-- SELECT event.location.city FROM events
+ReadSchema: struct<event:struct<location:struct<city:string>>>   -- pruned
 
--- query: SELECT my_udf(event) FROM events      (whole struct passed to a UDF)
-ReadSchema: struct<event:struct<location:struct<city:string,lat:double,lon:double>,user:struct<...>,...>>
+-- SELECT my_udf(event) FROM events    (whole struct passed to a UDF)
+ReadSchema: struct<event:struct<location:struct<city:string,
+                    lat:double,lon:double>,user:struct<...>,...>>
 \end{lstlisting}
 % CAPTURE: the lab has no nested table yet; add one to lab/gen_data.py and capture both scans
 

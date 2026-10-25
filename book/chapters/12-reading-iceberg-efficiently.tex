@@ -118,11 +118,11 @@ The second layer works for any column, but only if the statistics can tell files
 apart. The per-file minimum and maximum of \texttt{product\_id} on the lab's
 \texttt{orders} are a good example of statistics that cannot:
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={Per-file bounds for three \texttt{orders} files (\texttt{readable\_metrics} of the \texttt{files} table, trimmed)},captionpos=b,label=lst:ice-read-bounds]
-file                    order_id (lo .. hi)                  product_id (lo .. hi)
-...order_ts_day=03-01   000004a2-29b7-4d .. ffffcf0b-ec3e-4e   p0000005 .. p1999998
-...order_ts_day=03-02   00000221-2318-41 .. ffffa331-4b9b-4f   p0000001 .. p1999999
-...order_ts_day=03-03   000003c6-0c3e-41 .. ffffed77-6266-4g   p0000004 .. p1999998
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={Per-file bounds for three \texttt{orders} files (\texttt{readable\_metrics} of the \texttt{files} table, trimmed)},captionpos=b,label=lst:ice-read-bounds]
+file (day)   order_id (lo .. hi)                product_id (lo .. hi)
+03-01        000004a2-29b7-4d .. ffffcf0b-ec3e-4e   p0000005 .. p1999998
+03-02        00000221-2318-41 .. ffffa331-4b9b-4f   p0000001 .. p1999999
+03-03        000003c6-0c3e-41 .. ffffed77-6266-4g   p0000004 .. p1999998
 \end{lstlisting}
 
 Every file's range covers the whole key space, because rows were written in
@@ -334,7 +334,7 @@ Every layer above is inspectable directly, without guessing from query latency.
 \Cref{lst:ice-read-meta} runs the three most useful metadata tables against the
 lab's \texttt{orders}.
 
-\begin{lstlisting}[language=SQL,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={Three metadata tables on \texttt{orders}, with the lab's output},captionpos=b,label=lst:ice-read-meta]
+\begin{lstlisting}[language=SQL,numbers=none,style=plan,caption={Three metadata tables on \texttt{orders}, with the lab's output},captionpos=b,label=lst:ice-read-meta]
 SELECT count(*) AS files, round(avg(file_size_in_bytes)/1e6,1) AS avg_mb,
        sum(record_count) AS rows
 FROM lab.db.orders.files;

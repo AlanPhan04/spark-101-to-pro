@@ -103,7 +103,7 @@ Before a query runs, \texttt{EXPLAIN} shows the plan Spark \emph{intends} to run
 \Cref{lst:aqe-explain-before} is the specimen's, captured on the lab; the root
 reads \texttt{isFinalPlan=false}, the flag that says this plan may still change.
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={The specimen's plan before it runs (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-explain-before]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={The specimen's plan before it runs (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-explain-before]
 AdaptiveSparkPlan isFinalPlan=false
 +- Sort [on_time_rate ASC NULLS FIRST], true, 0
    +- Exchange rangepartitioning(on_time_rate ASC NULLS FIRST, 200)
@@ -270,7 +270,7 @@ When you want AQE to respect the advisory size exactly --- say, you are sizing
 partitions for a downstream write and the 40-slot term only gets in the way ---
 set \texttt{parallelismFirst} to \texttt{false}:
 
-\begin{lstlisting}[language=SQL,caption={Making the advisory size binding},captionpos=b,label=lst:aqe-coalesce-settings]
+\begin{lstlisting}[language=SQL,style=plan,caption={Making the advisory size binding},captionpos=b,label=lst:aqe-coalesce-settings]
 SET spark.sql.adaptive.coalescePartitions.parallelismFirst=false;
 SET spark.sql.adaptive.advisoryPartitionSizeInBytes=134217728;  -- 128 MB
 \end{lstlisting}
@@ -284,13 +284,13 @@ When coalescing fires, the final plan carries an \texttt{AQEShuffleRead} node
 whose argument is \texttt{coalesced}, over the shuffle's query stage. The
 statistics AQE saw sit on the stage:
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={A coalesced shuffle read in a final plan (\texttt{EXPLAIN FORMATTED}, trimmed)},captionpos=b,label=lst:aqe-coalesce-plan]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={A coalesced shuffle read in a final plan (\texttt{EXPLAIN FORMATTED}, trimmed)},captionpos=b,label=lst:aqe-coalesce-plan]
 AdaptiveSparkPlan (13)
 +- == Final Plan ==
    * HashAggregate (8)
-   +- AQEShuffleRead (7)                      -- Arguments: coalesced
-      +- ShuffleQueryStage (6), Statistics(sizeInBytes=245.9 MiB, rowCount=5.37E+6)
-         +- Exchange (5)                      -- hashpartitioning(customer_id, 2000)
+   +- AQEShuffleRead (7)                 -- Arguments: coalesced
+      +- ShuffleQueryStage (6)           -- 245.9 MiB, 5.37E+6 rows
+         +- Exchange (5)                 -- hash(customer_id, 2000)
             +- * HashAggregate (4)
                +- ... scan and filter ...
 \end{lstlisting}
@@ -334,16 +334,16 @@ reads shuffle output with a \emph{local shuffle reader}
 each reduce task reads shuffle files from its own executor instead of pulling a
 slice from every executor. The plan marks it with the argument \texttt{local}.
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={A runtime broadcast promotion in a final plan (\texttt{EXPLAIN FORMATTED}, trimmed)},captionpos=b,label=lst:aqe-broadcast-plan]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={A runtime broadcast promotion in a final plan (\texttt{EXPLAIN FORMATTED}, trimmed)},captionpos=b,label=lst:aqe-broadcast-plan]
 +- * BroadcastHashJoin Inner BuildRight
-   :- AQEShuffleRead                        -- Arguments: local
-   :  +- ShuffleQueryStage, Statistics(sizeInBytes=155.1 MiB, rowCount=6.78E+6)
-   :     +- Exchange                        -- the big side was shuffled anyway
-   +- BroadcastQueryStage, Statistics(sizeInBytes=20.0 MiB, rowCount=1.00E+5)
+   :- AQEShuffleRead                     -- Arguments: local
+   :  +- ShuffleQueryStage               -- 155.1 MiB, 6.78E+6 rows
+   :     +- Exchange                     -- big side shuffled anyway
+   +- BroadcastQueryStage               -- 20.0 MiB, 1.00E+5 rows
       +- BroadcastExchange
-         +- AQEShuffleRead                  -- Arguments: local
-            +- ShuffleQueryStage, Statistics(sizeInBytes=3.8 MiB, rowCount=1.00E+5)
-               +- Exchange                  -- the filtered side's shuffle, now feeding a broadcast
+         +- AQEShuffleRead              -- Arguments: local
+            +- ShuffleQueryStage        -- 3.8 MiB, 1.00E+5 rows
+               +- Exchange              -- small side, now a broadcast
 \end{lstlisting}
 
 Compare this to a join Catalyst broadcast at planning time. There, the big side
@@ -434,7 +434,7 @@ Nothing needs configuring to see the promotion: the query below ran with default
 settings and was promoted, because the filtered side's 3.8~MiB is under the
 10~MB default. The experiment in \Cref{tab:aqe-lab-threshold} changes one key:
 
-\begin{lstlisting}[language=SQL,caption={A filtered dimension that AQE promotes to a broadcast},captionpos=b,label=lst:aqe-promotion-experiment]
+\begin{lstlisting}[language=SQL,style=plan,caption={A filtered dimension that AQE promotes to a broadcast},captionpos=b,label=lst:aqe-promotion-experiment]
 -- SET spark.sql.adaptive.autoBroadcastJoinThreshold = 1048576;  -- 1 MB: no promotion
 SELECT p.category, COUNT(*) AS orders
 FROM orders o
@@ -546,7 +546,7 @@ To study skew on the specimen, remove the escape hatch that would otherwise
 broadcast \texttt{dim\_product}, and compare skew handling off and on over the
 whole month:
 
-\begin{lstlisting}[language=SQL,caption={Isolating skew handling on the specimen's join},captionpos=b,label=lst:aqe-skew-experiment]
+\begin{lstlisting}[language=SQL,style=plan,caption={Isolating skew handling on the specimen's join},captionpos=b,label=lst:aqe-skew-experiment]
 SET spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes = 33554432;  -- 32 MB (lab scale)
 SET spark.sql.adaptive.advisoryPartitionSizeInBytes = 8388608;               -- 8 MB (lab scale)
 SET spark.sql.adaptive.skewJoin.enabled = false;     -- run 1: no skew handling
@@ -591,7 +591,7 @@ The straggler is gone: the largest task reads 9.5~MB instead of 72.8~MB, and the
 stage ends when its slowest task, now close to the median, ends. The final plan
 marks the handling on the join node and on the skewed side's read:
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={A skew-split join in a final plan (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-skew-plan]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={A skew-split join in a final plan (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-skew-plan]
 AdaptiveSparkPlan isFinalPlan=true
 +- ...
    +- *(5) SortMergeJoin(skew=true) [product_id], [product_id], Inner
@@ -630,22 +630,22 @@ so the rewrites are visible as the difference between them.
 \Cref{lst:aqe-final-plan} is the skew-split join of the previous section, with
 the decisions numbered for the walk-through that follows.
 
-\begin{lstlisting}[language=text,numbers=none,basicstyle=\footnotesize\ttfamily,breaklines=false,caption={A final AQE plan, annotated (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-final-plan]
-AdaptiveSparkPlan isFinalPlan=true                                  -- (1)
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={A final AQE plan, annotated (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-final-plan]
+AdaptiveSparkPlan isFinalPlan=true                              -- (1)
 +- == Final Plan ==
    *(6) HashAggregate(keys=[category], functions=[avg(...)])
-   +- AQEShuffleRead coalesced                                      -- (2)
-      +- ShuffleQueryStage 2                                        -- (3)
+   +- AQEShuffleRead coalesced                                  -- (2)
+      +- ShuffleQueryStage 2                                    -- (3)
          +- Exchange hashpartitioning(category, 200)
-            +- *(5) HashAggregate(keys=[category], functions=[partial_avg(...)])
-               +- *(5) SortMergeJoin(skew=true) [product_id], [product_id], Inner  -- (4)
+            +- *(5) HashAggregate(keys=[category], ...partial_avg)
+               +- *(5) SortMergeJoin(skew=true) [product_id], ... -- (4)
                   :- *(3) Sort [product_id ASC NULLS FIRST]
-                  :  +- AQEShuffleRead coalesced and skewed         -- (5)
+                  :  +- AQEShuffleRead coalesced and skewed       -- (5)
                   :     +- ShuffleQueryStage 0
                   +- *(4) Sort [product_id ASC NULLS FIRST]
                      +- AQEShuffleRead coalesced
                         +- ShuffleQueryStage 1
-+- == Initial Plan ==                                                -- (6)
++- == Initial Plan ==                                            -- (6)
    HashAggregate(keys=[category], functions=[avg(...)])
    +- Exchange hashpartitioning(category, 200)
       +- ... SortMergeJoin [product_id], [product_id], Inner ...

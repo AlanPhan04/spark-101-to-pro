@@ -39,7 +39,7 @@ turned off so that every operator carries its codegen marker (with AQE on, the
 same plan gains the query-stage nodes of \Cref{sec:c-aqe}). \Cref{lst:explain-anatomy}
 shows the same plan before it runs.
 
-\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily,caption={The specimen's physical plan with AQE off (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:c-specimen-plan]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={The specimen's physical plan with AQE off (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:c-specimen-plan]
 *(7) Sort [on_time_rate ASC NULLS FIRST], true, 0
 +- Exchange rangepartitioning(on_time_rate ASC NULLS FIRST, 200)
    +- *(6) HashAggregate(keys=[category], functions=[avg(...)])

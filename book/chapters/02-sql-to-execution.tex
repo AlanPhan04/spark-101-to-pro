@@ -306,23 +306,23 @@ move to \texttt{FORMATTED} when you need each node's detail.}
 where each node's details are spelled out. Read the tree \textbf{bottom-up} ---
 the leaves are scans, the root is the final operator.
 
-\begin{lstlisting}[language=text,numbers=none,breaklines=false,basicstyle=\footnotesize\ttfamily,caption={\texttt{EXPLAIN FORMATTED} on the specimen, before it runs (trimmed)},captionpos=b,label=lst:explain-anatomy]
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={\texttt{EXPLAIN FORMATTED} on the specimen, before it runs (trimmed)},captionpos=b,label=lst:explain-anatomy]
 == Physical Plan ==
 AdaptiveSparkPlan (17)
-+- Sort (16)                               -- global ORDER BY
-   +- Exchange (15)                        -- rangepartitioning(on_time_rate, 200): shuffle #4
-      +- HashAggregate (14)                -- final aggregate
-         +- Exchange (13)                  -- hashpartitioning(category, 200): shuffle #3
-            +- HashAggregate (12)          -- partial aggregate
++- Sort (16)                         -- global ORDER BY
+   +- Exchange (15)                  -- range(on_time_rate): shuffle #4
+      +- HashAggregate (14)          -- final aggregate
+         +- Exchange (13)            -- hash(category): shuffle #3
+            +- HashAggregate (12)    -- partial aggregate
                +- Project (11)
-                  +- SortMergeJoin Inner (10)   -- dim_product is too big to broadcast
-                     :- Sort (5)           -- local sort, one per SMJ input
-                     :  +- Exchange (4)    -- hashpartitioning(product_id, 200): shuffle #1
+                  +- SortMergeJoin Inner (10)   -- dim_product: too big
+                     :- Sort (5)               -- local sort per input
+                     :  +- Exchange (4)        -- hash(product_id): #1
                      :     +- Project (3)
                      :        +- Filter (2)
                      :           +- BatchScan lab.db.orders (1)
                      +- Sort (9)
-                        +- Exchange (8)    -- hashpartitioning(product_id, 200): shuffle #2
+                        +- Exchange (8)        -- hash(product_id): #2
                            +- Filter (7)
                               +- BatchScan lab.db.dim_product (6)
 
