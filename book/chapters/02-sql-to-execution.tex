@@ -50,7 +50,7 @@ cooked by hands that no longer think through each step: that is
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{4.4cm}p{3.6cm}p{6cm}@{}}
+\begin{tabular}{@{}P{4.4cm}P{3.6cm}P{6cm}@{}}
 \toprule
 \textbf{In the kitchen} & \textbf{In Catalyst} & \textbf{What changes} \\
 \midrule
@@ -184,7 +184,7 @@ Read the differences line by line. The constant expression became the literal
 seven and six columns to three and two (column pruning). The date predicate left
 the \texttt{Filter} --- it was pushed into the scan, where
 \Cref{sec:dsv2-pushdown} shows it is fully handled because three whole days align
-with the partitions --- and the optimizer added \texttt{isnotnull(product\_id)}
+with the partitions --- and the optimizer added \conf{isnotnull(product_id)}
 filters, inferred from the inner-join condition, which cannot change the result and
 let the scan discard null keys early.
 
@@ -220,8 +220,8 @@ planner turns each logical operator into one or more \emph{physical} operators b
 applying \emph{strategies}:
 
 \begin{itemize}
-  \item a logical \texttt{Join} becomes \texttt{BroadcastHashJoin},
-        \texttt{ShuffledHashJoin}, or \texttt{SortMergeJoin}, chosen from the
+  \item a logical \texttt{Join} becomes \conf{BroadcastHashJoin},
+        \conf{ShuffledHashJoin}, or \texttt{SortMergeJoin}, chosen from the
         estimated sizes of its inputs and \conf{spark.sql.autoBroadcastJoinThreshold}
         (\Cref{ch:joins}).
   \item a logical \texttt{Aggregate} becomes a partial \texttt{HashAggregate} on
@@ -298,7 +298,7 @@ A stage stops being generated for a handful of reasons, and a plan missing stars
 where you expect them is usually hitting one:
 
 \begin{itemize}
-  \item an \texttt{Exchange} or \texttt{BroadcastExchange} --- you cannot fuse
+  \item an \texttt{Exchange} or \conf{BroadcastExchange} --- you cannot fuse
         operators across a network boundary, so codegen always restarts on the
         far side of a shuffle;
   \item a stage whose input or output schema has more columns than
@@ -316,7 +316,7 @@ where you expect them is usually hitting one:
         expressions (an update expression, a merge expression) that the
         codegen framework can inline directly into the generated method, the
         same as any other expression. A UDAF written against the older
-        imperative \texttt{Aggregator}/\texttt{UserDefinedAggregateFunction}
+        imperative \texttt{Aggregator}/\conf{UserDefinedAggregateFunction}
         API instead hands Spark opaque Scala/Java method bodies to call ---
         there is no expression tree to inline, so Spark can only invoke those
         methods the ordinary virtual-call way, and fusion stops at that node.
@@ -345,7 +345,7 @@ selected by a keyword in SQL or a \texttt{mode} argument to
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.15}
-\begin{tabular}{@{}p{2.7cm}p{11.2cm}@{}}
+\begin{tabular}{@{}P{2.7cm}P{11.2cm}@{}}
 \toprule
 \textbf{Mode} & \textbf{Shows} \\
 \midrule
@@ -392,7 +392,7 @@ AdaptiveSparkPlan (17)
 \end{lstlisting}
 
 The \texttt{*(n)} markers appear only after execution, in the final plan; the
-plan before it runs has none. The root is \texttt{AdaptiveSparkPlan} because AQE
+plan before it runs has none. The root is \conf{AdaptiveSparkPlan} because AQE
 is on (\Cref{ch:aqe}).
 
 The nodes you will meet most --- a full catalogue is \Cref{app:plans}:
@@ -401,9 +401,9 @@ The nodes you will meet most --- a full catalogue is \Cref{app:plans}:
 DataSource~V2 table (Spark's newer, pluggable table-source API, covered in
 \Cref{ch:dsv2} --- Iceberg tables always go through it); \texttt{FileScan
 parquet} for a Hive-catalogued table;
-\texttt{InMemoryTableScan} for cached data. Its fields are where pruning is
+\conf{InMemoryTableScan} for cached data. Its fields are where pruning is
 confirmed or denied (an Iceberg \texttt{BatchScan} prints its pushed predicates in
-one \texttt{filters=} list instead, as above): \texttt{PartitionFilters} (whole partitions skipped ---
+one \texttt{filters=} list instead, as above): \conf{PartitionFilters} (whole partitions skipped ---
 directories on object storage), \texttt{PushedFilters} (row groups skipped inside
 the files that are read, using column min/max and bloom filters),
 \texttt{DataFilters} (everything, including the part evaluated row-by-row after
@@ -414,13 +414,13 @@ are on.
 \paragraph{Exchange, at every stage boundary.} Each \texttt{Exchange} is one
 shuffle: serialize, write to local disk, transfer, re-read. Count them --- it is
 the best single predictor of cost. \texttt{hashpartitioning(key, n)} co-locates
-equal keys (joins, \texttt{GROUP BY}); \texttt{rangepartitioning} produces
-globally ordered partitions (a global \texttt{ORDER BY}); \texttt{SinglePartition}
+equal keys (joins, \texttt{GROUP BY}); \conf{rangepartitioning} produces
+globally ordered partitions (a global \texttt{ORDER BY}); \conf{SinglePartition}
 funnels everything to one task (a global aggregate, \texttt{coalesce(1)}). The
-\texttt{ENSURE\_REQUIREMENTS} tag means the planner inserted this exchange because
-a downstream operator needs that distribution. \texttt{BroadcastExchange} is a
+\conf{ENSURE_REQUIREMENTS} tag means the planner inserted this exchange because
+a downstream operator needs that distribution. \conf{BroadcastExchange} is a
 different move: it ships one small side whole to every executor, and it appears
-only below the build side of a \texttt{BroadcastHashJoin}.
+only below the build side of a \conf{BroadcastHashJoin}.
 
 \paragraph{Sort.} \texttt{Sort [key ASC NULLS FIRST], false, 0} --- the boolean
 is \texttt{true} for a global sort, \texttt{false} for a local per-partition one.
@@ -431,7 +431,7 @@ exchanges and the join.
 The fast scan of any plan, in order: (1) the join operator ---
 \texttt{SortMergeJoin} on a table you expected to be small means its size
 estimate is over the broadcast threshold (\Cref{ch:joins}); (2) the number of \texttt{Exchange} nodes; (3)
-\texttt{PartitionFilters} non-empty on a partitioned table (\Cref{ch:pruning});
+\conf{PartitionFilters} non-empty on a partitioned table (\Cref{ch:pruning});
 (4) \texttt{PushedFilters} non-empty; (5) \texttt{ReadSchema} listing only needed
 columns.
 \end{tip}
@@ -460,7 +460,7 @@ cost-based decisions (join strategy and order) unreliable until you
 \begin{exercises}
 \item Run \texttt{EXPLAIN FORMATTED} on the specimen query. Confirm the two
       Exchange nodes, the \texttt{SortMergeJoin}, and a non-empty
-      \texttt{PartitionFilters} on the \texttt{orders} scan.
+      \conf{PartitionFilters} on the \texttt{orders} scan.
 \item Write the same result three ways: with an explicit subquery, with a CTE,
       and as one flat statement. Compare the \emph{optimized} logical plans.
       Which differ, and which are identical?

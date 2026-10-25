@@ -13,7 +13,7 @@ straggler.
 \section{The shuffle manager and shuffle writers}
 \label{sec:sched-shuffle-manager}
 
-Every shuffle on a modern Spark version goes through \texttt{SortShuffleManager}
+Every shuffle on a modern Spark version goes through \conf{SortShuffleManager}
 --- the separate hash-based shuffle manager from early Spark versions was
 removed once sort-based shuffle's one-file-plus-index-per-task layout
 (\Cref{sec:shuffle-write}) proved strictly better at scale. What varies is
@@ -31,7 +31,7 @@ combine, so it never needs this; a \texttt{GROUP BY} always does.
 \centering
 \caption{Which shuffle writer a given shuffle gets, in the order Spark checks}
 \label{tab:sched-shuffle-writers}
-\begin{tabular}{@{}p{4.4cm}p{4.0cm}p{5.4cm}@{}}
+\begin{tabular}{@{}P{4.4cm}P{4.0cm}P{5.4cm}@{}}
 \toprule
 \textbf{Writer} & \textbf{Fires when} & \textbf{Why it's cheaper} \\
 \midrule
@@ -60,7 +60,7 @@ graph of the executed plan (\Cref{fig:shuffle-writer-grid}).
   \includegraphics[width=\linewidth]{shuffle-writer-grid.pdf}
   \caption{The writer each SQL shuffle got, in Spark 3.5.2. The choice flips at
   exactly 200 partitions: up to the bypass threshold every shuffle used the bypass
-  writer; at 201 and above, the serialized (\texttt{UnsafeShuffleWriter}) path. The
+  writer; at 201 and above, the serialized (\conf{UnsafeShuffleWriter}) path. The
   sort-merge join's third exchange, the single-partition one under the final
   count, stayed on bypass. No SQL shuffle used the general sort writer.}
   \label{fig:shuffle-writer-grid}
@@ -83,13 +83,13 @@ that count matters for other reasons.
 
 A reduce task needs to know which executors hold which map task's output
 before it can fetch anything --- that registry is the \emph{map output
-tracker}. The driver's copy, \texttt{MapOutputTrackerMaster}, is the single
+tracker}. The driver's copy, \conf{MapOutputTrackerMaster}, is the single
 authoritative record, updated every time a map task finishes (with its
 output location) and every time an executor is lost (with that executor's
 outputs invalidated, which is precisely the trigger behind
 \Cref{sec:failure-signatures}'s stage-resubmission behavior). Executors hold
 a read-only, periodically-refreshed cache of the same information,
-\texttt{MapOutputTrackerWorker}, so that a reduce task can resolve fetch
+\conf{MapOutputTrackerWorker}, so that a reduce task can resolve fetch
 locations locally most of the time without an RPC to the driver for every
 single task.
 
@@ -106,7 +106,7 @@ stage at every wide dependency) and owns the stage-resubmission decision
 behind \Cref{sec:failure-signatures}'s fetch-failure recovery --- what is
 new here is what it hands off once a stage is ready: a \emph{set of runnable
 tasks}, with no further opinion on execution order or placement. The
-\textbf{task scheduler} (\texttt{TaskSchedulerImpl}) owns everything past
+\textbf{task scheduler} (\conf{TaskSchedulerImpl}) owns everything past
 that handoff: given that set and the current executors, it decides
 \emph{which} task runs on \emph{which} executor, honoring the locality
 preferences below and retrying a task, up to \conf{spark.task.maxFailures},
@@ -142,7 +142,7 @@ behind the right-hand end of \Cref{fig:partitions-vs-slots}.
 Coordination messages (task assignment, status updates, the map output
 tracker's queries) travel over Spark's internal RPC layer, built on Netty;
 the actual shuffle bytes travel over a separate path, the
-\texttt{NettyBlockTransferService}. The two are kept apart because they
+\conf{NettyBlockTransferService}. The two are kept apart because they
 have opposite traffic shapes and opposite failure costs: an RPC message is
 small and latency-sensitive --- a slow task-assignment reply stalls
 scheduling for every waiting task --- while a shuffle fetch is large and
@@ -153,7 +153,7 @@ starve out) the small control messages the scheduler depends on to keep
 moving; separating them means a busy shuffle fetch never blocks the RPC
 call that would otherwise reassign a freed task slot. This split is also
 what makes the external shuffle service possible at all: it only has to
-reimplement the \texttt{NettyBlockTransferService} half as a standalone
+reimplement the \conf{NettyBlockTransferService} half as a standalone
 process (\Cref{sec:shuffle-external}), with no need to also speak the
 scheduler's RPC protocol, because block serving never depended on it.
 \Cref{fig:scheduler-components} puts all five pieces from this chapter in
@@ -197,7 +197,7 @@ lab counted the level of every task in its event logs (\Cref{tab:sched-locality}
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{6.3cm}rr@{}}
+\begin{tabular}{@{}P{6.3cm}rr@{}}
 \toprule
 \textbf{Kind of task (lab, single JVM)} & \textbf{PROCESS\_LOCAL} & \textbf{NODE\_LOCAL} \\
 \midrule
@@ -244,7 +244,7 @@ straggler to 11.2~s (\Cref{fig:speculation-gantt}).
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{3.7cm}P{4.1cm}P{3.2cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule

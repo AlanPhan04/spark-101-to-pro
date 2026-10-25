@@ -114,7 +114,7 @@ always cancel a storage booking to make room for a scheduled event, but never
 the reverse. The remaining floors are private apartments (\emph{user memory}):
 whatever a tenant does inside their own apartment is invisible to the building
 manager, and if a tenant packs it past capacity, nobody bails them out --- the
-apartment simply collapses (\texttt{OutOfMemoryError}). A separate storage unit
+apartment simply collapses (\conf{OutOfMemoryError}). A separate storage unit
 down the street, rented by some tenants but not others, is the \emph{off-heap}
 pool; and the building's own infrastructure --- elevators, wiring, hallway
 lighting (\emph{overhead}) --- draws power regardless of occupancy. The whole
@@ -145,7 +145,7 @@ it into three parts:
         manage lives here: the objects your UDFs and RDD closures create, the
         structures a \texttt{mapPartitions} builds up. Spark does not track this
         pool and cannot spill it; overflowing it throws
-        \texttt{OutOfMemoryError} and kills the executor.
+        \conf{OutOfMemoryError} and kills the executor.
 \end{itemize}
 
 \paragraph{Off-heap memory.} When \conf{spark.memory.offHeap.enabled} is set,
@@ -277,7 +277,7 @@ crew.
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{1.8cm}p{3.4cm}p{3.6cm}p{5cm}@{}}
+\begin{tabular}{@{}P{1.8cm}P{3.4cm}P{3.6cm}P{5cm}@{}}
 \toprule
 \textbf{Collector} & \textbf{Pause} & \textbf{Throughput / CPU} & \textbf{Best for} \\
 \midrule
@@ -400,7 +400,7 @@ pool overflowed.
       memory map in \Cref{fig:executor-memory-model}.
 \item An executor is killed by Kubernetes with \texttt{OOMKilled} and no Spark
       exception in the log. A second run fails with a Java
-      \texttt{OutOfMemoryError} in a task. Which pool overflowed in each case,
+      \conf{OutOfMemoryError} in a task. Which pool overflowed in each case,
       and which knob addresses each?
 \item In the Executors tab, one executor shows 40\% of task time in GC while the
       others show 5\%. What is the most likely cause, and which chapter covers

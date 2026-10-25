@@ -8,7 +8,7 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Memory (\Cref{ch:execmem})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
@@ -31,7 +31,7 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Shuffle (\Cref{ch:shuffle}, \Cref{ch:scheduler})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
@@ -61,7 +61,7 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Adaptive Query Execution (\Cref{ch:aqe})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
@@ -88,7 +88,7 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Joins (\Cref{ch:joins})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
@@ -102,7 +102,7 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Partitioning and pruning (\Cref{ch:pruning})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
@@ -128,53 +128,53 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Iceberg catalog and commits (\Cref{ch:catalogs})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
 \endhead
-\texttt{commit.retry.num-retries} & 4 & Retry attempts before a commit fails
+\conf{commit.retry.num-retries} & 4 & Retry attempts before a commit fails
   under contention (\Cref{sec:cat-retries}). \\
-\texttt{commit.retry.min-wait-ms} & 100 & Initial backoff. \\
-\texttt{commit.retry.max-wait-ms} & 60{,}000 & Backoff ceiling. \\
-\texttt{commit.retry.total-timeout-ms} & 1{,}800{,}000 & Overall retry time
+\conf{commit.retry.min-wait-ms} & 100 & Initial backoff. \\
+\conf{commit.retry.max-wait-ms} & 60{,}000 & Backoff ceiling. \\
+\conf{commit.retry.total-timeout-ms} & 1{,}800{,}000 & Overall retry time
   budget. \\
 \bottomrule
 \end{longtable}
 
 \section{Iceberg table properties (\Cref{ch:iceberg-layout}, \Cref{ch:iceberg-read}, \Cref{ch:iceberg-write})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
 \endhead
-\texttt{write.target-file-size-bytes} & 512~MB & Write-time file-size target
+\conf{write.target-file-size-bytes} & 512~MB & Write-time file-size target
   (\Cref{sec:ice-file-size}). \\
-\texttt{write.distribution-mode} & \texttt{hash} & Shuffle-before-write
+\conf{write.distribution-mode} & \texttt{hash} & Shuffle-before-write
   strategy (\Cref{sec:ice-write-distribution}). \\
-\texttt{write.delete.mode} \newline \texttt{write.update.mode} \newline
-  \texttt{write.merge.mode} & \texttt{copy-on-write} & Sets copy-on-write
+\conf{write.delete.mode} \newline \conf{write.update.mode} \newline
+  \conf{write.merge.mode} & \texttt{copy-on-write} & Sets copy-on-write
   vs.\ merge-on-read independently per operation type. Iceberg has changed
   this default across releases, so confirm with
   \texttt{SHOW TBLPROPERTIES} rather than assuming
   (\Cref{sec:ice-write-cow-mor}). \\
-\texttt{write.metadata.metrics.default} & \texttt{truncate(16)} & Manifest
+\conf{write.metadata.metrics.default} & \texttt{truncate(16)} & Manifest
   statistics granularity (\Cref{sec:ice-read-metrics-modes}). \\
-\texttt{write.parquet.bloom-filter-enabled.column.<col>} & unset & Enable a
+\conf{write.parquet.bloom-filter-enabled.column.<col>} & unset & Enable a
   bloom filter for point lookups (\Cref{sec:ice-read-bloom}). \\
-\texttt{read.split.target-size} & 128~MB & Iceberg-side input-split target
+\conf{read.split.target-size} & 128~MB & Iceberg-side input-split target
   (\Cref{sec:ice-read-splits}). \\
-\texttt{read.split.open-file-cost} & 4~MB & Assumed per-file overhead when
+\conf{read.split.open-file-cost} & 4~MB & Assumed per-file overhead when
   packing splits. \\
-\texttt{read.parquet.vectorization.batch-size} & 5{,}000 & Rows per
+\conf{read.parquet.vectorization.batch-size} & 5{,}000 & Rows per
   vectorized-read batch (\Cref{sec:ice-read-vectorized}). \\
 \bottomrule
 \end{longtable}
 
 \section{Streaming (\Cref{ch:streaming})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule
@@ -188,7 +188,7 @@ value on a table or job you cannot afford to be wrong about.
 
 \section{Dynamic allocation and scheduling (\Cref{ch:tuning}, \Cref{ch:scheduler})}
 
-\begin{longtable}{@{}p{6.0cm}p{2.1cm}p{6.2cm}@{}}
+\begin{longtable}{@{}P{6.6cm}P{2.3cm}P{5.7cm}@{}}
 \toprule
 \textbf{Key} & \textbf{Default} & \textbf{Controls} \\
 \midrule

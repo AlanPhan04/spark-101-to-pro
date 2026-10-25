@@ -56,7 +56,7 @@ and runs them in order. With AQE, the driver cuts the plan at every
 \texttt{Exchange} into \emph{query stages}: a query stage is a piece of the plan
 that is materialized (run to completion, its output written as shuffle files or
 collected for a broadcast) before anything downstream of it is planned in
-detail. The wrapper node that owns this loop is \texttt{AdaptiveSparkPlan}.
+detail. The wrapper node that owns this loop is \conf{AdaptiveSparkPlan}.
 
 \begin{figure}[htbp]
   \centering
@@ -85,13 +85,13 @@ Catalyst already made and gives them evidence.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{2.7cm}p{3.5cm}p{3.5cm}p{4.0cm}@{}}
+\begin{tabular}{@{}P{2.7cm}P{3.5cm}P{3.5cm}P{4.0cm}@{}}
 \toprule
 \textbf{AQE rewrite} & \textbf{Planning-time decision it revisits} & \textbf{Evidence it uses} & \textbf{Where it shows up in the plan} \\
 \midrule
 Coalesce partitions & shuffle partition count (\Cref{sec:shuffle-sizing}) & byte size of every partition & \texttt{AQEShuffleRead coalesced} \\
-Broadcast promotion & join strategy (\Cref{sec:joins-selection}) & total size of one shuffled side & \texttt{BroadcastHashJoin}, \texttt{BroadcastQueryStage} \\
-Skew split & one partition per key range & partition size against the median & \texttt{SortMergeJoin(skew=true)}, \texttt{AQEShuffleRead \ldots{} skewed} \\
+Broadcast promotion & join strategy (\Cref{sec:joins-selection}) & total size of one shuffled side & \conf{BroadcastHashJoin}, \conf{BroadcastQueryStage} \\
+Skew split & one partition per key range & partition size against the median & \conf{SortMergeJoin(skew=true)}, \texttt{AQEShuffleRead \ldots{} skewed} \\
 \bottomrule
 \end{tabular}
 \caption{The three runtime rewrites, each a planning-time decision revisited
@@ -101,7 +101,7 @@ with measured evidence.}
 
 Before a query runs, \texttt{EXPLAIN} shows the plan Spark \emph{intends} to run.
 \Cref{lst:aqe-explain-before} is the specimen's, captured on the lab; the root
-reads \texttt{isFinalPlan=false}, the flag that says this plan may still change.
+reads \conf{isFinalPlan=false}, the flag that says this plan may still change.
 
 \begin{lstlisting}[language=text,numbers=none,style=plan,caption={The specimen's plan before it runs (\texttt{EXPLAIN}, trimmed)},captionpos=b,label=lst:aqe-explain-before]
 AdaptiveSparkPlan isFinalPlan=false
@@ -160,7 +160,7 @@ The target is where most readers go wrong, because two keys influence it.
 that stops AQE from producing absurdly small partitions. And
 \conf{spark.sql.adaptive.coalescePartitions.parallelismFirst} (default
 \texttt{true}) tells Spark not to merge so far that the cluster goes idle.
-With \texttt{parallelismFirst} on, the effective target is
+With \conf{parallelismFirst} on, the effective target is
 
 \[
 \text{target} \;=\; \max\!\Bigl(\min\!\bigl(\tfrac{\text{total shuffle bytes}}{P},\ \text{advisory size}\bigr),\ \text{min partition size}\Bigr),
@@ -170,7 +170,7 @@ where $P$ is the cluster's default parallelism, which on the reference cluster
 is its 40 task slots (\Cref{app:refenv}). In words: the advisory size is a
 \emph{ceiling} on the target, and the parallelism term pulls it lower whenever
 the shuffle is small enough that 64~MB partitions would leave slots idle. Turn
-\texttt{parallelismFirst} off and the formula collapses to the advisory size
+\conf{parallelismFirst} off and the formula collapses to the advisory size
 alone. The Spark documentation describes the setting as ignoring the advisory
 size; that is true when the shuffle is small, as in the first rows below, and
 not when it is large.
@@ -193,7 +193,7 @@ cluster.
 \end{tabular}
 \caption{Coalescing a shuffle on 40 slots, with \texttt{parallelismFirst} true
 and false. Partition counts are approximate: AQE merges greedily in partition
-order, so real counts differ slightly. With \texttt{parallelismFirst} on, a small
+order, so real counts differ slightly. With \conf{parallelismFirst} on, a small
 shuffle keeps as many partitions as there are slots; with it off, the same
 shuffle collapses to a handful of tasks and leaves most of the cluster idle.}
 \label{tab:aqe-parallelism-first}
@@ -202,7 +202,7 @@ shuffle collapses to a handful of tasks and leaves most of the cluster idle.}
 The first row is the case \Cref{fig:aqe-coalesce} draws: 6~GB divided over 40
 slots is 150~MB per slot, far above the 64~MB advisory size, so the advisory
 size wins and the stage runs about $6000 / 64 \approx 94$ tasks. The second and
-third rows are where \texttt{parallelismFirst} earns its default: 1.5~GB at 64~MB
+third rows are where \conf{parallelismFirst} earns its default: 1.5~GB at 64~MB
 would give 24 tasks on 40 slots, with 16 cores idle, while the parallelism term
 keeps all 40 busy. The fourth row shows the floor: with only 20~MB to move,
 nothing smaller than 1~MB is worth a task.
@@ -219,13 +219,13 @@ bytes the stage read.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.6cm}rrrrr@{}}
+\begin{tabular}{@{}P{3.6cm}rrrrr@{}}
 \toprule
 \textbf{Setting changed} & \textbf{Shuffle read} & \textbf{Advisory} & \textbf{\texttt{pF}} & \textbf{Predicted} & \textbf{Observed tasks} \\
 \midrule
 AQE off & 94.1~MB & --- & --- & 2000 & 2000 \\
 baseline & 94.1~MB & 64~MB & true & 40 & 40 \\
-\texttt{parallelismFirst} off & 94.1~MB & 64~MB & false & 2 & 2 \\
+\conf{parallelismFirst} off & 94.1~MB & 64~MB & false & 2 & 2 \\
 bigger shuffle & 512.1~MB & 64~MB & true & $\approx$ 40 & 41 \\
 smaller advisory & 512.1~MB & 16~MB & true & $\approx$ 40 & 41 \\
 tiny advisory & 512.1~MB & 4~MB & true & $\approx$ 128 & 134 \\
@@ -233,7 +233,7 @@ bigger shuffle, \texttt{pF} off & 512.1~MB & 64~MB & false & $\approx$ 8 & 9 \\
 \bottomrule
 \end{tabular}
 \caption{Measured on the lab. Each prediction uses only the formula and the
-shuffle bytes the reduce stage read (\texttt{pF} is \texttt{parallelismFirst}).
+shuffle bytes the reduce stage read (\texttt{pF} is \conf{parallelismFirst}).
 The advisory size changes nothing until it falls below the parallelism term
 ($512.1 / 40 \approx 12.8$~MB), exactly as the formula says.}
 \label{tab:aqe-lab-coalesce}
@@ -256,10 +256,10 @@ about 64~MB and took a median of 8.2~s; the 41-task baseline took a median of
 
 One more observation from these runs, because it will mislead you otherwise. The
 final plan prints a \texttt{Statistics} annotation on every
-\texttt{ShuffleQueryStage}, and for the 94.1~MB shuffle above it says
+\conf{ShuffleQueryStage}, and for the 94.1~MB shuffle above it says
 \texttt{sizeInBytes=245.9 MiB}. That number is the \emph{uncompressed} data size
 of the shuffled rows. The coalescing decision tracked the 94.1~MB that the reduce
-tasks actually read: the compressed shuffle files. (\texttt{parallelismFirst=false}
+tasks actually read: the compressed shuffle files. (\conf{parallelismFirst=false}
 gave 2 tasks, not the 4 that 245.9~MiB would give.) The Spark UI reports the
 second number; the plan annotation reports the first.
 
@@ -282,7 +282,7 @@ as a possible effect on short queries against a cold application, not a measured
 
 When you want AQE to respect the advisory size exactly --- say, you are sizing
 partitions for a downstream write and the 40-slot term only gets in the way ---
-set \texttt{parallelismFirst} to \texttt{false}:
+set \conf{parallelismFirst} to \texttt{false}:
 
 \begin{lstlisting}[language=SQL,style=plan,caption={Making the advisory size binding},captionpos=b,label=lst:aqe-coalesce-settings]
 SET spark.sql.adaptive.coalescePartitions.parallelismFirst=false;
@@ -332,8 +332,8 @@ only the 170~MB table, cannot know. AQE gets a second chance after the join's
 inputs have shuffled. It reads the runtime
 statistics of each side's shuffle stage, and if one is below the adaptive
 threshold, it rewrites the sort-merge join into a broadcast hash join before the
-join runs. The final plan shows \texttt{BroadcastHashJoin} where the plan had
-\texttt{SortMergeJoin}, with a \texttt{BroadcastQueryStage} holding the small
+join runs. The final plan shows \conf{BroadcastHashJoin} where the plan had
+\texttt{SortMergeJoin}, with a \conf{BroadcastQueryStage} holding the small
 side.
 
 \subsection{What the conversion saves, and what it cannot}
@@ -387,13 +387,13 @@ evidence, as \Cref{tab:aqe-thresholds} sets out.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.3cm}p{5.5cm}p{5.5cm}@{}}
+\begin{tabular}{@{}P{3.3cm}P{5.5cm}P{5.5cm}@{}}
 \toprule
  & \textbf{Planning-time threshold} & \textbf{Adaptive threshold} \\
 \midrule
 Key & \conf{spark.sql.autoBroadcastJoinThreshold} & \conf{spark.sql.adaptive.autoBroadcastJoinThreshold} \\
 Default & 10~MB & unset, so the same as the planning key \\
-Compared against & an estimate: table metadata, catalog statistics, or file sizes & the \texttt{Statistics(sizeInBytes)} of the shuffle stage, measured \\
+Compared against & an estimate: table metadata, catalog statistics, or file sizes & the \conf{Statistics(sizeInBytes)} of the shuffle stage, measured \\
 What can go wrong & the estimate is low and the real table is large; the driver or executors run out of memory & the measured size understates the in-memory relation, because the built hash relation is larger \\
 Decided & before any stage runs & after the side's shuffle stage finishes \\
 \bottomrule
@@ -407,7 +407,7 @@ relation that gets built from them.}
 
 The lab shows the gap between those last two quantities directly. In
 \Cref{lst:aqe-broadcast-plan} the filtered \texttt{dim\_product}'s shuffle stage
-measures 3.8~MiB, and the \texttt{BroadcastQueryStage} built from it measures
+measures 3.8~MiB, and the \conf{BroadcastQueryStage} built from it measures
 20.0~MiB: the in-memory hash relation is more than five times larger than the
 number the threshold was compared against. \Cref{tab:aqe-lab-threshold} tests
 the comparison by moving the adaptive threshold across 3.8~MiB. The compressed
@@ -418,13 +418,13 @@ uncompressed figure.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}rll@{}}
+\begin{tabular}{@{}rlP{5.2cm}@{}}
 \toprule
 \textbf{Adaptive threshold} & \textbf{Shuffle stage measures} & \textbf{Final join} \\
 \midrule
 1~MB & 3.8~MiB & \texttt{SortMergeJoin} \\
-4~MB & 3.8~MiB & \texttt{BroadcastHashJoin} (relation is 20.0~MiB) \\
-unset ($= 10$~MB, from the planning key) & 3.8~MiB & \texttt{BroadcastHashJoin} \\
+4~MB & 3.8~MiB & \conf{BroadcastHashJoin} (relation is 20.0~MiB) \\
+unset ($= 10$~MB, from the planning key) & 3.8~MiB & \conf{BroadcastHashJoin} \\
 \bottomrule
 \end{tabular}
 \caption{The adaptive threshold decides on the shuffle stage's size, not on the
@@ -547,7 +547,7 @@ side of an outer join changes the result:
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{4.5cm}p{4.2cm}p{5.0cm}@{}}
+\begin{tabular}{@{}P{4.5cm}P{4.2cm}P{5.0cm}@{}}
 \toprule
 \textbf{Join type} & \textbf{Left side split?} & \textbf{Right side split?} \\
 \midrule
@@ -587,7 +587,7 @@ not enough. The split target is the 64~MB advisory size, and a 73~MB partition
 sits barely above it, so splitting it would leave a remainder too small to keep
 as its own piece. The plan showed no skew handling in either case. (The split
 heuristic is the explanation consistent with the observation; confirm it against
-\texttt{OptimizeSkewedJoin} in the 3.5 source.) \Cref{fig:skew-partition-sizes} plots all 200
+\conf{OptimizeSkewedJoin} in the 3.5 source.) \Cref{fig:skew-partition-sizes} plots all 200
 partitions against these thresholds.
 
 \begin{figure}[htbp]
@@ -684,17 +684,17 @@ AdaptiveSparkPlan isFinalPlan=true                              -- (1)
 Read it from the root down:
 
 \begin{enumerate}
-  \item \textbf{The root.} \texttt{isFinalPlan=true} confirms this is the plan as
-        executed; \texttt{isFinalPlan=false} is the compile-time plan from
+  \item \textbf{The root.} \conf{isFinalPlan=true} confirms this is the plan as
+        executed; \conf{isFinalPlan=false} is the compile-time plan from
         \texttt{explain()} before an action.
   \item \textbf{Coalescing.} \texttt{AQEShuffleRead coalesced} over the
         aggregation's shuffle: AQE merged its many small partitions before the
         final aggregate ran (\Cref{sec:aqe-coalesce}).
-  \item \textbf{Query stage numbers.} The number after \texttt{ShuffleQueryStage}
+  \item \textbf{Query stage numbers.} The number after \conf{ShuffleQueryStage}
         identifies one materialization point. The \texttt{Exchange} under it is
         what Catalyst planned, still reading 200, because coalescing changes the
         read, not the write.
-  \item \textbf{The join flag.} \texttt{SortMergeJoin(skew=true)} marks that skew
+  \item \textbf{The join flag.} \conf{SortMergeJoin(skew=true)} marks that skew
         handling applied to \emph{this} join, not just somewhere upstream.
   \item \textbf{Skewed reads.} \texttt{coalesced and skewed} on the split side;
         the replicated side shows only \texttt{coalesced}.
@@ -704,7 +704,7 @@ Read it from the root down:
 
 One query, two unrelated runtime corrections, each visible as its own marker in
 the same final plan. A promoted join looks different: the \texttt{SortMergeJoin}
-node is gone, replaced by a \texttt{BroadcastHashJoin} as in
+node is gone, replaced by a \conf{BroadcastHashJoin} as in
 \Cref{lst:aqe-broadcast-plan}. A join cannot show both a skew split and a
 broadcast promotion on the same side: a promoted side has no shuffle partitions
 left to measure for skew. The reference for every AQE node, including the ones
@@ -724,15 +724,15 @@ a config.
 AQE is the safety net under the decisions the earlier chapters taught, not a
 replacement for them. \Cref{tab:aqe-limits} lists the places it does nothing, and
 why. Two rows were checked on the lab: a query with no exchange printed a plain
-physical plan with no \texttt{AdaptiveSparkPlan} root, and
-\texttt{repartition(200)} and \texttt{repartition(200, customer\_id)} both ran
-exactly 200 reduce tasks, while \texttt{repartition(customer\_id)} with no count
+physical plan with no \conf{AdaptiveSparkPlan} root, and
+\conf{repartition(200)} and \texttt{repartition(200, customer\_id)} both ran
+exactly 200 reduce tasks, while \conf{repartition(customer_id)} with no count
 was coalesced to 47.
 
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{4.0cm}p{5.2cm}p{5.0cm}@{}}
+\begin{tabular}{@{}P{4.0cm}P{5.2cm}P{5.0cm}@{}}
 \toprule
 \textbf{Situation} & \textbf{Why AQE cannot help} & \textbf{What to do instead} \\
 \midrule
@@ -782,15 +782,15 @@ and \Cref{tab:aqe-levers} turns each symptom into the evidence and the knob.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.2cm}p{3.9cm}p{3.6cm}p{3.4cm}@{}}
+\begin{tabular}{@{}P{3.2cm}P{3.9cm}P{3.6cm}P{3.4cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Knob} & \textbf{Cost} \\
 \midrule
 thousands of tiny tasks after a shuffle & no \texttt{AQEShuffleRead coalesced} in the final plan; tiny shuffle-read sizes in \textbf{Stages} & check \conf{coalescePartitions.enabled}; raise the initial partition count & none: coalescing reads existing files \\
-too few tasks for the cluster after coalescing & task count below slot count in the stage & keep \texttt{parallelismFirst=true}; lower the advisory size & more, smaller tasks \\
-a sort-merge join on a small table & no \texttt{BroadcastQueryStage}; small \texttt{Statistics(sizeInBytes)} on the stage & raise the adaptive broadcast threshold & driver memory; relation larger than the threshold \\
+too few tasks for the cluster after coalescing & task count below slot count in the stage & keep \conf{parallelismFirst=true}; lower the advisory size & more, smaller tasks \\
+a sort-merge join on a small table & no \conf{BroadcastQueryStage}; small \conf{Statistics(sizeInBytes)} on the stage & raise the adaptive broadcast threshold & driver memory; relation larger than the threshold \\
 one straggler task, max $\gg$ median & \textbf{Stages} Summary Metrics & lower the skew floor and the advisory size & extra tasks and replicated reads \\
-AQE seems to do nothing & no \texttt{isFinalPlan=true} root, or a row of \Cref{tab:aqe-limits} applies & fix the earlier decision & none \\
+AQE seems to do nothing & no \conf{isFinalPlan=true} root, or a row of \Cref{tab:aqe-limits} applies & fix the earlier decision & none \\
 \bottomrule
 \end{tabular}
 \caption{The AQE levers: each symptom with the evidence that confirms it, the knob
@@ -807,7 +807,7 @@ has to be read at all.
       specimen with the advisory size at 8~MB and the skew floor at 32~MB
       (scale both to your data). Record the max and median task duration of the
       join stage with skew handling off, then on, and find
-      \texttt{SortMergeJoin(skew=true)} in the second run's final plan.
+      \conf{SortMergeJoin(skew=true)} in the second run's final plan.
 \item \textbf{Read a plan.} In \Cref{lst:aqe-final-plan}, which operators carry
       a runtime decision, and which two nodes would you check first to confirm
       the aggregation's shuffle was coalesced? Rewrite the plan as it would
@@ -815,6 +815,6 @@ has to be read at all.
 \item \textbf{Predict, then check.} A stage's shuffle produces 20 partitions of
       1~MB each on a 16-core cluster. Using the target formula in
       \Cref{sec:aqe-parallelism}, predict how many partitions AQE leaves with
-      \texttt{parallelismFirst} on, and with it off. Then run it and compare
+      \conf{parallelismFirst} on, and with it off. Then run it and compare
       against the reduce stage's task count.
 \end{exercises}

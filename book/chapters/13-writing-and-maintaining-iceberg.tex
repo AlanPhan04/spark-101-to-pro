@@ -23,8 +23,8 @@ in with that row changed or removed (\emph{copy-on-write}, CoW), or leave the
 data file untouched and record the change as a delete file plus, for an
 update, a new data file holding only the changed rows
 (\emph{merge-on-read}, MoR, built on \Cref{sec:ice-delete-files}'s delete
-files). \texttt{write.delete.mode}, \texttt{write.update.mode}, and
-\texttt{write.merge.mode} set this independently per operation type; check a
+files). \conf{write.delete.mode}, \conf{write.update.mode}, and
+\conf{write.merge.mode} set this independently per operation type; check a
 table's current properties rather than assuming a default, since Iceberg has
 changed which mode ships as the default across releases.
 
@@ -42,7 +42,7 @@ there would mean rewriting the same large file on nearly every micro-batch.
 \centering
 \caption{Choosing copy-on-write versus merge-on-read}
 \label{tab:ice-cow-mor}
-\begin{tabular}{@{}lp{3.6cm}p{3.6cm}@{}}
+\begin{tabular}{@{}lP{3.6cm}P{3.6cm}@{}}
 \toprule
  & \textbf{Copy-on-write} & \textbf{Merge-on-read} \\
 \midrule
@@ -63,7 +63,7 @@ and \Cref{tab:ice-lab-update-modes}). On Iceberg 1.6.1 the default for
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.5cm}rrrr@{}}
+\begin{tabular}{@{}P{3.5cm}rrrr@{}}
 \toprule
 \textbf{Mode} & \textbf{Per update} & \textbf{Bytes written} & \textbf{Files after ten} & \textbf{Full scan} \\
 \midrule
@@ -90,11 +90,11 @@ and only partly recovered by compaction.}
 Two details are easy to miss. A merge-on-read \texttt{UPDATE} is recorded as an
 \texttt{overwrite} snapshot with one added data file (the new row versions) and
 one added delete file (the old ones), not as a \texttt{delete}. And after
-\texttt{rewrite\_data\_files} rewrote the affected data file, the \texttt{files}
+\conf{rewrite_data_files} rewrote the affected data file, the \texttt{files}
 table still listed the ten delete files: they no longer point at live rows but
-were not removed. A follow-up run confirmed it on six deletes: \texttt{rewrite\_data\_files}
-with \texttt{rewrite-all} left one delete file standing, \texttt{rewrite\_position\_delete\_files}
-did not remove it, and the \texttt{remove-dangling-deletes} option was rejected by Iceberg
+were not removed. A follow-up run confirmed it on six deletes: \conf{rewrite_data_files}
+with \texttt{rewrite-all} left one delete file standing, \conf{rewrite_position_delete_files}
+did not remove it, and the \conf{remove-dangling-deletes} option was rejected by Iceberg
 1.6.1 (``Cannot use options [remove-dangling-deletes], they are not supported by the
 action or the rewriter BIN-PACK'') --- the option belongs to a later release. That is why read cost
 recovered only from 0.35 to 0.31~s.
@@ -197,7 +197,7 @@ straggler itself was not separately timed on the lab.)
 \section{Compacting data files}
 \label{sec:ice-write-compaction}
 
-\texttt{rewrite\_data\_files} is the direct fix for both small files
+\conf{rewrite_data_files} is the direct fix for both small files
 (\Cref{sec:ice-file-size}) and MoR read cost: it rewrites a set of files into
 fewer, better-organized ones, in one of three strategies.
 \texttt{binpack} (the default) merges small files toward the target size with
@@ -231,11 +231,11 @@ four times faster, with identical results.
 Manifests accumulate their own version of the small-files problem: many
 small commits each add a small manifest, and a scan's manifest-list pruning
 (\Cref{sec:ice-read-manifest-pruning}) works less well the more, smaller
-manifests it has to consult individually. \texttt{rewrite\_manifests}
+manifests it has to consult individually. \conf{rewrite_manifests}
 consolidates them into fewer, larger manifests with the same entries,
 improving planning time without touching a single data or delete file --- a
 metadata-only compaction, distinct from and cheaper than
-\texttt{rewrite\_data\_files}. On the lab it merged 61 manifests into one, but the
+\conf{rewrite_data_files}. On the lab it merged 61 manifests into one, but the
 scan time did not move (0.12 against 0.13~s): with sixty small manifests on a
 local disk, planning was never the bottleneck. The benefit appears when
 thousands of manifests make planning itself slow
@@ -246,14 +246,14 @@ thousands of manifests make planning itself slow
 
 \Cref{sec:ice-snapshots} noted that superseded files stay reachable until
 something removes their snapshot from the log --- that something is
-\texttt{expire\_snapshots}: past a retention window, it drops old snapshot
+\conf{expire_snapshots}: past a retention window, it drops old snapshot
 entries and, for any file no longer referenced by \emph{any} remaining
 snapshot, deletes the physical file. This is the mechanism that actually
 reclaims the disk space compaction's rewrites and a row-level operation's
 rewritten files leave behind; skipping it does not corrupt anything, it
 just means old files accumulate indefinitely.
 
-\texttt{remove\_orphan\_files} is a different, independent safety net: it
+\conf{remove_orphan_files} is a different, independent safety net: it
 scans the table's storage location directly for files that are not
 referenced by \emph{any} manifest at all --- typically the debris of a
 failed write that never committed, since a successful commit's files are
@@ -264,12 +264,12 @@ written files but not yet committed the metadata referencing them.
 
 The lab ran both on the merge-on-read table left by the update experiment, which
 had 12 snapshots and 20 data files in a 386.1~MB directory
-(\Cref{fig:expire-orphans}). \texttt{expire\_snapshots} with only the latest
+(\Cref{fig:expire-orphans}). \conf{expire_snapshots} with only the latest
 snapshot retained dropped 11 snapshots, deleted 11 data files, 11 manifests, and
 11 manifest lists, and left a 350.8~MB directory: 35.3~MB reclaimed, the one
 large data file each superseded snapshot had kept alive. A 5~MB stray file, the
 kind a failed write leaves, then added 5~MB that no manifest named.
-\texttt{remove\_orphan\_files} first \emph{refused} to run with a one-hour
+\conf{remove_orphan_files} first \emph{refused} to run with a one-hour
 cutoff (``Cannot remove orphan files with an interval less than 24 hours''); with
 the stray file aged three days and a 48-hour cutoff, a dry run listed exactly that
 file and the real run removed it, restoring 350.8~MB. The table still counted
@@ -280,18 +280,18 @@ file and the real run removed it, restoring 350.8~MB. The table still counted
   \includegraphics[width=\linewidth]{expire-orphans.pdf}
   \caption{Table directory size through the two cleanup procedures. Expiring
   snapshots frees what superseded history held; a stray file from a failed write
-  adds 5~MB until \texttt{remove\_orphan\_files} deletes it.}
+  adds 5~MB until \conf{remove_orphan_files} deletes it.}
   \label{fig:expire-orphans}
 \end{figure}
 
 \begin{warning}
 Guides disagree on a strict global order for these two procedures, and the
 official documentation does not mandate one. The mechanism explains why:
-\texttt{expire\_snapshots} is what makes old files eligible for deletion by
+\conf{expire_snapshots} is what makes old files eligible for deletion by
 un-referencing them, and it is reasonable to run it before or interleaved
-with \texttt{remove\_orphan\_files}, which only ever touches files no
+with \conf{remove_orphan_files}, which only ever touches files no
 snapshot ever referenced in the first place --- the two operate on disjoint
-sets of files by construction, as long as \texttt{remove\_orphan\_files}'s
+sets of files by construction, as long as \conf{remove_orphan_files}'s
 retention window is wide enough to never touch a write still in flight.
 Treat the "run compaction, then expire, then remove orphans" sequencing
 some operational guides recommend as a safe default cadence, not a
@@ -351,16 +351,16 @@ all of this running continuously rather than occasionally.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{3.3cm}P{3.9cm}P{3.7cm}P{3.1cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
 frequent small updates are slow and heavy & snapshot summary: tens of MB added per update & \texttt{write.*.mode} = merge-on-read & slower reads; compaction \\
-reads slower on a merge-on-read table & delete files in \texttt{files} (content 1) & \texttt{rewrite\_data\_files} with a delete threshold & a rewrite job \\
+reads slower on a merge-on-read table & delete files in \texttt{files} (content 1) & \conf{rewrite_data_files} with a delete threshold & a rewrite job \\
 a \texttt{MERGE} scans the whole table & scan bytes of every partition & a range on the partition column in \texttt{ON} & none \\
-many small files after streaming & tiny average size in \texttt{files} & \texttt{rewrite\_data\_files} (\texttt{binpack}) & a rewrite job \\
-disk keeps growing after compaction & large directory, many snapshots & \texttt{expire\_snapshots} & loses time travel past the retention \\
-files in storage no snapshot names & dry-run \texttt{remove\_orphan\_files} lists them & \texttt{remove\_orphan\_files} with a wide cutoff & a listing of the location \\
+many small files after streaming & tiny average size in \texttt{files} & \conf{rewrite_data_files} (\texttt{binpack}) & a rewrite job \\
+disk keeps growing after compaction & large directory, many snapshots & \conf{expire_snapshots} & loses time travel past the retention \\
+files in storage no snapshot names & dry-run \conf{remove_orphan_files} lists them & \conf{remove_orphan_files} with a wide cutoff & a listing of the location \\
 \bottomrule
 \end{tabular}
 \caption{The write and maintenance levers: symptom, evidence, lever, and cost.}
@@ -372,7 +372,7 @@ files in storage no snapshot names & dry-run \texttt{remove\_orphan\_files} list
 \item Run a \texttt{MERGE} with and without the partition column in the
       \texttt{ON} clause. Explain the difference in files scanned from the plan.
 \item Set a table to merge-on-read, run ten small updates, then run
-      \texttt{rewrite\_data\_files}. Compare scan latency before and after.
+      \conf{rewrite_data_files}. Compare scan latency before and after.
 \item Delete an entire partition's worth of rows in one statement and confirm
       from the plan that it resolved as a metadata-only delete.
 \end{exercises}

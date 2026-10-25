@@ -32,7 +32,7 @@
         <mxCell id="e1" style="edges=1;html=1;endArrow=block;strokeColor=#c77f3b;exitX=0.3;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="snap" target="oldbox"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e2" style="edges=1;html=1;endArrow=block;strokeColor=#4f8a3d;exitX=0.7;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="snap" target="newbox"><mxGeometry relative="1" as="geometry" /></mxCell>
 
-        <mxCell id="note" value="A query filtering by date evaluates each manifest against its OWN recorded spec --- coarser skipping on the left, finer on the right, in the same scan." style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
+        <mxCell id="note" value="A query filtering by date evaluates each manifest against its OWN recorded spec&lt;br&gt;--- coarser skipping on the left, finer on the right, in the same scan." style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
           <mxGeometry x="51.9" y="331.1" width="536.2" height="50.2" as="geometry" />
         </mxCell>
 

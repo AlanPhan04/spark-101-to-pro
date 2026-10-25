@@ -5,25 +5,25 @@
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <mxCell id="client" value="&lt;b&gt;Client&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;your session:your session, or the&lt;br&gt;Kyuubi SQL gatewaylt;br&gt;shell or notebook&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
+        <mxCell id="client" value="&lt;b&gt;Client&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:13px&quot;&gt;your session:&lt;br&gt;spark-submit,&lt;br&gt;shell or notebook&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceef1;strokeColor=#6b7280;fontSize=13;fontColor=#374151;" vertex="1" parent="1">
           <mxGeometry x="16.4" y="208.2" width="106.7" height="95.2" as="geometry" />
         </mxCell>
 
-        <mxCell id="k8s" value="&lt;b&gt;Kubernetes API&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;the cluster manager&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=13;fontColor=#3f335c;" vertex="1" parent="1">
+        <mxCell id="k8s" value="&lt;b&gt;Kubernetes API&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:13px&quot;&gt;the cluster manager&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontSize=13;fontColor=#3f335c;" vertex="1" parent="1">
           <mxGeometry x="205.1" y="29.7" width="147.7" height="71.4" as="geometry" />
         </mxCell>
 
-        <mxCell id="driver" value="&lt;b&gt;Driver&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;runs your SparkSession&lt;br&gt;plans the query (Ch. 2)&lt;br&gt;DAG + task scheduling&lt;br&gt;collects results&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;strokeWidth=2;fontSize=13;fontColor=#1f3d5c;" vertex="1" parent="1">
+        <mxCell id="driver" value="&lt;b&gt;Driver&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:13px&quot;&gt;runs your SparkSession&lt;br&gt;plans the query (Ch. 2)&lt;br&gt;DAG + task scheduling&lt;br&gt;collects results&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;strokeWidth=2;fontSize=13;fontColor=#1f3d5c;" vertex="1" parent="1">
           <mxGeometry x="188.7" y="196.3" width="164.1" height="130.9" as="geometry" />
         </mxCell>
 
-        <mxCell id="ex1" value="&lt;b&gt;Executor pod&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;spark.executor.cores task slots&lt;br&gt;runs tasks &amp;#8226; caches blocks&lt;br&gt;heartbeats to the driver&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
+        <mxCell id="ex1" value="&lt;b&gt;Executor pod&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:13px&quot;&gt;spark.executor.cores task slots&lt;br&gt;runs tasks &amp;#8226; caches blocks&lt;br&gt;heartbeats to the driver&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
           <mxGeometry x="443.1" y="35.7" width="180.5" height="113.0" as="geometry" />
         </mxCell>
-        <mxCell id="ex2" value="&lt;b&gt;Executor pod&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;spark.executor.cores task slots&lt;br&gt;runs tasks &amp;#8226; caches blocks&lt;br&gt;heartbeats to the driver&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
+        <mxCell id="ex2" value="&lt;b&gt;Executor pod&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:13px&quot;&gt;spark.executor.cores task slots&lt;br&gt;runs tasks &amp;#8226; caches blocks&lt;br&gt;heartbeats to the driver&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
           <mxGeometry x="443.1" y="204.6" width="180.5" height="113.0" as="geometry" />
         </mxCell>
-        <mxCell id="ex3" value="&lt;b&gt;Executor pod&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;spark.executor.cores task slots&lt;br&gt;runs tasks &amp;#8226; caches blocks&lt;br&gt;heartbeats to the driver&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
+        <mxCell id="ex3" value="&lt;b&gt;Executor pod&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:13px&quot;&gt;spark.executor.cores task slots&lt;br&gt;runs tasks &amp;#8226; caches blocks&lt;br&gt;heartbeats to the driver&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontSize=13;fontColor=#2f5320;" vertex="1" parent="1">
           <mxGeometry x="443.1" y="373.6" width="180.5" height="113.0" as="geometry" />
         </mxCell>
 
@@ -35,7 +35,7 @@
           <mxGeometry relative="1" as="geometry" />
           <mxPoint x="0.0" y="0.0" as="offset" />
         </mxCell>
-        <mxCell id="e_cli_lbl" value="submits the query" style="text;html=1;align=center;fontSize=13;fontColor=#555555;" vertex="1" parent="1">
+        <mxCell id="e_cli_lbl" value="submit" style="text;html=1;align=center;fontSize=13;fontColor=#555555;" vertex="1" parent="1">
           <mxGeometry x="123.1" y="233.2" width="73.8" height="16.7" as="geometry" />
         </mxCell>
 
@@ -50,7 +50,7 @@
         <mxCell id="e_ex1" style="endArrow=block;startArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=1.6;exitX=1;exitY=0.35;entryX=0;entryY=0.5;" edge="1" parent="1" source="driver" target="ex1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_ex2" value="tasks / results / heartbeats" style="endArrow=block;startArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=1.6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="driver" target="ex2">
+        <mxCell id="e_ex2" value="tasks, results" style="endArrow=block;startArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=1.6;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="driver" target="ex2">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e_ex3" style="endArrow=block;startArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=1.6;exitX=1;exitY=0.65;entryX=0;entryY=0.5;" edge="1" parent="1" source="driver" target="ex3">

@@ -8,9 +8,9 @@ import matplotlib.pyplot as plt
 from bookplot import C, save, use_book_style
 
 d = [x for x in json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "catalyst_rules.json"))) if "V2" not in x["variant"]]
-labels = ["all rules", "no column\npruning", "no predicate\npushdown", "no constant\nfolding", "none of\nthe four"]
-use_book_style(2.8)
-fig, (a, b) = plt.subplots(1, 2, figsize=(6.3, 2.8))
+labels = ["all\nrules", "no\ncolumn\npruning", "no\npredicate\npushdown", "no\nconstant\nfolding", "none\nof the\nfour"]
+use_book_style(3.1)
+fig, (a, b) = plt.subplots(1, 2, figsize=(6.3, 3.1))
 cols = [C["green"]] + [C["rose"]] * 3 + [C["gray"]]
 fills = [C["green_fill"]] + [C["rose_fill"]] * 3 + [C["gray_fill"]]
 for ax, key, title, fmt in ((a, "mb", "bytes read from Parquet (MB)", "{:,.0f}"), (b, "seconds", "wall clock (s)", "{:g}")):

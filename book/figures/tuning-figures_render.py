@@ -88,7 +88,7 @@ ax.scatter([x for x, s in zip(xs, sp) if s], [y for y, s in zip(ys, sp) if s], s
 ax.scatter([x for x, s in zip(xs, sp) if not s], [y for y, s in zip(ys, sp) if not s], s=60, color=C["green"], zorder=3, label="no spill")
 ax.set_xscale("log")
 ax.axvspan(298, 456, color=C["amber_fill"], zorder=0)
-ax.text(370, 520, "threshold\nbetween\n298 and 456", ha="center", fontsize=8.5, color=C["annot"])
+ax.text(370, 200, "threshold\nbetween\n298 and 456", ha="center", fontsize=8.5, color=C["annot"])
 ax.set_xlabel("unified memory ÷ cores (MB per concurrent task)")
 ax.set_ylabel("disk spill (MB)")
 ax.set_xticks([57, 114, 228, 456, 910, 2388]); ax.set_xticklabels(["57", "114", "228", "456", "910", "2388"])
@@ -107,7 +107,7 @@ if os.path.exists(p1) and os.path.exists(p2):
         ts = [r["seconds"] for r in pr]
         ax.plot(range(len(xs)), ts, color=C["blue"], marker="o", markersize=5)
         for i, t in enumerate(ts):
-            ax.text(i, t + max(ts) * 0.05, f"{t:g}", ha="center", fontsize=7.5, color=C["gray_ink"])
+            ax.text(i, t + max(ts) * 0.05, f"{t:g}", ha="center", fontsize=7.5, color=C["gray_ink"], bbox=dict(facecolor="white", edgecolor="none", pad=0.8, alpha=0.9), zorder=5)
         if 8 in xs:
             ax.axvline(xs.index(8), color=C["green"], linestyle="--", linewidth=1.2)
             ax.text(xs.index(8) + 0.12, max(ts) * 1.12, "8 slots", fontsize=8, color=C["green_ink"])
@@ -129,7 +129,7 @@ if os.path.exists(dyn):
         s_ = tl[key]
         ax.step(s_["t"], s_["n"], where="post", color=C["blue"], linewidth=2.2)
         ax.axvspan(s_["jobs"][0][1], s_["jobs"][1][1], color=C["amber_fill"], zorder=0)
-        ax.text((s_["jobs"][0][1] + s_["jobs"][1][1]) / 2, 0.25, "idle", fontsize=8, ha="center", color=C["annot"])
+        ax.text((s_["jobs"][0][1] + s_["jobs"][1][1]) / 2, 4.4, "idle", fontsize=8, ha="center", color=C["annot"])
         ax.set_title(title, fontsize=8.2)
         ax.set_xlabel("seconds"); ax.set_ylim(0, 4.8); ax.set_yticks(range(0, 5))
     axes[0].set_ylabel("executors")

@@ -32,7 +32,7 @@ chapter is about what Iceberg does with a value once Spark has produced one.
 \centering
 \caption{The pruning layers a scan passes through, in order}
 \label{tab:ice-pruning-layers}
-\begin{tabular}{@{}lp{7.5cm}@{}}
+\begin{tabular}{@{}lP{7.5cm}@{}}
 \toprule
 \textbf{Layer} & \textbf{Skips} \\
 \midrule
@@ -86,7 +86,7 @@ layouts of the same 30 million rows.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{4.1cm}rrrrr@{}}
+\begin{tabular}{@{}P{4.1cm}rrrrr@{}}
 \toprule
 \textbf{Table (same rows)} & \textbf{Manifests} & \textbf{Skipped manifests} & \textbf{Result files} & \textbf{Skipped files} & \textbf{Tasks} \\
 \midrule
@@ -148,7 +148,7 @@ scan.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{4.3cm}rrrr@{}}
+\begin{tabular}{@{}P{4.3cm}rrrr@{}}
 \toprule
 \textbf{Copy of 10 days} & \textbf{Files opened} & \textbf{Files skipped} & \textbf{Rows decoded} & \textbf{Bytes read} \\
 \midrule
@@ -188,7 +188,7 @@ rules for what pushes down are the same as for plain Parquet, catalogued in
 \section{Metrics modes: \texttt{full}, \texttt{truncate}, \texttt{counts}, \texttt{none}}
 \label{sec:ice-read-metrics-modes}
 
-\texttt{write.metadata.metrics.default} (default \texttt{truncate(16)})
+\conf{write.metadata.metrics.default} (default \texttt{truncate(16)})
 controls how much of each column's statistics get written into the manifest in
 the first place. It is a write-time property with a direct read-time consequence:
 
@@ -221,7 +221,7 @@ Parquet footers of those files still carry row-group statistics, so each task
 skips its row groups and the lookup reads only 1.5~MB; but it has opened 200
 files to find that out, where the \texttt{truncate} copy opened one.
 
-\texttt{write.metadata.metrics.column.<col>} overrides the default per column,
+\conf{write.metadata.metrics.column.<col>} overrides the default per column,
 which is the practical lever: set \texttt{full} on the column your biggest
 queries filter by most (the specimen's \texttt{order\_ts}, say) and leave wide
 free-text columns at \texttt{counts} so their manifests do not balloon for no
@@ -234,7 +234,7 @@ Min/max statistics prune well for a range predicate, or for a point lookup on
 data clustered by that column. They do not prune a point lookup on an unsorted
 high-cardinality column --- \Cref{fig:file-stat-ranges}'s top panel. A Parquet
 bloom filter, enabled per column with
-\texttt{write.parquet.bloom-filter-enabled.column.<col>=true}, answers a narrower
+\conf{write.parquet.bloom-filter-enabled.column.<col>=true}, answers a narrower
 question directly --- ``can this row group possibly contain this exact value'' ---
 with no false negatives and a tunable false-positive rate.
 
@@ -245,7 +245,7 @@ were still opened, because the filter lives inside the file, below the manifest
 layer. And not every row group was skipped, since a bloom filter has false
 positives and the column holds about a million distinct values per row group,
 more than the default size cap
-(\texttt{write.parquet.bloom-filter-max-bytes}, 1~MB, per row group) can
+(\conf{write.parquet.bloom-filter-max-bytes}, 1~MB, per row group) can
 represent at a tight false-positive rate. It costs write-time CPU and file size
 (the bloom copy is 35.8~MB per file against 34.8~MB), and is worth enabling only
 on columns queried by equality that you cannot sort by.
@@ -253,10 +253,10 @@ on columns queried by equality that you cannot sort by.
 \section{Vectorized reads}
 \label{sec:ice-read-vectorized}
 
-\texttt{read.parquet.vectorization.enabled} (default \texttt{true}) reads a
+\conf{read.parquet.vectorization.enabled} (default \texttt{true}) reads a
 \emph{batch} of rows into a columnar, Tungsten-friendly in-memory format
 (\Cref{ch:tungsten}) per call instead of materializing one Java object per row.
-\texttt{read.parquet.vectorization.batch-size} (default 5,000) sets how many rows
+\conf{read.parquet.vectorization.batch-size} (default 5,000) sets how many rows
 make up one batch; larger batches amortize per-batch overhead further but hold
 more decoded data in memory at once.
 
@@ -289,19 +289,19 @@ isolate a suspected reader bug.
 \label{sec:ice-read-splits}
 
 \Cref{sec:shape-jobs} described input partitions as roughly
-\texttt{read.split.target-size} (128~MB default) worth of data each. For an
+\conf{read.split.target-size} (128~MB default) worth of data each. For an
 Iceberg scan that is the configured \emph{ceiling}, and not always the number you
 get. The planner bins manifest entries toward the target, using
-\texttt{read.split.open-file-cost} (4~MB default) as a floor weight per file so
+\conf{read.split.open-file-cost} (4~MB default) as a floor weight per file so
 that many tiny files are not treated as free to combine, and
-\texttt{read.split.planning-lookback} (10) to bound how many candidate bins it
+\conf{read.split.planning-lookback} (10) to bound how many candidate bins it
 considers at once.
 
 On the lab the ceiling did nothing, and the cause is a feature. The 10 unsorted
 files total 348~MB. At the 128~MB default the arithmetic says about 4 splits,
-and the scan ran 10 tasks; setting \texttt{read.split.target-size} to 512~MB
+and the scan ran 10 tasks; setting \conf{read.split.target-size} to 512~MB
 changed nothing. Iceberg 1.6 shrinks the target when the scan is small relative
-to the cluster's default parallelism (\texttt{read.split.adaptive-size.enabled},
+to the cluster's default parallelism (\conf{read.split.adaptive-size.enabled},
 default \texttt{true}), so that a small scan still produces enough tasks to keep
 the slots busy; here the lab's 40-slot parallelism pulled the target well below
 a file. \Cref{tab:ice-lab-splits} turns the adaptive size off to expose the
@@ -310,7 +310,7 @@ setting underneath.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{5.2cm}p{3.0cm}r@{}}
+\begin{tabular}{@{}P{5.2cm}P{3.0cm}r@{}}
 \toprule
 \textbf{Settings} & \textbf{Files} & \textbf{Tasks} \\
 \midrule
@@ -322,7 +322,7 @@ adaptive off, target 8~MB & 10 files, 348~MB & 10 \\
 \bottomrule
 \end{tabular}
 \caption{Scan tasks for ten 35~MB files. Adaptive sizing hides
-\texttt{read.split.target-size} for a small scan. With it off, the 128~MB target
+\conf{read.split.target-size} for a small scan. With it off, the 128~MB target
 packs three files per task and a 512~MB target packs all ten into one. An 8~MB
 target cannot split a file that has no split offsets, so it leaves 10 tasks.}
 \label{tab:ice-lab-splits}
@@ -359,15 +359,15 @@ FROM lab.db.orders.manifests;
 \end{lstlisting}
 
 \texttt{table.files} lists every live data and delete file with its size, record
-count, and per-column bounds; \texttt{table.manifests} shows manifest-level
-summaries; \texttt{table.partitions} aggregates file counts and sizes per
+count, and per-column bounds; \conf{table.manifests} shows manifest-level
+summaries; \conf{table.partitions} aggregates file counts and sizes per
 partition, the fastest way to spot a partition accumulating too many small files
-(\Cref{sec:ice-file-size}); \texttt{table.snapshots} and \texttt{table.history}
+(\Cref{sec:ice-file-size}); \conf{table.snapshots} and \texttt{table.history}
 show the commit sequence a scan resolves against. Reading these tables directly
 is usually the faster way to confirm a suspicion from the scan counters.
 
 Inside Spark, name a metadata table with its full catalog path
-(\texttt{lab.db.orders.files}): after \texttt{USE lab.db}, the short form
+(\conf{lab.db.orders.files}): after \texttt{USE lab.db}, the short form
 \texttt{orders.files} is parsed as table \texttt{files} in namespace
 \texttt{orders} and fails.
 
@@ -375,7 +375,7 @@ Inside Spark, name a metadata table with its full catalog path
 The pruning ratio at each layer comes straight from the scan node's counters:
 \texttt{skippedDataManifests / totalDataManifest} for the first layer and
 \texttt{skippedDataFiles / (skippedDataFiles + resultDataFiles)} for the second.
-Compare \texttt{resultDataFiles} with the table's file count from
+Compare \conf{resultDataFiles} with the table's file count from
 \texttt{table.files} to see how selective the whole scan was.
 \end{tip}
 
@@ -397,16 +397,16 @@ symptom into the evidence and the lever.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{3.3cm}P{3.9cm}P{3.7cm}P{3.1cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
-a selective query opens every file & \texttt{skippedDataFiles} is 0; \texttt{files} ranges overlap & sort or cluster by the filter column & small files; write cost \\
-planning is slow, many manifests & large \texttt{totalDataManifest}; few skipped & rewrite manifests so each spans few partitions & a maintenance job \\
+a selective query opens every file & \conf{skippedDataFiles} is 0; \texttt{files} ranges overlap & sort or cluster by the filter column & small files; write cost \\
+planning is slow, many manifests & large \conf{totalDataManifest}; few skipped & rewrite manifests so each spans few partitions & a maintenance job \\
 min/max is missing for a column & \texttt{lower\_bound} is \texttt{NULL} in \texttt{files} & set the column's metrics mode to \texttt{full} or \texttt{truncate} & larger manifests \\
 an equality lookup on an unsorted column & overlapping ranges, high \texttt{rows decoded} & bloom filter on that column & write CPU, file size \\
 scan feeds too few tasks & tasks fewer than slots for a large scan & more or smaller files; check adaptive split size & more files to plan \\
-decoding is the bottleneck & no \texttt{ColumnarToRow} node & \texttt{read.parquet.vectorization.enabled=true} & none \\
+decoding is the bottleneck & no \texttt{ColumnarToRow} node & \conf{read.parquet.vectorization.enabled=true} & none \\
 \bottomrule
 \end{tabular}
 \caption{The read-path levers: symptom, evidence, lever, and cost.}
@@ -425,9 +425,9 @@ to maintaining it.
       say which layer skipped the other 24 partitions' worth of data.
 \item \textbf{Read the metadata.} Query \texttt{table.files} for a column you
       filter on and print its lower and upper bounds with
-      \texttt{readable\_metrics}. Do the per-file ranges overlap? Predict how many
+      \conf{readable_metrics}. Do the per-file ranges overlap? Predict how many
       files an equality lookup on that column opens, then check with the scan's
-      \texttt{resultDataFiles}.
+      \conf{resultDataFiles}.
 \item \textbf{Predict, then check.} For ten 35~MB files, predict the task count
       for a target of 128~MB and for 512~MB with adaptive sizing off, then run
       both. What happens with adaptive sizing on?

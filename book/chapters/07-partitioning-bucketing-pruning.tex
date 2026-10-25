@@ -26,11 +26,11 @@ lists them.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{5.4cm}p{5.6cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{5.4cm}P{5.6cm}@{}}
 \toprule
 \textbf{Field} & \textbf{What it says} & \textbf{An empty value means} \\
 \midrule
-\texttt{PartitionFilters} & predicates resolved against partition values, so whole partitions are skipped & the filter did not resolve against the partition column; every partition is read \\
+\conf{PartitionFilters} & predicates resolved against partition values, so whole partitions are skipped & the filter did not resolve against the partition column; every partition is read \\
 \texttt{PushedFilters} & predicates handed to the file reader, which skips row groups by their min/max statistics & nothing was pushed; rows are filtered after they are decoded \\
 \texttt{ReadSchema} & the columns the scan actually reads & (never empty) a schema wider than the query needs is a pruning failure \\
 \texttt{RuntimeFilters} & filters injected at run time, such as dynamic partition pruning's (\Cref{sec:pruning-dpp}) & no runtime filter was added \\
@@ -42,7 +42,7 @@ partitioned table is the first thing to look for when a scan reads too much.}
 \end{table}
 
 The names depend on the reader. A Hive-catalogued Parquet table, read through
-Spark's built-in file source, prints \texttt{PartitionFilters},
+Spark's built-in file source, prints \conf{PartitionFilters},
 \texttt{PushedFilters}, and \texttt{ReadSchema} on a \texttt{FileScan} node. An
 Iceberg table is read through the DataSource~V2 API, and its \texttt{BatchScan}
 node prints the pushed predicates inside a single \texttt{filters=[\ldots]} list
@@ -105,7 +105,7 @@ plots the bytes.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{5.3cm}p{3.6cm}rr@{}}
+\begin{tabular}{@{}P{5.3cm}P{3.6cm}rr@{}}
 \toprule
 \textbf{Filter as written} & \textbf{What the scan received} & \textbf{Input} & \textbf{Tasks} \\
 \midrule
@@ -192,14 +192,14 @@ cases that matter.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{5.6cm}p{3.7cm}rr@{}}
+\begin{tabular}{@{}P{5.6cm}P{3.7cm}rr@{}}
 \toprule
 \textbf{Case} & \textbf{\texttt{RuntimeFilters} on the fact scan} & \textbf{Input} & \textbf{Tasks} \\
 \midrule
 \texttt{orders\_d}, identity partition, DPP off & empty & 60.6~MB & 31 \\
-\texttt{orders\_d}, identity partition, DPP on & \texttt{dynamicpruningexpression(order\_date IN \ldots)} & 7.8~MB & 4 \\
-\texttt{orders\_d}, DPP on, broadcast disabled & \texttt{dynamicpruningexpression(true)} & 60.6~MB & 31 \\
-\texttt{orders}, \texttt{day(order\_ts)}, join on \texttt{CAST(order\_ts AS DATE)}, DPP on & \texttt{dynamicpruningexpression(cast(order\_ts as date) IN \ldots)} & 207.3~MB & 31 \\
+\texttt{orders\_d}, identity partition, DPP on & \texttt{dynamic\-pruning\-expression(order\_date IN \ldots)} & 7.8~MB & 4 \\
+\texttt{orders\_d}, DPP on, broadcast disabled & \texttt{dynamic\-pruning\-expression(true)} & 60.6~MB & 31 \\
+\texttt{orders}, \texttt{day(order\_ts)}, join on \texttt{CAST(order\_ts AS DATE)}, DPP on & \texttt{dynamic\-pruning\-expression(cast(order\_ts as date) IN \ldots)} & 207.3~MB & 31 \\
 \bottomrule
 \end{tabular}
 \caption{Dynamic partition pruning on the lab. It cuts the scan from 31 tasks
@@ -219,7 +219,7 @@ are the interesting ones, and the conditions in
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{4.3cm}p{5.0cm}p{4.7cm}@{}}
+\begin{tabular}{@{}P{4.3cm}P{5.0cm}P{4.7cm}@{}}
 \toprule
 \textbf{Condition} & \textbf{Why it is required} & \textbf{What fails without it} \\
 \midrule
@@ -239,11 +239,11 @@ builds the broadcast hash table for the join out of it as it would anyway, and
 reuses that \emph{same} in-memory result a second time as the list of matching
 keys for the fact-table filter: one execution, two consumers. In the lab's final
 plan the scan's subquery node reads \texttt{ReusedExchange} over the join's own
-\texttt{BroadcastExchange}. If the dimension side is not broadcastable there is
+\conf{BroadcastExchange}. If the dimension side is not broadcastable there is
 no cheap, already-materialized copy to reuse, and with the default
-\texttt{reuseBroadcastOnly} the filter collapses to
-\texttt{dynamicpruningexpression(true)}, a sentinel that means ``no pruning.''
-With \texttt{reuseBroadcastOnly} set to \texttt{false} Spark may run the
+\conf{reuseBroadcastOnly} the filter collapses to
+\conf{dynamicpruningexpression(true)}, a sentinel that means ``no pruning.''
+With \conf{reuseBroadcastOnly} set to \texttt{false} Spark may run the
 dimension side as its own query, but only when its estimate says the pruning
 saves more than it costs
 (\conf{spark.sql.optimizer.dynamicPartitionPruning.fallbackFilterRatio}, default
@@ -299,11 +299,11 @@ The lab bucketed \texttt{orders} and \texttt{dim\_customer} on
 Without Spark's storage-partitioned join enabled, the plan has two
 \texttt{Exchange hashpartitioning(customer\_id, 200)} nodes under the join, and
 the reduce stage read 226.9~MB of shuffle data across 45 tasks. With it enabled,
-the scans carry \texttt{groupedBy=customer\_id\_bucket}, the two exchanges are
+the scans carry \conf{groupedBy=customer_id_bucket}, the two exchanges are
 gone, and the join runs in the 16 tasks of the scan stage itself with no shuffle
 read. The settings the lab turned on were
 \conf{spark.sql.sources.v2.bucketing.enabled},
-\texttt{spark.sql.iceberg.planning.preserve-data-grouping}, and
+\conf{spark.sql.iceberg.planning.preserve-data-grouping}, and
 \conf{spark.sql.requireAllClusterKeysForCoPartition} set to \texttt{false}; the
 lab did not test which of the three can be left at its default.
 
@@ -377,14 +377,14 @@ column was measured on the lab for the first three rows.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.6cm}p{2.6cm}p{2.8cm}p{4.9cm}@{}}
+\begin{tabular}{@{}P{3.6cm}P{2.6cm}P{2.8cm}P{4.9cm}@{}}
 \toprule
 \textbf{Call or hint} & \textbf{Shuffles?} & \textbf{Distributes by} & \textbf{Does AQE change the count?} \\
 \midrule
 \texttt{repartition(n)} & yes & round-robin & no: 200 requested, 200 tasks ran \\
 \texttt{repartition(n, cols)} & yes & hash of columns & no: 200 requested, 200 tasks ran \\
-\texttt{repartition(cols)} & yes & hash of columns & yes: 200 default, coalesced to 47 \\
-\texttt{repartitionByRange(cols)} & yes, after a sampling job & range of columns & no: 200 requested, 200 tasks ran \\
+\conf{repartition(cols)} & yes & hash of columns & yes: 200 default, coalesced to 47 \\
+\conf{repartitionByRange(cols)} & yes, after a sampling job & range of columns & no: 200 requested, 200 tasks ran \\
 \texttt{coalesce(n)} & no & merges neighbors & not applicable \\
 \texttt{/*+ REBALANCE */} & yes & balances sizes & yes: coalesced to 40 tasks (44 with a column) \\
 \bottomrule
@@ -410,13 +410,13 @@ weeks of \texttt{orders}, read and written to a no-op sink.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.6cm}rrrr@{}}
+\begin{tabular}{@{}P{3.6cm}rrrr@{}}
 \toprule
 \textbf{Plan} & \textbf{Scan tasks} & \textbf{Median scan task} & \textbf{Reduce tasks} & \textbf{Shuffle read} \\
 \midrule
 no change & 14 & 1688~ms & --- & --- \\
 \texttt{coalesce(10)} & 10 & 1660~ms & --- & --- \\
-\texttt{repartition(10)} & 14 & 3334~ms & 10 & 1001.2~MB \\
+\conf{repartition(10)} & 14 & 3334~ms & 10 & 1001.2~MB \\
 \bottomrule
 \end{tabular}
 \caption{Fourteen days of \texttt{orders} (490.6~MB read), then 10 output
@@ -437,7 +437,7 @@ scan task about twice as slow because it now also writes shuffle files.}
 The numbers are small because the lab is small, but the direction scales.
 \texttt{coalesce(10)} on a 560-split scan would run the scan and filter on 10
 tasks of 56 splits each instead of 560 tasks spread over 40 slots: about 14 waves
-become 56 split-times in series on 10 of 40 slots. \texttt{repartition(10)} adds a
+become 56 split-times in series on 10 of 40 slots. \conf{repartition(10)} adds a
 shuffle but keeps the scan wide. Neither is free; the choice is whether you would
 rather pay in a shuffle or in a slow narrow stage.
 
@@ -445,7 +445,7 @@ rather pay in a shuffle or in a slow narrow stage.
 The \texttt{shuffle} flag in \texttt{coalesce(n, shuffle=true)} belongs to the RDD
 API (\texttt{rdd.coalesce}). The DataFrame method \texttt{df.coalesce(n)} has no
 such flag; the DataFrame equivalent of ``coalesce with a shuffle'' is
-\texttt{df.repartition(n)}.
+\conf{df.repartition(n)}.
 \end{note}
 
 \section{Column pruning and \texttt{ReadSchema}}
@@ -463,7 +463,7 @@ strings that compress poorly, are among the three it skips.
 
 It goes one level deeper for a nested (struct) column. Parquet and Iceberg store
 nested fields independently enough that a query touching only
-\texttt{event.location.city} out of a wide \texttt{event STRUCT<\ldots>} column can
+\conf{event.location.city} out of a wide \texttt{event STRUCT<\ldots>} column can
 prune to that one leaf field, without reading its siblings. This is
 \emph{nested schema pruning}
 (\conf{spark.sql.optimizer.nestedSchemaPruning.enabled}, default \texttt{true}).
@@ -498,7 +498,7 @@ much usually fails the first of the three that you check.
 Static partition pruning skips whole directories when the filter reaches the scan
 as a range on the bare column --- Spark rewrites date comparisons on a timestamp
 into one, but not string casts or arithmetic --- and the scan node's
-\texttt{filters=} list (\texttt{PartitionFilters} on a Hive table) is where you
+\texttt{filters=} list (\conf{PartitionFilters} on a Hive table) is where you
 see it. Dynamic partition pruning gets the same skipping for a filter that lives
 on the other side of a join, by running that side first and reusing its
 broadcast; on the lab it cut a 31-task scan to 4, but only when the fact table
@@ -518,12 +518,12 @@ symptom into the evidence and the fix.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{3.3cm}P{3.9cm}P{3.7cm}P{3.1cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Fix} & \textbf{Cost} \\
 \midrule
 a scan reads every partition & no range on the partition column in \texttt{filters=}; month-sized input in the \textbf{Stages} tab & rewrite the filter as a bare-column range, not a string cast or arithmetic & none \\
-a star join scans the whole fact table & empty or \texttt{dynamicpruningexpression(true)} \texttt{RuntimeFilters} & partition the fact table by the join column itself; keep the dimension broadcastable & a layout decision \\
+a star join scans the whole fact table & empty or \conf{dynamicpruningexpression(true)} \texttt{RuntimeFilters} & partition the fact table by the join column itself; keep the dimension broadcastable & a layout decision \\
 a repeated join shuffles both sides every run & two \texttt{Exchange} nodes under the join & bucket both tables on the key, same count & write cost; fixed bucket count \\
 a write produces thousands of tiny files or a few huge ones & file sizes in the output & \texttt{REBALANCE} before the write & a shuffle \\
 a stage got slower after \texttt{coalesce} & few tasks in the scan stage & \texttt{repartition(n)} instead & a shuffle \\
@@ -553,6 +553,6 @@ to keeping what is expensive to recompute.
       \texttt{RuntimeFilters} in each plan and compare the fact scan's task count.
 \item \textbf{Predict, then check.} \texttt{orders} scans as 560 splits. Predict
       the number of tasks and the number of waves on 40 slots for the scan stage
-      with \texttt{coalesce(10)} before a write, and with \texttt{repartition(10)}.
+      with \texttt{coalesce(10)} before a write, and with \conf{repartition(10)}.
       Then run both and compare the stage's task count in the \textbf{Stages} tab.
 \end{exercises}

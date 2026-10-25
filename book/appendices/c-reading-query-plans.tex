@@ -11,7 +11,7 @@ of the reference environment (\Cref{app:refenv}).
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.15}
-\begin{tabular}{@{}p{3cm}p{10.8cm}@{}}
+\begin{tabular}{@{}P{3cm}P{10.8cm}@{}}
 \toprule
 \textbf{Form} & \textbf{Output} \\
 \midrule
@@ -20,7 +20,7 @@ of the reference environment (\Cref{app:refenv}).
 \texttt{EXPLAIN FORMATTED} & physical plan as a tree + a numbered list expanding every node \\
 \texttt{EXPLAIN COST} & optimized logical plan with the planner's row-count / size estimates \\
 \texttt{EXPLAIN CODEGEN} & physical plan + the generated Java for each whole-stage stage \\
-\texttt{df.explain(mode=)} & same five, as \texttt{"simple"}, \texttt{"extended"}, \texttt{"formatted"}, \texttt{"cost"}, \texttt{"codegen"} \\
+\conf{df.explain(mode=)} & same five, as \texttt{"simple"}, \texttt{"extended"}, \texttt{"formatted"}, \texttt{"cost"}, \texttt{"codegen"} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -66,7 +66,7 @@ left-hand \texttt{BatchScan} of \texttt{orders}, which reads the raw files. The
 into row form, the \texttt{Filter} drops rows with a null key, and the
 \texttt{Project} keeps the three columns the join and aggregate need. That is the
 entire left-hand side up to the first \texttt{Exchange}: the filtered rows are
-shuffled by \texttt{hash(product\_id)} into 200 partitions, so that every row
+shuffled by \conf{hash(product_id)} into 200 partitions, so that every row
 with a given \texttt{product\_id} ends up in the same partition as every other
 row sharing it, and the \texttt{Sort} above it orders each partition by
 \texttt{product\_id}. The right-hand branch does the same three things --- scan,
@@ -78,7 +78,7 @@ per partition, but it cannot finish the aggregate: the join partitioned by
 \texttt{product\_id} and the aggregate groups by \texttt{category}, so a second
 \texttt{Exchange} regroups the partial results by \texttt{category} before the
 final \texttt{HashAggregate} (marker \texttt{*(6)}). A third \texttt{Exchange},
-\texttt{rangepartitioning}, orders the twenty rows for the global
+\conf{rangepartitioning}, orders the twenty rows for the global
 \texttt{ORDER BY}, and the final \texttt{Sort} emits them. Four exchanges, so five
 stages; the codegen markers \texttt{*(1)} through \texttt{*(7)} count the
 fused pieces inside them. Every step in this reading is exactly ``what does this
@@ -93,14 +93,14 @@ Where data enters the plan.
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.15}
-\begin{tabular}{@{}p{3.6cm}p{10.2cm}@{}}
+\begin{tabular}{@{}P{3.6cm}P{10.2cm}@{}}
 \toprule
 \textbf{Operator} & \textbf{Source} \\
 \midrule
 \texttt{BatchScan} & a DataSource~V2 table --- Iceberg on the reference stack \\
 \texttt{FileScan parquet} / \texttt{orc} / \texttt{csv} & a file-based table through the Hive catalog (DataSource~V1) \\
-\texttt{InMemoryTableScan} & a cached DataFrame or \texttt{CACHE TABLE} \\
-\texttt{DataSourceV2ScanRelation} & the logical-plan form of a V2 scan \\
+\conf{InMemoryTableScan} & a cached DataFrame or \texttt{CACHE TABLE} \\
+\conf{DataSourceV2ScanRelation} & the logical-plan form of a V2 scan \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -115,7 +115,7 @@ BatchScan orders
 \end{lstlisting}
 
 \begin{description}
-  \item[\texttt{PartitionFilters}] filters resolved against partition values, so
+  \item[\conf{PartitionFilters}] filters resolved against partition values, so
         whole partitions (directories on object storage) are skipped without
         being opened. Empty on a partitioned table means the filter did not match
         the partition transform (\Cref{ch:pruning}).
@@ -142,14 +142,14 @@ is the fastest estimate of a query's cost.
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{3cm}p{4.4cm}p{6cm}@{}}
+\begin{tabular}{@{}P{3cm}P{4.4cm}P{6cm}@{}}
 \toprule
 \textbf{Partitioning} & \textbf{In the plan} & \textbf{Created by} \\
 \midrule
 Hash & \texttt{hashpartitioning(col, n)} & joins, \texttt{GROUP BY}, \texttt{repartition(n, col)} \\
-Range & \texttt{rangepartitioning(col ASC, n)} & global \texttt{ORDER BY}, \texttt{repartitionByRange} \\
-Round-robin & \texttt{roundrobinpartitioning(n)} & \texttt{repartition(n)} with no column \\
-Single & \texttt{SinglePartition} & global aggregate with no group key, \texttt{coalesce(1)} \\
+Range & \texttt{rangepartitioning(col ASC, n)} & global \texttt{ORDER BY}, \conf{repartitionByRange} \\
+Round-robin & \conf{roundrobinpartitioning(n)} & \texttt{repartition(n)} with no column \\
+Single & \conf{SinglePartition} & global aggregate with no group key, \texttt{coalesce(1)} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -158,14 +158,14 @@ Single & \texttt{SinglePartition} & global aggregate with no group key, \texttt{
 Exchange hashpartitioning(product_id, 200), ENSURE_REQUIREMENTS, [plan_id=42]
 \end{lstlisting}
 
-\texttt{ENSURE\_REQUIREMENTS} means the planner's \texttt{EnsureRequirements} rule
+\conf{ENSURE_REQUIREMENTS} means the planner's \conf{EnsureRequirements} rule
 inserted this exchange because the operator above it needs its input distributed
 that way. \texttt{ReuseExchange} in a plan means two identical exchanges were
 deduplicated --- one shuffle feeds both consumers.
 
-\texttt{BroadcastExchange} is not a shuffle. It collects one small side to the
+\conf{BroadcastExchange} is not a shuffle. It collects one small side to the
 driver and ships it whole to every executor; it appears only below the build side
-of a \texttt{BroadcastHashJoin} or \texttt{BroadcastNestedLoopJoin}.
+of a \conf{BroadcastHashJoin} or \conf{BroadcastNestedLoopJoin}.
 
 \section{Sort operators}
 
@@ -174,7 +174,7 @@ Sort [product_id ASC NULLS FIRST], false, 0
 \end{lstlisting}
 
 The boolean is \texttt{true} for a global sort (a single ordered output across all
-partitions, preceded by a \texttt{rangepartitioning} exchange) and \texttt{false}
+partitions, preceded by a \conf{rangepartitioning} exchange) and \texttt{false}
 for a local per-partition sort. A \texttt{SortMergeJoin} always shows two local
 sorts, one per input, between the exchanges and the join. Sorts need a sort
 buffer in execution memory and spill when it is exhausted (\Cref{ch:execmem}).
@@ -186,7 +186,7 @@ buffer in execution memory and spill when it is exhausted (\Cref{ch:execmem}).
 choice in a plan.
 
 \paragraph{BroadcastHashJoin.} \texttt{BroadcastHashJoin [\ldots], BuildRight}
-(or \texttt{BuildLeft}) with a \texttt{BroadcastExchange} below the build side and
+(or \texttt{BuildLeft}) with a \conf{BroadcastExchange} below the build side and
 \emph{no} exchange on the probe (large) side. The cheapest join: no shuffle of
 the big table.
 
@@ -219,11 +219,11 @@ the giveaway that the join key is not an equality. \texttt{dim\_customer}
 itself is too large to broadcast by default (\Cref{sec:refenv-orders}), but
 here it is filtered down to its small \texttt{VIP} segment first, and it is
 \emph{that} filtered result, small enough to broadcast, that the
-\texttt{BroadcastExchange} ships whole; every task on the \texttt{orders}
+\conf{BroadcastExchange} ships whole; every task on the \texttt{orders}
 side then compares each of its rows against every row of that broadcast
 copy, checking \texttt{order\_total > credit\_limit} directly. This is only
 affordable because the broadcast side is small; the same plan shape with
-neither side small enough to broadcast falls to \texttt{CartesianProduct}
+neither side small enough to broadcast falls to \conf{CartesianProduct}
 instead.
 
 \paragraph{CartesianProduct.} Every row of one side with every row of the other.
@@ -242,7 +242,7 @@ combine), a shuffle, then a final aggregate.
       +- ...
 \end{lstlisting}
 
-Reading bottom-up: the lower \texttt{partial\_avg(on\_time)} runs once per
+Reading bottom-up: the lower \conf{partial_avg(on_time)} runs once per
 input partition, producing one partial running-sum-and-count per
 \texttt{product\_id} it saw locally; the \texttt{Exchange} then redistributes
 those small partial results by \texttt{product\_id}, so every partial result
@@ -254,12 +254,12 @@ directly --- only the already-shrunk partial aggregates are.
 \begin{table}[H]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{3.4cm}p{4.6cm}p{5.4cm}@{}}
+\begin{tabular}{@{}P{3.4cm}P{4.6cm}P{5.4cm}@{}}
 \toprule
 \textbf{Operator} & \textbf{Chosen when} & \textbf{Memory} \\
 \midrule
 \texttt{HashAggregate} & all aggregate buffers are fixed-width (numeric, date, timestamp) & off-heap hash map; falls back to sort-based under memory pressure \\
-\texttt{ObjectHashAggregate} & a buffer holds a variable-width or complex type (\texttt{collect\_list}, \texttt{collect\_set}, some UDAFs) & on-heap objects; falls back to sort-based past \conf{spark.sql.objectHashAggregate.sortBased.fallbackThreshold} (128) distinct keys \\
+\conf{ObjectHashAggregate} & a buffer holds a variable-width or complex type (\texttt{collect\_list}, \texttt{collect\_set}, some UDAFs) & on-heap objects; falls back to sort-based past \conf{spark.sql.objectHashAggregate.sortBased.fallbackThreshold} (128) distinct keys \\
 \texttt{SortAggregate} & hash aggregation is not feasible & needs input pre-sorted by the group keys; handles any size, slower \\
 \bottomrule
 \end{tabular}
@@ -298,7 +298,7 @@ the interpreter; \Cref{sec:wholestage-codegen} lists why a stage loses codegen.
 
 When Adaptive Query Execution is on (\Cref{ch:aqe}), the plan the SQL tab shows
 after the query finishes is rooted at \texttt{AdaptiveSparkPlan
-isFinalPlan=true}. \texttt{isFinalPlan=false} is the compile-time plan from
+isFinalPlan=true}. \conf{isFinalPlan=false} is the compile-time plan from
 \texttt{explain()} before an action --- it may change substantially at runtime.
 
 \begin{description}
@@ -309,15 +309,15 @@ isFinalPlan=true}. \texttt{isFinalPlan=false} is the compile-time plan from
         reads \texttt{coalesced and skewed}.
   \item[\texttt{AQEShuffleRead local}] a reduce task reads shuffle files from its
         own executor; used for the large side after a broadcast promotion.
-  \item[\texttt{BroadcastQueryStage}] a \texttt{SortMergeJoin} was converted to a
+  \item[\conf{BroadcastQueryStage}] a \texttt{SortMergeJoin} was converted to a
         broadcast at runtime because the shuffled side turned out small.
-  \item[\texttt{SortMergeJoin(skew=true)}] AQE detected and handled skew in
+  \item[\conf{SortMergeJoin(skew=true)}] AQE detected and handled skew in
         this join.
 \end{description}
 
 \Cref{ch:aqe} shows each of these in a final plan, with the plan annotated
 (\Cref{sec:aqe-reading}). A promoted join no longer shows
-\texttt{SortMergeJoin}: AQE rewrites it to \texttt{BroadcastHashJoin}. The large
+\texttt{SortMergeJoin}: AQE rewrites it to \conf{BroadcastHashJoin}. The large
 side's shuffle write has already happened by then, so that side is read
 through \texttt{AQEShuffleRead local} rather than skipping its shuffle. A
 join cannot show both a skew split and a broadcast promotion on the same side,
@@ -341,7 +341,7 @@ row-by-row after the read (\Cref{ch:pruning}):
 \end{itemize}
 
 \paragraph{Verification.} Run \texttt{EXPLAIN FORMATTED}, find the scan, and check
-that each partition-column filter is in \texttt{PartitionFilters} and each
+that each partition-column filter is in \conf{PartitionFilters} and each
 data-column filter is in \texttt{PushedFilters}. If one is missing, it hit a
 killer above.
 

@@ -8,7 +8,7 @@
         <mxCell id="t1" value="&lt;b&gt;1. Storage borrows idle execution space&lt;/b&gt;" style="text;html=1;align=left;fontSize=13;fontColor=#2f3b52;" vertex="1" parent="1">
           <mxGeometry x="18.3" y="13.3" width="292.6" height="31.8" as="geometry" />
         </mxCell>
-        <mxCell id="a-storage2" value="&lt;b&gt;Storage&lt;/b&gt; --- its own half, plus borrowed idle execution space&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;(dashed edge: this part is borrowed, not owned)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;dashed=1;fontSize=13;fontColor=#7a4a17;" vertex="1" parent="1">
+        <mxCell id="a-storage2" value="&lt;b&gt;Storage&lt;/b&gt;&lt;br&gt;its own half, plus borrowed&lt;br&gt;idle execution space&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;(dashed edge: this part is borrowed, not owned)&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;dashed=1;fontSize=13;fontColor=#7a4a17;" vertex="1" parent="1">
           <mxGeometry x="18.3" y="58.3" width="274.3" height="92.8" as="geometry" />
         </mxCell>
 

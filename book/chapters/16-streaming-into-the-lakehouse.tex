@@ -20,7 +20,7 @@ processing a growing directory.
 Structured Streaming treats a stream as a table that keeps growing, and a
 streaming query as an ordinary DataFrame query re-run incrementally against the new
 rows since the last run. Each run is a \emph{micro-batch}: the driver's
-\texttt{StreamExecution} asks the source for the range of new offsets available,
+\conf{StreamExecution} asks the source for the range of new offsets available,
 plans and executes an ordinary batch job over exactly that range --- the same
 Catalyst pipeline, the same job/stage/task machinery from \Cref{ch:shape} ---
 and, on success, records the offsets it has processed to a \emph{checkpoint}
@@ -108,7 +108,7 @@ eventually threatens the heap in a way no batch operator ever has to plan around
 The \emph{state store} holds the partial results a windowed aggregation or a
 streaming join needs across micro-batches, checkpointed alongside the offsets so it
 survives a restart. The default provider keeps state as JVM objects in memory per
-task and snapshots it to the checkpoint; \texttt{RocksDBStateStoreProvider}
+task and snapshots it to the checkpoint; \conf{RocksDBStateStoreProvider}
 (\conf{spark.sql.streaming.stateStore.providerClass}) moves it into an embedded
 RocksDB instance per task --- a log-structured merge tree that never updates a file
 in place, flushes a small in-memory buffer as an immutable sorted file, and merges
@@ -284,12 +284,12 @@ implies, not as a substitute for choosing it.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{3.7cm}P{4.1cm}P{3.2cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
 thousands of tiny files per day & \texttt{files}: 66~KB average at a 2~s trigger & widen the trigger; compact continuously & latency; a rewrite job \\
-manifests multiply with commits & \texttt{manifests}: one per commit (49 in 100~s) & \texttt{rewrite\_manifests} on a schedule & a metadata rewrite \\
+manifests multiply with commits & \texttt{manifests}: one per commit (49 in 100~s) & \conf{rewrite_manifests} on a schedule & a metadata rewrite \\
 state grows without bound & state rows still rising at the end of the run & add a watermark (4,000-row plateau) & late rows dropped \\
 output table grows every batch & \texttt{complete} mode: 3 to 27 rows in 15 batches & use \texttt{update} or \texttt{append} & none \\
 need a scheduled job, not a service & \texttt{AvailableNow}: a no-data run commits nothing & \texttt{AvailableNow} from a cron job & start-up time per run \\
@@ -321,7 +321,7 @@ streaming table's small-files and manifest pressure: 49 files in 100 seconds at 
 \item Given a trigger interval and an input rate, estimate files committed per
       hour and the compaction cadence needed to keep the table healthy.
 \item Run a windowed aggregation with and without a watermark; read
-      \texttt{stateOperators.numRowsTotal} from \texttt{recentProgress} after each
+      \conf{stateOperators.numRowsTotal} from \texttt{recentProgress} after each
       batch and plot it.
 \item Kill a streaming query mid-batch and restart it with the same checkpoint.
       Confirm from the table's snapshot summaries that the epoch ids have no gap

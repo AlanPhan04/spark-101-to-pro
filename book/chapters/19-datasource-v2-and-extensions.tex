@@ -26,28 +26,28 @@ interface a class implements is a capability the planner may use.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{1.9cm}p{5.8cm}p{6.5cm}@{}}
+\begin{tabular}{@{}P{1.9cm}P{5.8cm}P{6.5cm}@{}}
 \toprule
 \textbf{Object} & \textbf{Interface (Spark 3.5)} & \textbf{What it lets the planner do, and where this book shows it} \\
 \midrule
-catalog & \texttt{TableCatalog}, \texttt{SupportsNamespaces} & resolve \texttt{lab.db.orders} to a table (\Cref{ch:catalogs}) \\
- & \texttt{ProcedureCatalog} & \texttt{CALL lab.system.rewrite\_data\_files(...)} (\Cref{sec:dsv2-extensions}) \\
- & \texttt{StagingTableCatalog} & stage a table so a failed \texttt{CREATE TABLE AS SELECT} leaves nothing (claim --- not tested) \\
- & \texttt{FunctionCatalog} & \texttt{bucket}, \texttt{days} and the other partition transforms as functions \\
+catalog & \texttt{TableCatalog}, \conf{SupportsNamespaces} & resolve \texttt{lab.db.orders} to a table (\Cref{ch:catalogs}) \\
+ & \conf{ProcedureCatalog} & \texttt{CALL lab.system.rewrite\_data\_files(...)} (\Cref{sec:dsv2-extensions}) \\
+ & \conf{StagingTableCatalog} & stage a table so a failed \texttt{CREATE TABLE AS SELECT} leaves nothing (claim --- not tested) \\
+ & \conf{FunctionCatalog} & \texttt{bucket}, \texttt{days} and the other partition transforms as functions \\
 table & \texttt{SupportsRead}, \texttt{SupportsWrite} & obtain a scan builder or a write builder (this section) \\
- & \texttt{SupportsDeleteV2} & a \texttt{DELETE} on a whole partition resolved from metadata (\Cref{ch:iceberg-write}) \\
- & \texttt{SupportsRowLevelOperations} & \texttt{UPDATE}, \texttt{DELETE}, \texttt{MERGE} as copy-on-write or merge-on-read (\Cref{ch:iceberg-write}) \\
- & \texttt{SupportsMetadataColumns} & the hidden \texttt{\_file} and \texttt{\_pos} columns \\
-scan builder & \texttt{SupportsPushDownV2Filters} & the filter negotiation (\Cref{sec:dsv2-pushdown}) \\
- & \texttt{SupportsPushDownRequiredColumns} & column pruning (\Cref{sec:pruning-column}) \\
- & \texttt{SupportsPushDownAggregates} & \texttt{COUNT}, \texttt{MIN}, \texttt{MAX} from metadata (\Cref{fig:aggregate-pushdown}) \\
- & \texttt{SupportsReportStatistics} & the size estimate behind join selection (\Cref{sec:dsv2-splits-stats}) \\
-scan & \texttt{SupportsReportPartitioning} & storage-partitioned joins (\Cref{sec:joins-spj}) \\
- & \texttt{SupportsRuntimeV2Filtering} & dynamic partition pruning (\Cref{sec:pruning-dpp}) \\
+ & \conf{SupportsDeleteV2} & a \texttt{DELETE} on a whole partition resolved from metadata (\Cref{ch:iceberg-write}) \\
+ & \conf{SupportsRowLevelOperations} & \texttt{UPDATE}, \texttt{DELETE}, \texttt{MERGE} as copy-on-write or merge-on-read (\Cref{ch:iceberg-write}) \\
+ & \conf{SupportsMetadataColumns} & the hidden \texttt{\_file} and \texttt{\_pos} columns \\
+scan builder & \conf{SupportsPushDownV2Filters} & the filter negotiation (\Cref{sec:dsv2-pushdown}) \\
+ & \conf{SupportsPushDownRequiredColumns} & column pruning (\Cref{sec:pruning-column}) \\
+ & \conf{SupportsPushDownAggregates} & \texttt{COUNT}, \texttt{MIN}, \texttt{MAX} from metadata (\Cref{fig:aggregate-pushdown}) \\
+ & \conf{SupportsReportStatistics} & the size estimate behind join selection (\Cref{sec:dsv2-splits-stats}) \\
+scan & \conf{SupportsReportPartitioning} & storage-partitioned joins (\Cref{sec:joins-spj}) \\
+ & \conf{SupportsRuntimeV2Filtering} & dynamic partition pruning (\Cref{sec:pruning-dpp}) \\
 \bottomrule
 \end{tabular}
 \caption{The DSv2 interfaces implemented by Iceberg 1.6.1's \texttt{SparkCatalog},
-\texttt{SparkTable}, \texttt{SparkScanBuilder} and \texttt{SparkBatchQueryScan}, read by
+\texttt{SparkTable}, \conf{SparkScanBuilder} and \conf{SparkBatchQueryScan}, read by
 reflection from a running session. Each row is a capability the planner can use,
 and each chapter that shows its effect is cited.}
 \label{tab:dsv2-interfaces}
@@ -58,10 +58,10 @@ which hands back a \texttt{ScanBuilder} the planner negotiates with
 (\Cref{sec:dsv2-pushdown}) before it ever produces a physical scan. For a write,
 the same \texttt{Table} hands back a \texttt{WriteBuilder}, and the write is a
 fixed sequence of hops: the \texttt{WriteBuilder} produces a \texttt{BatchWrite}
-on the driver, which ships a \texttt{DataWriterFactory} to the executors; each task
+on the driver, which ships a \conf{DataWriterFactory} to the executors; each task
 gets a \texttt{DataWriter}, writes its partition, and returns a small
-\texttt{WriterCommitMessage} (for Iceberg, the list of files it wrote); only when
-\emph{every} message has arrived does the driver call \texttt{BatchWrite.commit()}
+\conf{WriterCommitMessage} (for Iceberg, the list of files it wrote); only when
+\emph{every} message has arrived does the driver call \conf{BatchWrite.commit()}
 once. That single call is the DSv2 hook behind Iceberg's atomic pointer swap
 (\Cref{sec:cat-swap}); \Cref{fig:dsv2-write-protocol} draws the sequence and the
 failure path.
@@ -90,7 +90,7 @@ can abort --- a killed driver --- files can remain; those are the orphans of
 Pushdown under DSv2 is a negotiation, not a guarantee: the planner offers a source
 a set of filters, columns, and (since Spark 3.2, for a narrow set of cases)
 aggregates, and the source reports back which it can apply. Iceberg implements the
-\emph{V2} filter interface, \texttt{SupportsPushDownV2Filters}, and its reply has
+\emph{V2} filter interface, \conf{SupportsPushDownV2Filters}, and its reply has
 more than two outcomes. The lab ran thirteen \texttt{WHERE} shapes against the
 30-million-row \texttt{orders} table and recorded, for each, how many rows left the
 scan and whether Spark kept a \texttt{Filter} node above it
@@ -149,7 +149,7 @@ BatchScan lab.db.orders[order_ts, order_total] [filters=order_ts IS NOT NULL,
 BatchScan lab.db.orders[order_ts, order_total] [filters=order_ts IS NOT NULL, groupedBy=]
 \end{lstlisting}
 
-\texttt{SupportsPushDownRequiredColumns} is the same negotiation for columns: the
+\conf{SupportsPushDownRequiredColumns} is the same negotiation for columns: the
 first line of each scan node above lists only \texttt{order\_ts} and
 \texttt{order\_total}, the two columns the query uses.
 
@@ -162,7 +162,7 @@ path was taken: a \texttt{LocalTableScan} means the answer was already computed.
   \centering
   \includegraphics[width=\linewidth]{aggregate-pushdown.pdf}
   \caption{\texttt{COUNT(*)} on the whole table, on one day, \texttt{MIN}/\texttt{MAX}
-  of \texttt{order\_ts} and \texttt{MAX(order\_total)} were answered from metadata in
+  of \texttt{order\_ts} and \conf{MAX(order_total)} were answered from metadata in
   0.09--0.17~s. \texttt{COUNT(*)} with a data-column filter and \texttt{SUM} had to
   scan the data files (0.6--1.0~s).}
   \label{fig:aggregate-pushdown}
@@ -181,14 +181,14 @@ rows match. Pushing the aggregate is also the reason why a \texttt{COUNT(*)} on 
 A DSv2 source does not hand the planner data directly. It hands back a set of
 \texttt{InputPartition}s (Iceberg's version of the split planning of
 \Cref{sec:ice-read-splits}) and a \texttt{PartitionReaderFactory} that reads each
-one. Separately, \texttt{SupportsReportStatistics} tells the planner an estimated
+one. Separately, \conf{SupportsReportStatistics} tells the planner an estimated
 size and row count \emph{before} the scan runs. The lab printed what the
 optimizer saw (\Cref{tab:dsv2-stats}).
 
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{5.3cm}rrr@{}}
+\begin{tabular}{@{}P{5.3cm}rrr@{}}
 \toprule
 \textbf{Scan} & \textbf{sizeInBytes} & \textbf{rowCount} & \textbf{bytes per row} \\
 \midrule
@@ -232,7 +232,7 @@ without any hint.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{6.0cm}rr@{}}
+\begin{tabular}{@{}P{6.0cm}rr@{}}
 \toprule
 \textbf{Projection of \texttt{dim\_product} (2 M rows)} & \textbf{Default widths} & \textbf{sizeInBytes} \\
 \midrule
@@ -251,18 +251,18 @@ projects.}
 \label{sec:dsv2-extensions}
 
 Nothing about this negotiation requires modifying Spark itself. A
-\texttt{SparkSessionExtensions} entry point lets an external jar register
+\conf{SparkSessionExtensions} entry point lets an external jar register
 additional Catalyst rules --- injected into the analyzer, the optimizer, or physical
 planning, alongside Spark's own rules from \Cref{sec:catalyst-rules} --- as well as
 entirely new SQL syntax the parser would not otherwise recognize. Iceberg's
-\texttt{IcebergSparkSessionExtensions} is exactly this mechanism, and the lab shows
+\conf{IcebergSparkSessionExtensions} is exactly this mechanism, and the lab shows
 what it adds by taking it away. The same four statements were run in a session with
 \conf{spark.sql.extensions} empty (\Cref{tab:dsv2-noext}).
 
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{5.4cm}p{8.8cm}@{}}
+\begin{tabular}{@{}P{5.4cm}P{8.8cm}@{}}
 \toprule
 \textbf{Statement, no extension registered} & \textbf{Result} \\
 \midrule
@@ -324,7 +324,7 @@ experiment on the Spark 4 Iceberg runtime before assuming the table in
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{3.7cm}P{4.1cm}P{3.2cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
@@ -332,7 +332,7 @@ a filter does not reduce the data read & a \texttt{Filter} node above the scan; 
 a pushed filter still scans everything & \texttt{filters=} lists it but scan rows equal the table & sort or Z-order so the column's ranges separate files (\Cref{ch:iceberg-layout}) & a rewrite \\
 a time-range filter leaves a \texttt{Filter} node & range does not align with the partition transform & accept it, or align the range to the transform & none \\
 join strategy surprises & \texttt{EXPLAIN COST}: estimate far from disk size & remember: rows $\times$ default width; use a hint or statistics (\Cref{ch:joins}) & hint maintenance \\
-\texttt{CALL} is a syntax error & \texttt{PARSE\_SYNTAX\_ERROR} at \texttt{CALL} & register \conf{spark.sql.extensions} & none \\
+\texttt{CALL} is a syntax error & \conf{PARSE_SYNTAX_ERROR} at \texttt{CALL} & register \conf{spark.sql.extensions} & none \\
 \bottomrule
 \end{tabular}
 \caption{The DSv2 levers: symptom, evidence, lever, cost.}

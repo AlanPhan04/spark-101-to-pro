@@ -82,10 +82,10 @@ bars = ax.bar(range(4), vals, color=fills, edgecolor=colors, linewidth=1.2)
 labels(ax, bars, "{:g} MB", dy=1.0)
 ax.set_xticks(range(4))
 ax.set_xticklabels(x, fontsize=8)
-ax.set_ylim(0, 440)
+ax.set_ylim(0, 500)
 ax.set_ylabel("table directory (MB)")
-ax.annotate("11 data files, 11 manifests,\n11 manifest lists deleted", xy=(1, 356), xytext=(1.0, 405), fontsize=8.5, color=C["green_ink"],
-            arrowprops=dict(arrowstyle="->", color=C["green_ink"], lw=1.0))
+ax.annotate("11 data files, 11 manifests,\n11 manifest lists deleted", xy=(1, 372), xytext=(1.5, 450), ha="center", fontsize=8.5, color=C["green_ink"],
+            arrowprops=dict(arrowstyle="-", color=C["green_ink"], lw=0.8, shrinkB=1))
 ax.grid(axis="x", visible=False)
 fig.tight_layout()
 save(fig, "expire-orphans")

@@ -30,7 +30,7 @@ ax.set_xticklabels(STEPS)
 ax.set_ylim(0, 11.5)
 ax.set_ylabel("partitions still cached (of 8)")
 ax.legend(ncol=3, loc="upper left")
-ax.annotate("ca loses half its blocks,\nleast recently used first", xy=(2 - w, 4.2), xytext=(0.0, 5.6), fontsize=9,
+ax.annotate("ca loses half its blocks,\nleast recently used first", xy=(2 - w, 4.2), xytext=(0.15, 9.0), fontsize=9,
             color=C["blue_ink"], arrowprops=dict(arrowstyle="->", color=C["blue_ink"], lw=1.1))
 ax.annotate("re-reading ca took 8.5 s\n(cc: 0.4 s) and evicted cb", xy=(3 + 0.0, 8.3), xytext=(1.5, 10.4), fontsize=9,
             color=C["rose_ink"], arrowprops=dict(arrowstyle="->", color=C["rose_ink"], lw=1.1))

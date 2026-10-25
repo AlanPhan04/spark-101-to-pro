@@ -29,15 +29,15 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="looplabel" value="repeats forever (ProcessingTime)&lt;br&gt;or once and stops (Once /&lt;br&gt;AvailableNow)" style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
-          <mxGeometry x="20.0" y="203.0" width="200.0" height="116.0" as="geometry" />
+        <mxCell id="looplabel" value="repeats forever&lt;br&gt;(ProcessingTime) or&lt;br&gt;once and stops&lt;br&gt;(Once /&lt;br&gt;AvailableNow)" style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="195.0" y="195.0" width="125.0" height="110.0" as="geometry" />
         </mxCell>
 
-        <mxCell id="restartlabel" value="a restart replays from here:&lt;br&gt;same offsets, same rows,&lt;br&gt;no duplicate commit" style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
-          <mxGeometry x="420.0" y="203.0" width="200.0" height="116.0" as="geometry" />
+        <mxCell id="restartlabel" value="a restart&lt;br&gt;replays from&lt;br&gt;here: same&lt;br&gt;offsets, same&lt;br&gt;rows, no&lt;br&gt;duplicate commit" style="text;html=1;align=center;fontSize=13;fontColor=#57503f;" vertex="1" parent="1">
+          <mxGeometry x="330.0" y="195.0" width="125.0" height="110.0" as="geometry" />
         </mxCell>
 
       </root>
     </mxGraphModel>
   </diagram>
-</mxfile>
+</mxfile> 

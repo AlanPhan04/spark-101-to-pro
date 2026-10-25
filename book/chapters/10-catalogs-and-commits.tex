@@ -29,8 +29,8 @@ writer has to agree on synchronously.
 
 Catalogs differ only in \emph{where} that one pointer lives and \emph{how} the
 conditional swap is enforced (\Cref{fig:catalog-pointer-types}). The lab uses
-the simplest: a file-based catalog whose pointer is a \texttt{version-hint.text}
-file naming the latest \texttt{vN.metadata.json}, and whose swap is the creation
+the simplest: a file-based catalog whose pointer is a \conf{version-hint.text}
+file naming the latest \conf{vN.metadata.json}, and whose swap is the creation
 of the next numbered file, which fails if that file already exists. That
 works on a filesystem with atomic create or rename; Iceberg's documentation
 advises against a file-based catalog on object stores whose rename is not atomic,
@@ -52,8 +52,8 @@ which is why production deployments use a catalog backed by a service
 
 The lab ran one service-style catalog: Iceberg's JDBC catalog on a SQLite
 database. Its pointer is one row of a table \texttt{iceberg\_tables} with columns
-\texttt{catalog\_name}, \texttt{table\_namespace}, \texttt{table\_name},
-\texttt{metadata\_location} and \texttt{previous\_metadata\_location}; after a
+\texttt{catalog\_name}, \conf{table_namespace}, \texttt{table\_name},
+\conf{metadata_location} and \conf{previous_metadata_location}; after a
 \texttt{CREATE} and one \texttt{INSERT} the row pointed at \texttt{00001-\ldots.metadata.json}
 and remembered \texttt{00000-\ldots} as its predecessor. A commit is a conditional
 \texttt{UPDATE} that names the old location: replaying a stale writer's update
@@ -129,7 +129,7 @@ CommitFailedException: Cannot commit changes based on stale table metadata
 \end{lstlisting}
 
 The first is the file-based catalog's compare-and-swap: two writers both built
-\texttt{v14.metadata.json} from the same base, one created it first, and the
+\conf{v14.metadata.json} from the same base, one created it first, and the
 second found it already there. The second message is the client noticing
 before it tries. Either way the writer re-reads the current metadata and goes
 again, without surfacing an error to the job (\Cref{fig:catalog-commit-race}
@@ -139,15 +139,15 @@ tally the outcome.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{2.9cm}rrrrrr@{}}
+\begin{tabular}{@{}rrrrrrr@{}}
 \toprule
-\textbf{\texttt{commit.retry.num-retries}} & \textbf{Commits} & \textbf{First try} & \textbf{Two attempts} & \textbf{Four attempts} & \textbf{Failed} & \textbf{Rows vs.\ expected} \\
+\textbf{Retries} & \textbf{Commits} & \textbf{First try} & \textbf{Two attempts} & \textbf{Four attempts} & \textbf{Failed} & \textbf{Rows vs.\ expected} \\
 \midrule
 4 (default) & 48 & 12 & 34 & 1 & 1 & 940,000 = 940,000 \\
 0 & 48 & 41 & 0 & 0 & 7 & 820,000 = 820,000 \\
 \bottomrule
 \end{tabular}
-\caption{Twelve writers, one table, 48 commits, measured. With the default, 34
+\caption{Twelve writers, one table, 48 commits, measured; Retries is \conf{commit.retry.num-retries}. With the default, 34
 commits needed a second attempt and one needed four; with no retries, 7 failed
 outright. In both runs the row count equals 20,000 times the commits that
 succeeded: a lost swap loses no data, only the attempt.}
@@ -197,21 +197,21 @@ writers there are (\Cref{fig:commit-throughput}).
 \centering
 \caption{Iceberg commit-retry table properties}
 \label{tab:cat-retry-props}
-\begin{tabular}{@{}lll@{}}
+\begin{tabular}{@{}P{5.6cm}P{2.0cm}P{6.4cm}@{}}
 \toprule
 \textbf{Property} & \textbf{Default} & \textbf{Meaning} \\
 \midrule
-\texttt{commit.retry.num-retries} & 4 & Max retry attempts before failing the commit \\
-\texttt{commit.retry.min-wait-ms} & 100 & Initial backoff between attempts \\
-\texttt{commit.retry.max-wait-ms} & 60{,}000 & Backoff ceiling \\
-\texttt{commit.retry.total-timeout-ms} & 1{,}800{,}000 & Overall time budget across all retries \\
+\conf{commit.retry.num-retries} & 4 & Max retry attempts before failing the commit \\
+\conf{commit.retry.min-wait-ms} & 100 & Initial backoff between attempts \\
+\conf{commit.retry.max-wait-ms} & 60{,}000 & Backoff ceiling \\
+\conf{commit.retry.total-timeout-ms} & 1{,}800{,}000 & Overall time budget across all retries \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 A table with many concurrent writers hitting the same partitions --- several
 streaming jobs upserting into one table, say --- can exhaust the default 4
-retries under sustained contention, as one commit of 48 did on the lab; raising \texttt{commit.retry.num-retries}
+retries under sustained contention, as one commit of 48 did on the lab; raising \conf{commit.retry.num-retries}
 (a table property, set via \texttt{ALTER TABLE ... SET TBLPROPERTIES}) trades
 a slower worst-case commit for a much lower failure rate. It does not help a
 table where every writer touches the \emph{same} partition on every commit ---
@@ -245,11 +245,11 @@ the catalog name in the identifier, not any global default, decides which
 metadata store and which commit protocol from this chapter actually apply.
 
 \begin{note}
-\texttt{org.apache.iceberg.spark.SparkCatalog} has to actually be on the
+\conf{org.apache.iceberg.spark.SparkCatalog} has to actually be on the
 JVM's classpath for this registration to resolve to anything --- the lab passes the
 Iceberg Spark runtime jar with \texttt{--jars}; it is not something set by this
 config block alone. A catalog name that fails to resolve with a
-\texttt{ClassNotFoundException} rather than a clear catalog-not-found error
+\conf{ClassNotFoundException} rather than a clear catalog-not-found error
 is almost always this: the config is correct, the jar is missing from the
 engine that tried to honor it.
 \end{note}
@@ -275,7 +275,7 @@ genuine concurrent-writer contention.
 \item Register the same physical warehouse location under two differently
       named catalogs in one Spark session. Confirm both resolve the same
       table to the same current snapshot.
-\item Lower \texttt{commit.retry.num-retries} to 1 on a table and reproduce a
+\item Lower \conf{commit.retry.num-retries} to 1 on a table and reproduce a
       commit failure under two concurrent writers; raise it back and confirm
       both succeed.
 \end{exercises}

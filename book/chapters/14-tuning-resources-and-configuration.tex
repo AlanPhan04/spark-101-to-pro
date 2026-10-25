@@ -217,7 +217,7 @@ stage whatever happened to the executors, and the comparison measured nothing.)
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{4.4cm}p{3.4cm}p{3.1cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{4.4cm}P{3.4cm}P{3.1cm}P{3.1cm}@{}}
 \toprule
 \textbf{Setup} & \textbf{Executors in the idle period} & \textbf{Job 2 duration} & \textbf{Why} \\
 \midrule
@@ -249,7 +249,7 @@ service, so that statement rests on the Spark documentation and the mechanism in
 Without an external shuffle service, a reduce task fetches shuffle blocks directly
 from the executor that wrote them (\Cref{sec:shuffle-write}) --- the dependency that
 dynamic allocation has to work around, and the one that turns a premature executor
-removal into a \texttt{FetchFailedException}. \conf{spark.shuffle.service.enabled}
+removal into a \conf{FetchFailedException}. \conf{spark.shuffle.service.enabled}
 moves block serving out of the executor JVM into a separate long-lived process, so
 shuffle data stays servable after the executor that wrote it is gone and scale-down
 carries no data-loss risk. Push-based shuffle (\Cref{sec:shuffle-push}) builds on
@@ -275,13 +275,13 @@ layer and asked the live session which value it saw (\Cref{tab:tuning-precedence
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.2}
-\begin{tabular}{@{}p{6.2cm}rr@{}}
+\begin{tabular}{@{}P{6.2cm}rr@{}}
 \toprule
 \textbf{Where the key was set} & \textbf{shuffle.partitions} & \textbf{executor.memory} \\
 \midrule
-properties file only (\texttt{spark-defaults.conf} equivalent) & 111 & 3g \\
+properties file only (\conf{spark-defaults.conf} equivalent) & 111 & 3g \\
 file and \texttt{--conf} on \texttt{spark-submit} & 222 & 5g \\
-file, \texttt{--conf} and \texttt{SparkSession.builder.config} & 300 & 5g \\
+file, \texttt{--conf} and \conf{SparkSession.builder.config} & 300 & 5g \\
 the above, then \texttt{spark.conf.set} on the running session & 400 & --- \\
 \texttt{spark.conf.set("spark.executor.memory", ...)} on the running session & rejected & --- \\
 \bottomrule
@@ -293,12 +293,12 @@ cannot be changed once the application has started.}
 \end{table}
 
 The order is therefore: a runtime \texttt{SET} for SQL settings, then values set in
-application code, then \texttt{--conf} flags, then \texttt{spark-defaults.conf},
+application code, then \texttt{--conf} flags, then \conf{spark-defaults.conf},
 then the built-in default. The code layer in the experiment set only the SQL key,
 so the memory column carries the \texttt{--conf} value forward unchanged. The rejected last row is
 the practical rule: only SQL configuration is changeable mid-session. A value that
 looks ignored is usually overridden from a higher layer than the one you edited, and
-\texttt{spark.conf.get(key)} in the running session reports the value actually in
+\conf{spark.conf.get(key)} in the running session reports the value actually in
 effect --- faster than re-reading files.
 
 \section{From symptom to lever}
@@ -310,14 +310,14 @@ you which one applies and what it costs.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{3.7cm}P{4.1cm}P{3.2cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
 sort or hash spills & \emph{Spill} columns in the stage page, only on some tasks & unified pool $\div$ cores below the largest per-task need: raise heap or lower cores (\Cref{fig:spill-vs-share}) & memory per executor, or fewer slots \\
 many idle slots in a shuffle stage & stage has fewer tasks than slots (2 partitions on 8 slots took 3.5$\times$ longer than 8) & raise shuffle partitions to at least the slot count & scheduling cost beyond a few thousand \\
 GC time grows with cores & GC column in the executors summary & fewer cores per executor, or more heap & slower per-executor parallelism \\
-idle executors held for minutes & timeline of executors vs jobs (\Cref{fig:dynalloc-timeline}) & lower \texttt{shuffleTracking.timeout} & recompute if the files are needed \\
+idle executors held for minutes & timeline of executors vs jobs (\Cref{fig:dynalloc-timeline}) & lower \conf{shuffleTracking.timeout} & recompute if the files are needed \\
 application will not start with dynamic allocation & the exception in \Cref{lst:tuning-da-error} & enable shuffle tracking, or an external service & held executors \\
 a setting seems ignored & \texttt{spark.conf.get} differs from the file & find the higher layer (\Cref{tab:tuning-precedence}) & none \\
 \bottomrule

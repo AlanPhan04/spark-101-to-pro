@@ -124,13 +124,13 @@ purpose (\Cref{tab:debug-oom}).
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.0cm}p{5.0cm}p{5.8cm}@{}}
+\begin{tabular}{@{}P{3.0cm}P{5.0cm}P{5.8cm}@{}}
 \toprule
 \textbf{How triggered} & \textbf{Evidence} & \textbf{What overflowed} \\
 \midrule
 \texttt{collect()} of 30~M rows, 512~MB heap & \texttt{java.lang.OutOfMemoryError: Java heap space}, logged as \texttt{Executor: Exception in task} & the JVM heap, by an allocation Spark does not track \\
 \texttt{collect\_list} of one hot key, 512~MB heap & \texttt{SparkOutOfMemoryError: [UNABLE\_TO\_ACQUIRE\_MEMORY] Unable to acquire 65536 bytes of memory, got 0} & Spark's own execution-memory accounting: the pool had no 64~KB page to give \\
-off-heap sort in a 1~GB container & exit code 137, \texttt{OOMKilled=true}, \textbf{zero} \texttt{OutOfMemoryError} lines in the log & the container's cgroup limit: heap plus off-heap exceeded what the kernel allowed \\
+off-heap sort in a 1~GB container & exit code 137, \texttt{OOMKilled=true}, \textbf{zero} \conf{OutOfMemoryError} lines in the log & the container's cgroup limit: heap plus off-heap exceeded what the kernel allowed \\
 \bottomrule
 \end{tabular}
 \caption{Three OOM signatures, reproduced on the lab. The distinguishing evidence is
@@ -139,8 +139,8 @@ the exception class (or its absence), not the words ``out of memory.''}
 \end{table}
 
 Two observations. First, the exception \emph{class} separates the first two:
-\texttt{java.lang.OutOfMemoryError} is the JVM refusing an allocation;
-\texttt{SparkOutOfMemoryError} is Spark's memory manager (\Cref{sec:mem-model})
+\conf{java.lang.OutOfMemoryError} is the JVM refusing an allocation;
+\conf{SparkOutOfMemoryError} is Spark's memory manager (\Cref{sec:mem-model})
 refusing to grant a page, with the byte count it could not get. Second, in local
 mode a driver \texttt{collect()} OOM was logged by an executor thread, because the
 driver and executor share one JVM: on a cluster the same failure would appear in the
@@ -184,8 +184,8 @@ executors, then ran the same query again (\Cref{fig:fetch-failure-stages}).
   \centering
   \includegraphics[width=\linewidth]{fetch-failure-stages.pdf}
   \caption{The stage attempts of the second run. The final stage failed at once with
-  a \texttt{FetchFailedException}; the map stage re-ran for the missing output
-  (3 tasks); a middle stage failed with a second \texttt{FetchFailedException}; the
+  a \conf{FetchFailedException}; the map stage re-ran for the missing output
+  (3 tasks); a middle stage failed with a second \conf{FetchFailedException}; the
   map stage ran again (4 tasks); then the middle and final stages succeeded. Three
   tasks failed with \texttt{FetchFailed}, 7.7~s in all.}
   \label{fig:fetch-failure-stages}
@@ -242,16 +242,16 @@ is checked the same way: read the operator (\Cref{sec:joins-measured}).
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{3.9cm}p{4.0cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{3.9cm}P{4.0cm}P{3.1cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
 one task far slower than the rest & max/median duration 9.7$\times$; records read 16$\times$ & skew handling (\Cref{ch:aqe}) or repartition by a better key & shuffle cost \\
 one slow task, ordinary input & records read near the median; scheduler delay low & \conf{spark.speculation} (and only if node-related) & duplicate compute; needs more than one host \\
-\texttt{java.lang.OutOfMemoryError} & exception class names the JVM heap & raise executor heap, or shrink what the task holds & memory per executor \\
-\texttt{SparkOutOfMemoryError} & ``Unable to acquire \dots\ got 0'' & raise unified pool per task: more heap or fewer cores (\Cref{fig:spill-vs-share}) & memory, or slots \\
+\conf{java.lang.OutOfMemoryError} & exception class names the JVM heap & raise executor heap, or shrink what the task holds & memory per executor \\
+\conf{SparkOutOfMemoryError} & ``Unable to acquire \dots\ got 0'' & raise unified pool per task: more heap or fewer cores (\Cref{fig:spill-vs-share}) & memory, or slots \\
 executor vanishes, no exception & exit code 137, \texttt{OOMKilled} & raise \conf{spark.executor.memoryOverhead} & pod size \\
-stage runs several times & \texttt{FetchFailedException}, attempts $>$ 1 & shuffle service, tracking timeout, retries (\Cref{ch:tuning}) & held executors \\
+stage runs several times & \conf{FetchFailedException}, attempts $>$ 1 & shuffle service, tracking timeout, retries (\Cref{ch:tuning}) & held executors \\
 event log is huge & about 6.4~KB per task & roll and compress the log & history-server CPU \\
 \bottomrule
 \end{tabular}

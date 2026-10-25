@@ -74,8 +74,8 @@
     basicstyle=\footnotesize\ttfamily,
     breaklines=true,
     breakindent=0pt,
-    xleftmargin=-0.8cm,
-    xrightmargin=-0.8cm,
+    xleftmargin=0cm,
+    xrightmargin=0cm,
     numbers=none,
 }
 
@@ -102,7 +102,7 @@
 \setcounter{tocdepth}{2}
 
 % --- chapter heading style --------------------------------------------
-\titleformat{\chapter}[display]{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titleformat{\chapter}[display]{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge\raggedright\hyphenpenalty=10000 \exhyphenpenalty=10000 }
 
 % --- running headers ---------------------------------------------------
 \setlength{\headheight}{16pt}
@@ -120,6 +120,13 @@
 
 % Monospace config keys (spark.sql.adaptive.enabled) that may break at dots.
 \newcommand{\conf}[1]{\nolinkurl{#1}}
+\makeatletter\g@addto@macro\UrlBreaks{\do\-\do\_\do\,\do\(}\makeatother
+% Ragged-right paragraph column: long config keys and plan tokens can wrap in a narrow cell.
+\usepackage{array}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+% Let text wrap instead of overrunning the margin when a line has no good break.
+\emergencystretch=3em
+\renewcommand{\_}{\textunderscore\hspace{0pt}}
 
 % --- chapter opener + exercises + callouts -----------------------------
 \newenvironment{chapterintro}

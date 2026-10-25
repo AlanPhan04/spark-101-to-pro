@@ -94,7 +94,7 @@ AS SELECT} of three days, then two appends of one day each.
   \centering
   \includegraphics[width=\linewidth]{metadata-tree-lab.pdf}
   \caption{The metadata tree of \texttt{t\_meta} after three commits, as the
-  lab's metadata tables report it. The catalog points to \texttt{v3.metadata.json};
+  lab's metadata tables report it. The catalog points to \conf{v3.metadata.json};
   the snapshot-3 manifest list names three manifests, one written by each
   commit, which list five data files.}
   \label{fig:metadata-tree-lab}
@@ -136,7 +136,7 @@ the table at that moment, which is why a reader needs only the one it resolved.
 
 On disk the same table, after two further deletes and one property change, holds
 exactly six \texttt{metadata.json} files (\texttt{v1} to \texttt{v6}), five
-manifest lists, and six manifests, plus a \texttt{version-hint.text} that the
+manifest lists, and six manifests, plus a \conf{version-hint.text} that the
 file-based catalog uses as its pointer. The sixth metadata file is worth a
 sentence: \texttt{ALTER TABLE \ldots{} SET TBLPROPERTIES} wrote a new
 \texttt{metadata.json} and no new snapshot, because properties live in the
@@ -156,10 +156,10 @@ that tree a well-formed query gets to skip.
 \label{sec:ice-snapshots}
 
 A \emph{snapshot} is one committed version of the table: a \texttt{snapshot-id},
-a pointer to its manifest list, an optional \texttt{parent-snapshot-id}
+a pointer to its manifest list, an optional \conf{parent-snapshot-id}
 linking it to the version it replaced, a \texttt{timestamp-ms}, and --- the
 detail that makes format v2 usable for row-level deletes --- a monotonically
-increasing \texttt{sequence-number}. Every file recorded anywhere in the tree
+increasing \conf{sequence-number}. Every file recorded anywhere in the tree
 inherits the sequence number of the snapshot that added it, and that number is
 what lets a reader decide, cheaply, whether a given delete file is even
 relevant to a given data file: the sequence numbers decide which delete files can
@@ -196,7 +196,7 @@ manifest list exactly as if it were current. The lab confirms it: counting rows
 3,873,680, and 4,841,619, matching the three days, four days, and five days
 committed. A commit does not delete an
 old snapshot's entry from this log; that is a separate, deliberate operation
-(\texttt{expire\_snapshots}, \Cref{ch:iceberg-write}) --- until it runs, the
+(\conf{expire_snapshots}, \Cref{ch:iceberg-write}) --- until it runs, the
 old files a superseded snapshot referenced are still reachable, which is
 also why an append does not immediately reclaim the disk space of files it
 replaced.
@@ -246,14 +246,14 @@ rewriting the data file itself. Two encodings exist, and they trade off
 
 Whether a Spark \texttt{DELETE} writes a delete file at all is a table setting, not
 a property of the statement. The lab deleted one row of a 969,000-row day twice:
-once with the default, and once after setting \texttt{write.delete.mode} to
+once with the default, and once after setting \conf{write.delete.mode} to
 \texttt{merge-on-read} (\Cref{tab:ice-lab-delete-modes} and
 \Cref{fig:delete-bytes-written}).
 
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.8cm}p{2.6cm}p{3.1cm}p{3.6cm}@{}}
+\begin{tabular}{@{}P{3.8cm}P{2.6cm}P{3.1cm}P{3.6cm}@{}}
 \toprule
 \textbf{Mode} & \textbf{Snapshot operation} & \textbf{Data files} & \textbf{Bytes written} \\
 \midrule
@@ -306,7 +306,7 @@ a table built on one of the others.
 \centering
 \caption{Where the three table formats put their defaults}
 \label{tab:ice-comparison}
-\begin{tabular}{@{}lp{3.3cm}p{3.3cm}p{3.3cm}@{}}
+\begin{tabular}{@{}lP{3.3cm}P{3.3cm}P{3.3cm}@{}}
 \toprule
  & \textbf{Iceberg} & \textbf{Delta Lake} & \textbf{Hudi} \\
 \midrule
@@ -344,13 +344,13 @@ how that top-level pointer swap becomes atomic when two writers race for it.
 
 \exercisehead
 \begin{exercises}
-\item Commit three appends to a table, then inspect \texttt{metadata\_log\_entries},
+\item Commit three appends to a table, then inspect \conf{metadata_log_entries},
       \texttt{snapshots}, and \texttt{manifests}. Explain how many metadata files
       and manifests exist and why.
 \item Delete one row from a copy-on-write table and then from the same table
       set to merge-on-read. Compare the snapshot summaries and the \texttt{files}
       metadata table, and explain the difference in bytes written.
 \item Query a table with \texttt{VERSION AS OF} an old snapshot after a
-      subsequent commit. Confirm from \texttt{metadata\_log\_entries} which
+      subsequent commit. Confirm from \conf{metadata_log_entries} which
       manifest list that snapshot still points to.
 \end{exercises}

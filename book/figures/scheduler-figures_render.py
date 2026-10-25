@@ -53,7 +53,12 @@ fig, (a, b) = plt.subplots(1, 2, figsize=(6.3, 2.7))
 xs = [r["tasks"] for r in t]
 a.plot(range(len(xs)), [r["seconds"] for r in t], color=C["blue"], marker="o", markersize=5)
 for i, r in enumerate(t):
-    a.text(i, r["seconds"] + 0.8, f"{r['seconds']:g} s", ha="center", fontsize=8, color=C["gray_ink"])
+    if i == 2:
+        a.text(i - 0.1, r["seconds"] + 1.0, f"{r['seconds']:g} s", ha="right", fontsize=8, color=C["gray_ink"])
+    elif i < len(t) - 1:
+        a.text(i, r["seconds"] + 1.6, f"{r['seconds']:g} s", ha="center", fontsize=8, color=C["gray_ink"])
+    else:
+        a.text(i - 0.12, r["seconds"] - 0.5, f"{r['seconds']:g} s", ha="right", va="top", fontsize=8, color=C["gray_ink"])
 a.set_xticks(range(len(xs))); a.set_xticklabels([f"{x:,}" for x in xs], fontsize=8)
 a.set_xlabel("tasks in one stage"); a.set_ylabel("seconds"); a.set_title("whole stage", fontsize=9.5); a.set_ylim(0, 21)
 bars = b.bar(range(len(xs)), [r["ms_per_task"] for r in t], color=[C["blue_fill"]] * 3 + [C["rose_fill"]], edgecolor=[C["blue"]] * 3 + [C["rose"]], linewidth=1.2)

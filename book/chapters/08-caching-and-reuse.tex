@@ -86,7 +86,7 @@ each step.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{6.2cm}rr@{}}
+\begin{tabular}{@{}P{6.2cm}rr@{}}
 \toprule
 \textbf{Step} & \textbf{Cached partitions} & \textbf{In memory} \\
 \midrule
@@ -112,7 +112,7 @@ Use \texttt{CACHE LAZY TABLE} for the lazy behavior \texttt{df.cache()} gives yo
 \section{Storage levels and the GC trade-off}
 \label{sec:caching-storage-levels}
 
-The default storage level for a DataFrame, \texttt{MEMORY\_AND\_DISK}, keeps
+The default storage level for a DataFrame, \conf{MEMORY_AND_DISK}, keeps
 cached blocks in storage memory and spills to disk only when they do not fit.
 What the blocks \emph{are} matters for the arithmetic. Spark SQL caches a
 DataFrame as compressed columnar batches (\conf{spark.sql.inMemoryColumnarStorage.compressed},
@@ -123,12 +123,12 @@ lab measured the same 6.8 million rows at three levels (\Cref{tab:caching-lab-le
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{6.0cm}rr@{}}
+\begin{tabular}{@{}P{6.0cm}rr@{}}
 \toprule
 \textbf{How it was cached} & \textbf{In memory} & \textbf{On disk} \\
 \midrule
 \texttt{df.cache()} (Scala default, deserialized) & 563.3~MB & 0 \\
-\texttt{MEMORY\_AND\_DISK\_SER} (serialized) & 410.5~MB & 0 \\
+\conf{MEMORY_AND_DISK_SER} (serialized) & 410.5~MB & 0 \\
 \texttt{DISK\_ONLY} & 0 & 410.5~MB \\
 \bottomrule
 \end{tabular}
@@ -144,7 +144,7 @@ a collector toward its expensive full-heap path (\Cref{sec:mem-gc}). Two levels
 exist to trade that away:
 
 \begin{itemize}
-  \item \texttt{MEMORY\_AND\_DISK\_SER} keeps the cache serialized, one contiguous
+  \item \conf{MEMORY_AND_DISK_SER} keeps the cache serialized, one contiguous
         block per partition, at the cost of decoding rows back out on every read.
   \item \texttt{OFF\_HEAP} (with \conf{spark.memory.offHeap.enabled}) puts the
         cache outside the JVM heap, the pool from \Cref{sec:mem-model}: zero GC
@@ -161,7 +161,7 @@ to disk rather than failing.
 enough to re-reading the source that the cache buys little.
 
 \begin{warning}
-PySpark's \texttt{StorageLevel.MEMORY\_AND\_DISK} is the \emph{serialized} level
+PySpark's \conf{StorageLevel.MEMORY_AND_DISK} is the \emph{serialized} level
 (its \texttt{deserialized} flag is false), while Scala's \texttt{df.cache()} uses
 the deserialized one. On the lab the two differ by 153~MB for the same rows,
 which is the 27\% of \Cref{tab:caching-lab-levels}. Check the Storage tab's
@@ -184,7 +184,7 @@ all of it for cached blocks.
 
 The boundary only matters once both sides want space at the same time. Suppose
 storage's own half of a 4~GB unified pool is 2~GB. A pipeline caches
-\texttt{filtered\_orders} and the cache grows to 3~GB: 2~GB in storage's own half
+\conf{filtered_orders} and the cache grows to 3~GB: 2~GB in storage's own half
 plus 1~GB borrowed from execution's idle half. A join then starts and its sort
 buffers need 1.5~GB. Execution is entitled to reclaim its space, so Spark evicts
 blocks from the borrowed 1~GB (LRU order); if the join later needs more than its
@@ -217,7 +217,7 @@ operator is worse than evicting a cache entry and recomputing it later
 
 The lab reproduced the eviction. With a 4~GB heap (about 2.3~GB of unified
 memory) the whole month of \texttt{orders} was cached at
-\texttt{MEMORY\_AND\_DISK}: 2253~MB in memory and 176~MB on disk, all 31 of 31
+\conf{MEMORY_AND_DISK}: 2253~MB in memory and 176~MB on disk, all 31 of 31
 partitions resident. A join to \texttt{dim\_customer} then ran in the same
 application and needed execution memory. Afterwards the cache still held 31 of 31
 partitions, but 1931~MB in memory and 410~MB on disk: 322~MB of blocks had moved
@@ -260,7 +260,7 @@ self-join of a per-product aggregate.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{5.2cm}rrr@{}}
+\begin{tabular}{@{}P{5.2cm}rrr@{}}
 \toprule
 \textbf{Plan} & \textbf{Scan stages} & \textbf{\texttt{ReusedExchange}} & \textbf{Wall clock} \\
 \midrule
@@ -343,7 +343,7 @@ the lever.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{3.3cm}P{3.9cm}P{3.7cm}P{3.1cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule

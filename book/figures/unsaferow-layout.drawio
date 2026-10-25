@@ -33,7 +33,7 @@
           <mxGeometry x="17.3" y="178.1" width="562.2" height="25.1" as="geometry" />
         </mxCell>
 
-        <mxCell id="varregion" value="&lt;b&gt;Variable-length region&lt;/b&gt; (same buffer, past the last fixed slot)&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;bytes: &amp;quot;P-88213&amp;quot;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;dashed=1;fontSize=13;fontColor=#7a4a17;" vertex="1" parent="1">
+        <mxCell id="varregion" value="&lt;b&gt;Variable-length region&lt;/b&gt;&lt;br&gt;same buffer, past the last&lt;br&gt;fixed slot&lt;br&gt;&lt;span style=&quot;font-size:12px&quot;&gt;bytes: &amp;quot;P-88213&amp;quot;&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;dashed=1;fontSize=13;fontColor=#7a4a17;" vertex="1" parent="1">
           <mxGeometry x="259.5" y="288.4" width="224.9" height="87.8" as="geometry" />
         </mxCell>
 

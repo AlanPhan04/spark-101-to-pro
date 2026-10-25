@@ -29,7 +29,7 @@ fills = [C["rose_fill"] if i == len(durs) - 1 else C["blue_fill"] for i in range
 ax.bar(range(len(durs)), durs, color=fills, edgecolor=cols, linewidth=1.0)
 ax.axhline(sk["median_task"]["duration_ms"] / 1000, color=C["green"], linestyle="--", linewidth=1.2)
 ax.text(1, sk["median_task"]["duration_ms"] / 1000 + 0.25, f"median {sk['median_task']['duration_ms'] / 1000:.2f} s", fontsize=8.5, color=C["green_ink"])
-ax.text(len(durs) - 1.5, durs[-1] - 0.5, f"{durs[-1]:.1f} s: {sk['ratio_max_over_median']}× the median", fontsize=8.5, color=C["rose_ink"], ha="right", va="top")
+ax.text(len(durs) - 2.2, durs[-1] - 0.3, f"{durs[-1]:.1f} s: {sk['ratio_max_over_median']}× the median", fontsize=8.5, color=C["rose_ink"], ha="right", va="top")
 ax.set_xlabel("the 40 tasks of the join stage, sorted by duration"); ax.set_ylabel("seconds"); ax.set_xticks([])
 ax.grid(axis="x", visible=False)
 fig.tight_layout()

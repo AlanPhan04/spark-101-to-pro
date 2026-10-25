@@ -56,9 +56,9 @@ row, one for each place the engine needs a number.
 \label{sec:tungsten-offheap}
 
 \texttt{UnsafeRow} buffers do not have to live on the JVM heap. When
-\conf{spark.memory.offHeap.enabled} is set, Tungsten's \texttt{TaskMemoryManager}
+\conf{spark.memory.offHeap.enabled} is set, Tungsten's \conf{TaskMemoryManager}
 allocates fixed-size pages directly from off-heap memory using
-\texttt{sun.misc.Unsafe}-style raw access. A row in an off-heap page is invisible to
+\conf{sun.misc.Unsafe}-style raw access. A row in an off-heap page is invisible to
 the garbage collector --- not cheap to collect, never considered --- and the price is
 manual lifecycle management: a task must free a page explicitly when it no longer
 needs it.
@@ -151,11 +151,11 @@ over a whole \texttt{ColumnarBatch}, and the generated code walks it row by row
 reading each column through a typed accessor (\texttt{getDouble}) --- no
 \texttt{InternalRow} object per row. The filter is two inline comparisons with
 \texttt{continue} for the rows that fail; the aggregation call
-(\texttt{hashAgg\_doConsume\_0}) is the next operator's \texttt{consume()} spliced in
+(\conf{hashAgg_doConsume_0}) is the next operator's \texttt{consume()} spliced in
 at that point. Scan adapter, filter, projection and partial aggregate are one
 method, which is what lets the JIT compile them as a unit. Counting the generated
 source is also a quick check on size: this one stage compiled to 283 bytes of
-bytecode in its largest method (\texttt{maxMethodCodeSize} in the output header),
+bytecode in its largest method (\conf{maxMethodCodeSize} in the output header),
 far from the 64~KB method limit.
 
 \Cref{fig:wholestage-onoff} measures what the fusion is worth, by running the same
@@ -211,10 +211,10 @@ The limit is where the documentation says: 100 columns fuse, 101 do not. What th
 documentation does not say is that fusing the last few columns before the limit was
 the \emph{slowest} configuration in the experiment. The measurement does not isolate
 the cause; the mechanism that fits is that the generated method for 99--100 wide
-expressions is huge, and a method above the JVM's \texttt{HugeMethodLimit} (8,000
+expressions is huge, and a method above the JVM's \conf{HugeMethodLimit} (8,000
 bytes of bytecode) is not JIT-compiled by default and runs in the bytecode
 interpreter, so ``generated code'' stops being fast code. The lab tested
-that: with the JVM flag \texttt{-XX:-DontCompileHugeMethods} the 99-column stage ran in
+that: with the JVM flag \conf{-XX:-DontCompileHugeMethods} the 99-column stage ran in
 4.5~s instead of 40.1~s, while the 50-column stage was unchanged at 4.4~s. The
 generated code was fine; the JIT was refusing to compile it. The
 practical reading is for tooling that emits hundreds of columns: wide projections
@@ -242,7 +242,7 @@ and sum it over 30~million rows.
   \includegraphics[width=0.9\linewidth]{udf-cost.pdf}
   \caption{The same arithmetic as a built-in expression (0.29~s), a pandas UDF
   evaluated in Arrow batches (2.5~s) and a row-at-a-time Python UDF (9.2~s). The
-  plan shows \texttt{ArrowEvalPython} for the second and \texttt{BatchEvalPython}
+  plan shows \conf{ArrowEvalPython} for the second and \conf{BatchEvalPython}
   for the third; neither is inside the whole-stage-codegen loop.}
   \label{fig:udf-cost}
 \end{figure}
@@ -260,14 +260,14 @@ into its throwaway container for this run.)
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\begin{tabular}{@{}P{3.1cm}P{3.7cm}P{4.1cm}P{3.2cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
 a CPU-bound stage is slow & no \texttt{*(n)} on its operators in \texttt{EXPLAIN} & find what blocks fusion (a UDF, more than 100 fields) & rewrite of the expression \\
-a Python UDF dominates & \texttt{BatchEvalPython} in the plan; 30$\times$ slower than built-ins & built-in functions, or a pandas UDF (Arrow batches) & pyarrow dependency \\
+a Python UDF dominates & \conf{BatchEvalPython} in the plan; 30$\times$ slower than built-ins & built-in functions, or a pandas UDF (Arrow batches) & pyarrow dependency \\
 a wide \texttt{SELECT} is slower than a narrower one & codegen time, not run time; 99--100 columns slowest in the lab & split the projection or stay above the 100-field limit & none \\
-sort of a numeric or timestamp key is slow & \texttt{enableRadixSort} false or key not radix-eligible & leave radix sort on (default) & none \\
+sort of a numeric or timestamp key is slow & \conf{enableRadixSort} false or key not radix-eligible & leave radix sort on (default) & none \\
 GC time is high & GC column in the UI & measure first; off-heap did not help when GC was 1\% (\Cref{fig:offheap-gc}) & container memory \\
 \bottomrule
 \end{tabular}

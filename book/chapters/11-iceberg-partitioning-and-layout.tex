@@ -36,7 +36,7 @@ appearing in the query text.
 \centering
 \caption{Common Iceberg partition transforms}
 \label{tab:ice-transforms}
-\begin{tabular}{@{}llp{5.2cm}@{}}
+\begin{tabular}{@{}P{2.9cm}P{4.7cm}P{7.3cm}@{}}
 \toprule
 \textbf{Transform} & \textbf{Use case} & \textbf{Notes} \\
 \midrule
@@ -121,7 +121,7 @@ describing old files under the old spec, new manifests describe new files
 under the new spec, and a query spans both by evaluating each manifest
 against its own recorded spec.
 
-This is why moving from \texttt{month(order\_ts)} to \texttt{day(order\_ts)}
+This is why moving from \conf{month(order_ts)} to \texttt{day(order\_ts)}
 as a table grows is a metadata-only operation, not a maintenance project: new
 data lands under the finer scheme immediately, old data keeps the coarser
 scheme it was written with, and a query filtering by date prunes correctly
@@ -140,7 +140,7 @@ new ones, with no explicit migration step and no downtime
   \label{fig:partition-evolution}
 \end{figure}
 
-The lab built exactly this. A table was partitioned by \texttt{months(order\_ts)}
+The lab built exactly this. A table was partitioned by \conf{months(order_ts)}
 and loaded with the first 15 days of March, then evolved with \texttt{ALTER TABLE
 \ldots{} REPLACE PARTITION FIELD months(order\_ts) WITH days(order\_ts)}, and loaded
 with the remaining 16 days. No file was rewritten, and the \texttt{partitions}
@@ -188,7 +188,7 @@ front to back --- a table sorted by \texttt{(category, customer\_id)} gives
 none, because rows are grouped by category first and only ordered by
 customer \emph{within} that grouping.
 
-\emph{Z-ordering} (\texttt{rewrite\_data\_files} with \texttt{sort\_order}
+\emph{Z-ordering} (\conf{rewrite_data_files} with \texttt{sort\_order}
 type \texttt{zorder}) fixes exactly that asymmetry by building one sort key
 out of \emph{interleaved bits} from several columns, so no single column
 gets front-of-key priority. Interleaving means taking each column's bits one
@@ -226,11 +226,11 @@ as bad as its worst. Use the one that matches how you query; if one column
 dominates, sort by it.
 
 \begin{warning}
-\texttt{rewrite\_data\_files} only rewrites files it considers badly sized. The
+\conf{rewrite_data_files} only rewrites files it considers badly sized. The
 lab's first sort attempt left most files alone, because they were already near
 the 8~MB target, and the customer lookup still skipped just 3 of 44 files.
-Adding \texttt{rewrite-all=true} rewrote every file and the same lookup then read
-one. Check \texttt{skippedDataFiles} after a sort, not just the procedure's
+Adding \conf{rewrite-all=true} rewrote every file and the same lookup then read
+one. Check \conf{skippedDataFiles} after a sort, not just the procedure's
 success message.
 \end{warning}
 
@@ -243,7 +243,7 @@ its footer, resolving its schema --- independent of how many rows it holds
 from the other direction). A table accumulating many small files, typically
 from frequent low-volume commits (a streaming job flushing every micro-batch,
 \Cref{ch:streaming}), pays that overhead over and over for little data each
-time. \texttt{write.target-file-size-bytes} (512~MB by default) sets what a
+time. \conf{write.target-file-size-bytes} (512~MB by default) sets what a
 write aims for; \Cref{ch:iceberg-write}'s compaction procedures are the
 after-the-fact fix for files that already landed too small.
 
@@ -254,7 +254,7 @@ Before a write's rows are grouped into per-partition files, Spark may need to
 shuffle them so that all rows for a given partition value land together
 rather than scattered across every task's output --- exactly the shuffle
 mechanics from \Cref{ch:shuffle}, applied to a write instead of a read.
-\texttt{write.distribution-mode} chooses how:
+\conf{write.distribution-mode} chooses how:
 
 \begin{description}
   \item[\texttt{none}] writes rows in whatever order the upstream plan already
@@ -297,7 +297,7 @@ day-partitioned table under each mode (\Cref{fig:distribution-modes}).
 
 The shuffle bought a tenfold reduction in files and cost nothing measurable in
 this run, because the write itself dominated. \texttt{none} also needs the
-fanout writer (\texttt{write.spark.fanout.enabled}), since its input is not
+fanout writer (\conf{write.spark.fanout.enabled}), since its input is not
 clustered by partition; without it the write fails. If you control the upstream
 ordering, as a daily partitioned scan does, \texttt{none} is free; otherwise
 \texttt{hash} is the safe default.
@@ -343,12 +343,12 @@ well-sized files or many small ones in the first place.
 \begin{table}[htbp]
 \centering\footnotesize
 \renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\begin{tabular}{@{}P{3.3cm}P{3.9cm}P{3.7cm}P{3.1cm}@{}}
 \toprule
 \textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
 \midrule
 thousands of tiny files & \texttt{files} table: small average size, many rows of it & coarser partition transform; \texttt{hash} distribution & coarser pruning; a shuffle \\
-a lookup opens every file & \texttt{skippedDataFiles} is 0 & sort or Z-order by the filter columns & compaction job; small files \\
+a lookup opens every file & \conf{skippedDataFiles} is 0 & sort or Z-order by the filter columns & compaction job; small files \\
 history is slower than new data & old spec partitions in \texttt{partitions} & rewrite old files under the new spec & a rewrite \\
 one file or task much larger & skewed row count per bucket & a different bucket column; salt the key & less clean joins \\
 writes produce one file per task per partition & \texttt{none} mode on unclustered input & \texttt{hash} or \texttt{range} distribution & a shuffle \\
@@ -362,10 +362,10 @@ writes produce one file per task per partition & \texttt{none} mode on uncluster
 \begin{exercises}
 \item Given a daily data volume and a query pattern, choose a partition spec.
       Justify it against the target of 128~MB--1~GB per partition per write.
-\item Evolve a table's partition spec from \texttt{month(order\_ts)} to
+\item Evolve a table's partition spec from \conf{month(order_ts)} to
       \texttt{day(order\_ts)}. Confirm from the \texttt{partitions} metadata
       table that old and new data report different specs.
-\item Write the same DataFrame with \texttt{write.distribution-mode} set to
+\item Write the same DataFrame with \conf{write.distribution-mode} set to
       \texttt{none} and then \texttt{hash}. Compare the file count per
       partition in each case.
 \end{exercises}
