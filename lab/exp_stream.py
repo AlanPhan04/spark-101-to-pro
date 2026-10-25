@@ -138,3 +138,26 @@ elif mode == "availnow":
         res.append({"run": run + 1, "landed_rows": n, "seconds": round(time.time() - t, 1), "table_rows": rows, "snapshots": sn})
         print(res[-1])
     json.dump(res, open(f"{OUT}/stream_avail.json", "w"), indent=1)
+
+if mode == "statebig":
+    prov, dur = sys.argv[2], int(sys.argv[3])
+    if prov == "rocksdb":
+        spark.conf.set("spark.sql.streaming.stateStore.providerClass", "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider")
+    s = (spark.readStream.format("rate").option("rowsPerSecond", 20000).option("numPartitions", 2).load()
+         .select(F.col("timestamp").alias("order_ts"), (F.col("value") % 40000).cast("string").alias("customer_id")))
+    agg = s.groupBy(F.window("order_ts", "10 seconds"), "customer_id").count()
+    shutil.rmtree(f"{CK}/big_{prov}", ignore_errors=True)
+    q = (agg.writeStream.format("noop").outputMode("update").trigger(processingTime="5 seconds")
+         .option("checkpointLocation", f"{CK}/big_{prov}").start())
+    series, seen, t0 = [], set(), time.time()
+    while time.time() - t0 < dur:
+        time.sleep(2)
+        for p in q.recentProgress:
+            if p["batchId"] in seen or not p.get("stateOperators"):
+                continue
+            seen.add(p["batchId"]); so = p["stateOperators"][0]
+            series.append({"t": round(time.time() - t0), "state_rows": so["numRowsTotal"], "state_bytes": so["memoryUsedBytes"], "batch_ms": p["durationMs"]["triggerExecution"],
+                           "commit_ms": so.get("commitTimeMs", None)})
+    q.stop()
+    json.dump(series, open(f"{OUT}/stream_big_{prov}.json", "w"), indent=1)
+    print("RESULT", prov, series[-1] if series else None)

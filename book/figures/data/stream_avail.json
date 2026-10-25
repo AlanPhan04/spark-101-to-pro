@@ -1,0 +1,23 @@
+[
+ {
+  "run": 1,
+  "landed_rows": 100000,
+  "seconds": 6.6,
+  "table_rows": 100000,
+  "snapshots": 1
+ },
+ {
+  "run": 2,
+  "landed_rows": 0,
+  "seconds": 1.6,
+  "table_rows": 100000,
+  "snapshots": 1
+ },
+ {
+  "run": 3,
+  "landed_rows": 50000,
+  "seconds": 4.2,
+  "table_rows": 150000,
+  "snapshots": 2
+ }
+]

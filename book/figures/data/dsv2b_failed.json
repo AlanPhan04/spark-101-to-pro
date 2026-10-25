@@ -1,0 +1,11 @@
+{
+ "error": "Job aborted due to stage failure: Task 1 in stage 13.0 failed 1 times, most recent failure: Lost task 1.0 in stage 13.0 (TID 45) (70046323b8ea executor driver): java.lang.RuntimeException: boom at the end",
+ "snapshots_before_after": [
+  1,
+  1
+ ],
+ "parquet_before_after": [
+  2,
+  2
+ ]
+}

@@ -292,7 +292,7 @@ cannot be changed once the application has started.}
 The order is therefore: a runtime \texttt{SET} for SQL settings, then values set in
 application code, then \texttt{--conf} flags, then \texttt{spark-defaults.conf},
 then the built-in default. The code layer in the experiment set only the SQL key,
-so the memory column carries the 	exttt{--conf} value forward unchanged. The rejected last row is
+so the memory column carries the \texttt{--conf} value forward unchanged. The rejected last row is
 the practical rule: only SQL configuration is changeable mid-session. A value that
 looks ignored is usually overridden from a higher layer than the one you edited, and
 \texttt{spark.conf.get(key)} in the running session reports the value actually in

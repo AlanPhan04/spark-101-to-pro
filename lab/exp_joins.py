@@ -33,7 +33,7 @@ def go(label, build, hint, sql, reps=2):
     print(res[-1])
 
 
-S = "SELECT /*+ {h}({t}) */ count(*), sum(o.order_total) FROM orders o JOIN {t} {a} ON {on}"
+S = "SELECT /*+ {h}({a}) */ count(*), sum(o.order_total) FROM orders o JOIN {t} {a} ON {on}"
 cases = [
     ("dim_date (365 rows)", "dim_date", "d", "date(o.order_ts) = d.date"),
     ("dim_customer (2M rows)", "dim_customer", "c", "o.customer_id = c.customer_id"),

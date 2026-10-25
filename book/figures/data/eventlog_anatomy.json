@@ -1,0 +1,50 @@
+{
+ "app": "debug-skew",
+ "file": "local-1792904899149",
+ "bytes": 1021098,
+ "events": 276,
+ "top": [
+  {
+   "event": "TaskEnd",
+   "count": 125,
+   "bytes": 804410
+  },
+  {
+   "event": "EnvironmentUpdate",
+   "count": 1,
+   "bytes": 79939
+  },
+  {
+   "event": "TaskStart",
+   "count": 125,
+   "bytes": 42895
+  },
+  {
+   "event": "StageCompleted",
+   "count": 4,
+   "bytes": 28226
+  },
+  {
+   "event": "StageSubmitted",
+   "count": 4,
+   "bytes": 26245
+  },
+  {
+   "event": "SQLExecutionStart",
+   "count": 2,
+   "bytes": 21415
+  },
+  {
+   "event": "JobStart",
+   "count": 1,
+   "bytes": 15625
+  },
+  {
+   "event": "DriverAccumUpdates",
+   "count": 5,
+   "bytes": 840
+  }
+ ],
+ "tasks": 125,
+ "bytes_per_task": 6435
+}

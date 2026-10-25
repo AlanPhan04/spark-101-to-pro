@@ -1,0 +1,32 @@
+[
+ {
+  "predicate": "one whole day (aligned)",
+  "filter_above_scan": false,
+  "rows_out_of_scan": 967939,
+  "scan_line": "+- BatchScan lab.db.orders[order_ts#1, order_total#6] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772668800000000, order_ts < 1772755200000000, groupedBy=] RuntimeFilters: []"
+ },
+ {
+  "predicate": "one hour inside a day",
+  "filter_above_scan": true,
+  "rows_out_of_scan": 967939,
+  "scan_line": "+- BatchScan lab.db.orders[order_ts#21, order_total#26] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772704800000000, order_ts < 1772708400000000, groupedBy=] RuntimeFilters: []"
+ },
+ {
+  "predicate": "date(order_ts) = day",
+  "filter_above_scan": false,
+  "rows_out_of_scan": 967939,
+  "scan_line": "+- BatchScan lab.db.orders[order_ts#41, order_total#46] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772668800000000, order_ts < 1772755200000000, groupedBy=] RuntimeFilters: []"
+ },
+ {
+  "predicate": "partition OR data column",
+  "filter_above_scan": true,
+  "rows_out_of_scan": 30000000,
+  "scan_line": "+- BatchScan lab.db.orders[order_ts#61, product_id#62, order_total#66] lab.db.orders (branch=null) [filters=((order_ts >= 1772668800000000 AND order_ts < 1772755200000000) OR product_id = 'p0000042'), groupedBy=] RuntimeFilters: []"
+ },
+ {
+  "predicate": "partition AND data column",
+  "filter_above_scan": true,
+  "rows_out_of_scan": 967939,
+  "scan_line": "+- BatchScan lab.db.orders[order_ts#82, order_total#87] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_total IS NOT NULL, order_ts >= 1772668800000000, order_ts < 1772755200000000, order_total > 200.0, groupedBy=] RuntimeFilters: []"
+ }
+]

@@ -8,7 +8,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$1"; shift || true
 mkdir -p "$HERE/out" "$HERE/events" "$HERE/warehouse"
-MSYS_NO_PATHCONV=1 docker run --rm --user root \
+MSYS_NO_PATHCONV=1 docker run --rm ${NAME:+--name $NAME} -e JAVA_TOOL_OPTIONS --user root \
   --memory 6g \
   -v "$(cygpath -w "$HERE" 2>/dev/null || echo "$HERE")":/lab \
   -w /lab \

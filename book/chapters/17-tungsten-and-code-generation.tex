@@ -3,253 +3,297 @@
 
 \begin{chapterintro}
 Below the plan, a stage does not interpret operators row by row. Tungsten stores
-rows as packed off-heap bytes, and whole-stage code generation collapses an
-operator subtree into a single generated Java method that the JIT compiles to
-tight machine code. This chapter opens that layer: the binary row format,
-off-heap memory management, cache-aware computation, and the generated code you
-can actually read with \texttt{EXPLAIN CODEGEN}.
+rows as packed bytes, and whole-stage code generation collapses an operator subtree
+into a single generated Java method that the JIT compiles to tight machine code.
+This chapter opens that layer with the real thing: the binary row format, the
+\texttt{EXPLAIN CODEGEN} output of a stage from the lab, and four measurements ---
+what turning code generation off costs, what a Python UDF costs, where the 100-field
+limit bites, and what off-heap execution memory did and did not change. All
+numbers come from the lab in \Cref{sec:refenv-lab} (Spark 3.5.2, local mode, 30
+million rows); single runs unless stated.
 \end{chapterintro}
 
 \section{The Tungsten binary row format}
 \label{sec:tungsten-row}
 
-A plain JVM object holding a row --- one field per Java object, boxed
-primitives, object headers --- is exactly the per-object overhead
-\Cref{sec:mem-heap} described, multiplied by every row in every partition.
-\texttt{UnsafeRow} avoids it by laying a row out as one contiguous byte
-buffer instead of a graph of objects: a fixed-size null-tracking bitset
-first, then one 8-byte slot per field (a primitive stored inline, or an
-offset-and-length pair pointing into a variable-length region at the end of
-the same buffer for a string or binary value). \Cref{fig:unsaferow-layout}
-shows this for one row of the specimen's \texttt{orders} table: three fixed
-8-byte fields sit inline, while \texttt{product\_id} --- a string, so its
-length varies row to row --- carries only an (offset, length) pair in its
-fixed slot, pointing further into the same buffer where its actual bytes
-live.
+A plain JVM object holding a row --- one object per field, boxed primitives, object
+headers --- is the per-object overhead \Cref{sec:mem-heap} measured, multiplied by
+every row in every partition. \texttt{UnsafeRow} avoids it by laying a row out as one
+contiguous byte buffer: a null-tracking bitset first, then one 8-byte slot per
+field (a primitive stored inline, or an offset-and-length pair pointing into a
+variable-length region at the end of the same buffer for a string or binary value).
+\Cref{fig:unsaferow-layout} shows this for one row of the specimen's \texttt{orders}
+table.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{unsaferow-layout.pdf}
-  \caption{One \texttt{UnsafeRow}: a null bitset, one 8-byte slot per field,
-  and a variable-length region past the last fixed slot. A fixed field's
-  slot holds its value directly; a variable field's slot holds an
-  (offset, length) pointer into the variable region of the same buffer.}
+  \caption{One \texttt{UnsafeRow}: a null bitset, one 8-byte slot per field, and a
+  variable-length region past the last fixed slot. A fixed field's slot holds its
+  value directly; a variable field's slot holds an (offset, length) pointer into
+  the variable region of the same buffer.}
   \label{fig:unsaferow-layout}
 \end{figure}
 
-Reading a field is a direct byte-offset access into this buffer --- for a
-fixed field, read 8 bytes at a statically known offset; for a variable
-field, read the (offset, length) pair, then read that many bytes starting
-at that offset --- with no pointer chasing through a graph of objects and
-no per-field object to allocate or garbage-collect. The trade is that every
-value must fit this fixed encoding, which is exactly why Catalyst carries a
-strict, fully resolved schema (\Cref{ch:catalyst}) all the way to execution
---- the row format has no room for a value whose type or size was not known
-in advance.
+Reading a field is a direct byte-offset access: for a fixed field, read 8 bytes at a
+statically known offset; for a variable field, read the (offset, length) pair, then
+that many bytes. There is no pointer chasing through an object graph and no
+per-field object to allocate or collect. The trade is that every value must fit this
+fixed encoding, which is why Catalyst carries a fully resolved schema
+(\Cref{ch:catalyst}) all the way to execution.
+
+By the layout rule an \texttt{orders} row has a 64-byte fixed part (an 8-byte bitset
+plus seven 8-byte slots) and a variable part padded to 8-byte words --- the
+36-character \texttt{order\_id} takes 40 bytes, the 8-character \texttt{product\_id}
+8, the 9-character \texttt{customer\_id} 16 --- about 128 bytes in total (computed
+from the layout, not measured). That is more than the 84 bytes per row the source
+reports to the planner (\Cref{tab:dsv2-stats}) and more than the roughly 50 bytes per
+row the same data occupies in compressed Parquet: three different sizes for the same
+row, one for each place the engine needs a number.
 
 \section{Off-heap memory management}
 \label{sec:tungsten-offheap}
 
-\texttt{UnsafeRow} buffers do not have to live on the JVM heap at all. When
+\texttt{UnsafeRow} buffers do not have to live on the JVM heap. When
 \conf{spark.memory.offHeap.enabled} is set, Tungsten's \texttt{TaskMemoryManager}
-allocates fixed-size pages directly from off-heap memory (the same pool
-\Cref{sec:mem-model} carved out of the executor's total footprint) using
-\texttt{sun.misc.Unsafe}-style raw memory access rather than the JVM's normal
-object allocator. A row living in an off-heap page is invisible to the
-garbage collector entirely --- not "cheap to collect," but never considered
-by a GC cycle at all --- which is the mechanism behind
-\Cref{sec:mem-gc}'s claim that off-heap execution memory trades GC pressure
-for manual lifecycle management: Spark itself must now free a page
-explicitly when a task no longer needs it, work the JVM would otherwise have
-done automatically at some GC pause's cost.
+allocates fixed-size pages directly from off-heap memory using
+\texttt{sun.misc.Unsafe}-style raw access. A row in an off-heap page is invisible to
+the garbage collector --- not cheap to collect, never considered --- and the price is
+manual lifecycle management: a task must free a page explicitly when it no longer
+needs it.
 
-Trace one page through its lifecycle to see what "manual" actually means
-here. A task building a hash table for the specimen's join over
-\texttt{product\_id} asks the \texttt{TaskMemoryManager} for a page --- say
-64~KB, Tungsten's usual default page size --- and gets back a raw pointer
-into off-heap memory, not a Java object. As matching \texttt{orders} rows
-arrive, the task writes each one's \texttt{UnsafeRow} bytes directly into
-that page at increasing offsets, tracking how much of the page is used
-itself, since nothing else is tracking it. When the page fills, the task
-asks for another one; when the task finishes, either successfully or via a
-failure that unwinds it, it calls \texttt{freePage()} on every page it
-still holds, explicitly returning that memory to the pool. Skip that last
-step --- a bug in an operator's cleanup path, not a normal case --- and the
-memory is simply gone until the executor JVM itself exits, since no
-collector is ever going to notice it is unreachable and reclaim it the way
-it would an abandoned Java object.
+The mechanism suggests off-heap memory should cut garbage-collection time. The lab
+tested that on the sort-heavy stage of \Cref{ch:tuning}, adding a 1~GB off-heap
+pool to a 1~GB and a 2~GB heap at four cores (\Cref{fig:offheap-gc}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{offheap-gc.pdf}
+  \caption{The same stage on-heap and with a 1~GB off-heap pool added. GC time did
+  not fall (0.65 to 0.72~s in all four), spill was identical (417~MB to disk), and
+  wall-clock time was 6--20\% higher with off-heap enabled. One run each.}
+  \label{fig:offheap-gc}
+\end{figure}
+
+On this stage the hypothesis did not hold: GC time was already small (0.65--0.72~s
+summed over 40 tasks and about 20~s of wall clock), the spill volume did not change,
+and the off-heap runs were slower. The lab does not isolate why --- one plausible
+reading is that the stage's garbage was not the sorted rows but the short-lived
+objects around them, and that off-heap allocation adds its own cost --- so the safe
+conclusion is narrower than the folklore: \emph{measure GC time first}
+(\Cref{sec:reading-metrics}); off-heap pays only when GC time is a large share of
+task time, and in this stage it was about 1\%. When off-heap is enabled the pool is
+extra memory and must be added to the container limit (\Cref{sec:executor-sizing}).
 
 \section{Cache-aware computation}
 \label{sec:tungsten-cache-aware}
 
-A CPU cache miss costs orders of magnitude more than a cache hit, and a
-sort or hash operation over an array of object pointers --- the classic JVM
-collection layout --- follows a different, effectively random pointer on
-every comparison, defeating the cache almost completely. Tungsten's
-sort implementation instead packs a compact \emph{(prefix, pointer)} pair per
-row into one flat array: the prefix is a fixed-size encoding of enough of
-the sort key to resolve most comparisons without ever dereferencing the
-pointer, so the hot comparison loop reads sequentially through one small,
-cache-resident array, only chasing the pointer to the full row on the rare
-comparison the prefix cannot resolve alone. Concretely, sorting the
-specimen's \texttt{orders} by \texttt{order\_total} (a \texttt{double}):
-the prefix \emph{is} that value's own sortable bit encoding, packed directly
-into the fixed-size prefix slot --- so two rows with \texttt{order\_total}
-of \$42.50 and \$187.00 are fully ordered by comparing their prefixes alone,
-with the pointer to each row's full data never touched at all during that
-comparison; the pointer is only followed on the rare case of two rows
-sharing the exact same \texttt{order\_total}, where the prefix cannot
-distinguish them and a real tie-break against the full row is unavoidable.
-For fixed-width numeric keys,
-Tungsten goes further with a radix sort, which sorts by key bytes directly
-with no comparisons at all.
+A CPU cache miss costs orders of magnitude more than a hit, and sorting an array of
+object pointers --- the classic JVM layout --- follows a different, effectively
+random pointer on every comparison. Tungsten's sort packs a compact
+\emph{(prefix, pointer)} pair per row into one flat array: the prefix is a
+fixed-size encoding of enough of the sort key to settle most comparisons, so the
+hot loop reads sequentially through one small array and chases the pointer to the
+full row only on a tie. For fixed-width numeric keys Spark goes further with a radix
+sort that orders by key bytes with no comparisons at all, controlled by
+\conf{spark.sql.sort.enableRadixSort} (default true).
+
+The lab sorted nine days of \texttt{orders} by \texttt{order\_ts} (a timestamp, so
+radix-eligible) through a window function, with the setting on and off
+(\Cref{fig:radix-sort}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{radix-sort.pdf}
+  \caption{The same sort with radix sort on (the default) and off. Radix sort made
+  the stage 1.7$\times$ faster; the comparison sort the setting falls back to is
+  the prefix-based one described above.}
+  \label{fig:radix-sort}
+\end{figure}
 
 \section{Whole-stage code generation internals}
 \label{sec:tungsten-wholestage}
 
-Interpreting a plan operator by operator means a virtual call and a full
-row materialization at every boundary between them --- a filter producing a
-row, handed to a project, handed to an aggregate, each step paying function-call
-overhead the JIT cannot see through because the call target varies with the
-plan. \emph{Whole-stage code generation} collapses a chain of adjacent
-operators that support it (marked \texttt{CodegenSupport}, a Scala trait an
-operator implements to opt into this fusion, internally) into
-one generated Java method, using a \emph{produce/consume} protocol: each
-operator's \texttt{produce()} emits the code that generates its rows, and
-calls into the next operator's \texttt{consume()} inline rather than through
-a virtual dispatch --- the whole fused chain becomes one straight-line loop
-the JIT compiler can then optimize as a single unit. The \texttt{*(n)}
-markers this produces in a plan were already introduced in
-\Cref{sec:wholestage-codegen} and catalogued in \Cref{sec:c-codegen}; what
-those two places don't show is what the generated method actually looks
-like, which is the point of running \texttt{EXPLAIN CODEGEN} yourself rather
-than taking the marker on faith.
+Interpreting a plan operator by operator means a virtual call and a row hand-off at
+every boundary, none of which the JIT can see through because the call target varies
+with the plan. \emph{Whole-stage code generation} collapses a chain of adjacent
+operators that implement \texttt{CodegenSupport} into one generated Java method
+using a \emph{produce/consume} protocol: each operator's \texttt{produce()} emits
+the code that generates its rows and calls into the next operator's
+\texttt{consume()} \emph{inline}. The \texttt{*(n)} markers this produces were
+introduced in \Cref{sec:wholestage-codegen}. To see what the generated method
+looks like, the lab ran \texttt{EXPLAIN CODEGEN} on a scan, filter, projection and
+partial aggregate over \texttt{orders}.
 
-\Cref{lst:shape-query}'s stage~1 scan-and-filter of \texttt{orders}
-(\Cref{sec:catalyst-explain}'s plan, node \texttt{*(1)}) compiles to
-something close to this, trimmed to the produce/consume skeleton:
+\begin{lstlisting}[language=text,style=plan,caption={The plan of the lab's stage 1 and an excerpt of its generated method (\texttt{EXPLAIN CODEGEN}, Spark 3.5.2; lines shortened)},captionpos=b,label=lst:tungsten-codegen]
+*(1) HashAggregate(keys=[], functions=[partial_sum(order_total)])
++- *(1) Project [order_total]
+   +- *(1) Filter (order_total > 100.0 AND promised_days < 5 ...)
+      +- *(1) ColumnarToRow
+         +- BatchScan lab.db.orders[promised_days, order_total]
 
-\begin{lstlisting}[language=text,numbers=none,caption={EXPLAIN CODEGEN, trimmed to the *(1) scan-filter stage},captionpos=b]
-== Subtree 1 / 2 (maxMethodCodeSize:389) ==
-*(1) Filter (order_ts#12 >= 2026-03-01 AND order_ts#12 < 2026-03-08)
-+- *(1) ColumnarToRow
-   +- BatchScan orders
-
-Generated code:
-final class GeneratedIteratorForCodegenStage1 extends BufferedRowIterator {
-  protected void processNext() throws java.io.IOException {
-    while (scan_input.hasNext()) {
-      InternalRow scan_row = (InternalRow) scan_input.next();
-      long scan_value = scan_row.getLong(1);           // order_ts, inline field
-      // Filter.consume(): the range check, straight-line, no virtual call
-      if (scan_value >= 1772323200000000L
-          && scan_value < 1772928000000000L) {
-        append(scan_row);                              // -> next operator's consume()
-      }
-    }
-  }
-}
+/* 037 */ private void hashAgg_doAggregateWithoutKey_0() {
+/* 045 */   while (columnartorow_mutableStateArray_1[0] != null) {
+/* 048 */     for (int localIdx = 0; localIdx < localEnd; localIdx++) {
+/* 051 */       boolean isNull_1 = vector[1].isNullAt(rowIdx);
+/* 052 */       double value_1 = isNull_1 ? -1.0 : vector[1].getDouble(rowIdx);
+/* 058 */       filter_value_3 = SQLOrderingUtil.compareDoubles(value_1, 100.0D) > 0;
+/* 059 */       if (!filter_value_3) continue;
+/* 067 */       filter_value_9 = value_0 < 5;
+/* 068 */       if (!filter_value_9) continue;
+/* 074 */       hashAgg_doConsume_0(value_1, false);
 \end{lstlisting}
 
-Three unfamiliar names carry the whole mechanism, so before reading the
-payoff, here is what each one is. \texttt{BufferedRowIterator} is the base
-class every generated whole-stage method extends --- it is Spark's own
-plumbing, not something you write, and it is what lets the generated class
-plug into the rest of the engine as an ordinary iterator despite being
-freshly compiled at runtime. \texttt{InternalRow} is Catalyst's internal
-row representation --- the \texttt{UnsafeRow} byte layout from
-\Cref{sec:tungsten-row} accessed through this interface, which is why
-\texttt{scan\_row.getLong(1)} above is a direct, typed field read rather
-than a generic get-and-cast. \texttt{append(scan\_row)} is how one fused
-operator hands a row to the next one \emph{inside} the same generated
-method: it is not a function return, it is the literal inlined code of the
-next operator's \texttt{consume()} step, spliced in at compile time --- the
-mechanism the produce/consume protocol described in the abstract a moment
-ago, spelled out here in the concrete generated source.
+Read the listing as the mechanism made concrete. The batch loop
+(\texttt{while}/\texttt{for}) sits \emph{inside} the generated method: the scan hands
+over a whole \texttt{ColumnarBatch}, and the generated code walks it row by row
+reading each column through a typed accessor (\texttt{getDouble}) --- no
+\texttt{InternalRow} object per row. The filter is two inline comparisons with
+\texttt{continue} for the rows that fail; the aggregation call
+(\texttt{hashAgg\_doConsume\_0}) is the next operator's \texttt{consume()} spliced in
+at that point. Scan adapter, filter, projection and partial aggregate are one
+method, which is what lets the JIT compile them as a unit. Counting the generated
+source is also a quick check on size: this one stage compiled to 283 bytes of
+bytecode in its largest method (\texttt{maxMethodCodeSize} in the output header),
+far from the 64~KB method limit.
 
-One loop, one method: the scan's \texttt{next()}, the columnar-to-row
-conversion, and the filter's comparison all inline into
-\texttt{processNext()} with no call back out to a generic \texttt{Filter}
-object per row --- this is the whole payoff whole-stage codegen exists for,
-made concrete instead of asserted.
+\Cref{fig:wholestage-onoff} measures what the fusion is worth, by running the same
+three queries with \conf{spark.sql.codegen.wholeStage} on and off.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{wholestage-onoff.pdf}
+  \caption{Whole-stage codegen on and off. A filter-and-aggregate and an arithmetic
+  chain ran 1.4--1.5$\times$ faster with it; a shuffle-bound group-by did not change
+  (0.99$\times$), because its time is in the exchange, not in the fused loop.}
+  \label{fig:wholestage-onoff}
+\end{figure}
+
+The scan itself is already vectorized (\Cref{sec:ice-read-vectorized} measured that
+at about 7$\times$ over the row-based reader), so the 1.4--1.5$\times$ here is what
+fusion adds on top; and fusion pays where the stage's time is CPU in the fused
+operators, not where it is data movement.
 
 \begin{note}
-Not everything fuses. An \texttt{Exchange} always breaks the chain --- you
-cannot generate one straight-line loop across a network boundary, so codegen
-restarts on the far side of every shuffle, exactly the stage boundary
-\Cref{sec:catalyst-physical} already described from the other direction. A
-sort-merge join itself, despite materializing state per key, does implement
-\texttt{CodegenSupport} and fuses like any other operator --- this is why
-the specimen's own plan (\Cref{lst:c-specimen-plan}) shows \texttt{*(5)
-SortMergeJoin} carrying a star rather than breaking the chain.
-What genuinely does not fuse is an aggregate whose buffer needs arbitrary
-objects (\texttt{ObjectHashAggregate} falling back past its distinct-key
-threshold, \Cref{sec:c-agg}) or a row-at-a-time UDF Catalyst cannot
-generate code for at all --- both visible as a plan node with no asterisk,
-or the codegen number resetting around it.
+Not everything fuses. An \texttt{Exchange} always breaks the chain --- there is no
+straight-line loop across a network boundary --- so codegen restarts on the far side
+of every shuffle; this is the stage boundary \Cref{sec:catalyst-physical} described
+from the other direction. A sort-merge join implements \texttt{CodegenSupport} and
+fuses like any other operator (\Cref{lst:c-specimen-plan}). What does not fuse is an
+operator Catalyst cannot generate code for: a row-at-a-time Python UDF, below.
 \end{note}
 
-\section{Expression code generation}
+\section{Expression code generation and its limits}
 \label{sec:tungsten-expr-codegen}
 
-Beneath whole-stage codegen, an individual Catalyst \texttt{Expression}
-(\texttt{a + b * 2}, a \texttt{CASE WHEN}) generates its own Java source
-fragment rather than being evaluated through a generic interpreter tree ---
-the same "generate code instead of interpreting a tree" idea applied one
-level down. A single JVM method has a 64~KB bytecode size limit; a query
-with a very wide \texttt{SELECT} or a very deep expression tree can generate
-code that would exceed it, and Spark's codegen falls back to splitting the
-generated code across multiple smaller methods first; if the schema is wide
-enough to cross \conf{spark.sql.codegen.maxFields} (100 columns by default,
-the same limit \Cref{sec:wholestage-codegen} named as a whole-stage fusion
-boundary), Spark instead gives up on generating code for that expression at
-all and falls back to plain, interpreted \texttt{Expression} evaluation ---
-a real ceiling worth knowing about, since a query built by tooling that
-emits hundreds of generated columns can hit it in practice.
+Beneath whole-stage codegen, an individual Catalyst \texttt{Expression} generates
+its own Java fragment rather than being evaluated by a generic interpreter tree.
+Two ceilings apply. A single JVM method is limited to 64~KB of bytecode, and Spark
+splits oversized generated code across methods first. And
+\conf{spark.sql.codegen.maxFields} (default 100) makes Spark \emph{give up} on
+whole-stage codegen for a stage that handles more than 100 fields, falling back to
+interpreted evaluation. The lab built a \texttt{SELECT} with 10 to 400 derived
+columns (each \texttt{order\_total * i + promised\_days}) and checked whether the
+projection stayed inside whole-stage codegen (\Cref{fig:codegen-fields}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{codegen-fields.pdf}
+  \caption{Whole-stage codegen holds up to exactly 100 columns and is abandoned at
+  101. The interesting part is the time: the 99- and 100-column stages took about
+  43~s, ten times the 4~s of the 101-column interpreted fallback. One run each,
+  log scale.}
+  \label{fig:codegen-fields}
+\end{figure}
+
+The limit is where the documentation says: 100 columns fuse, 101 do not. What the
+documentation does not say is that fusing the last few columns before the limit was
+the \emph{slowest} configuration in the experiment. The measurement does not isolate
+the cause; the mechanism that fits is that the generated method for 99--100 wide
+expressions is huge, and a method above the JVM's \texttt{HugeMethodLimit} (8,000
+bytes of bytecode) is not JIT-compiled by default and runs in the bytecode
+interpreter, so ``generated code'' stops being fast code. (Claim --- not tested:
+raising or removing the JIT's huge-method limit would change the 43~s.) The
+practical reading is for tooling that emits hundreds of columns: wide projections
+are not where whole-stage codegen helps, and a few more columns can be cheaper than
+a few fewer.
 
 \section{Columnar processing and vectorization}
 \label{sec:tungsten-columnar}
 
-\texttt{UnsafeRow} is still fundamentally row-oriented: one contiguous
-buffer per row. \texttt{ColumnarBatch} (backed by Arrow-compatible
-\texttt{ColumnVector}s) stores a batch of rows the other way, one contiguous
-buffer per \emph{column} across many rows --- exactly the layout
-\Cref{sec:ice-read-vectorized}'s vectorized Parquet reader produces directly
-from the file's own columnar encoding, with no row-oriented conversion step
-in between. This is also the representation a Pandas UDF or Arrow-based
-Python UDF communicates through, and the reason it is fast is more specific
-than "same layout": \texttt{ColumnarBatch} and Arrow's own in-memory format
-are close enough in byte-level structure that handing a batch to the Python
-process can reuse the same underlying buffers rather than walking the data
-and re-encoding it --- the JVM and Python sides read the identical bytes
-over shared memory, with no per-value (de)serialization loop in between.
-A row-at-a-time Python UDF has no such shortcut: every row crosses the
-JVM/Python boundary as its own converted Python object, one round trip per
-row instead of one per batch.
+\texttt{UnsafeRow} is row-oriented: one contiguous buffer per row.
+\texttt{ColumnarBatch} stores a batch the other way, one contiguous buffer per
+\emph{column} across many rows --- the layout \Cref{sec:ice-read-vectorized}'s
+vectorized Parquet reader produces directly from the file's own columnar encoding.
+It is also the representation a pandas UDF communicates through, and the reason it
+is fast is specific: \texttt{ColumnarBatch} and Arrow's in-memory format are close
+enough that a batch can be handed to the Python process with no per-value
+(de)serialization loop. A row-at-a-time Python UDF has no such shortcut: every row
+crosses the JVM/Python boundary as its own converted object.
+
+\Cref{fig:udf-cost} measures the three ways to compute \texttt{order\_total * 1.07}
+and sum it over 30~million rows.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{udf-cost.pdf}
+  \caption{The same arithmetic as a built-in expression (0.29~s), a pandas UDF
+  evaluated in Arrow batches (2.5~s) and a row-at-a-time Python UDF (9.2~s). The
+  plan shows \texttt{ArrowEvalPython} for the second and \texttt{BatchEvalPython}
+  for the third; neither is inside the whole-stage-codegen loop.}
+  \label{fig:udf-cost}
+\end{figure}
+
+The row-at-a-time UDF is 32$\times$ slower than the built-in; the Arrow-based one
+recovers a factor of 3.7 of that and is still 8.6$\times$ slower, because the data
+must still leave the JVM. The fix that costs nothing is to express the logic in
+built-in functions so that Catalyst can generate code for it. (The pandas UDF
+needed \texttt{pyarrow}, which the lab image does not ship; the lab installed it
+into its throwaway container for this run.)
+
+\section{From symptom to lever}
+\label{sec:tungsten-levers}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.1cm}p{3.7cm}p{4.1cm}p{3.2cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
+\midrule
+a CPU-bound stage is slow & no \texttt{*(n)} on its operators in \texttt{EXPLAIN} & find what blocks fusion (a UDF, more than 100 fields) & rewrite of the expression \\
+a Python UDF dominates & \texttt{BatchEvalPython} in the plan; 30$\times$ slower than built-ins & built-in functions, or a pandas UDF (Arrow batches) & pyarrow dependency \\
+a wide \texttt{SELECT} is slower than a narrower one & codegen time, not run time; 99--100 columns slowest in the lab & split the projection or stay above the 100-field limit & none \\
+sort of a numeric or timestamp key is slow & \texttt{enableRadixSort} false or key not radix-eligible & leave radix sort on (default) & none \\
+GC time is high & GC column in the UI & measure first; off-heap did not help when GC was 1\% (\Cref{fig:offheap-gc}) & container memory \\
+\bottomrule
+\end{tabular}
+\caption{The Tungsten levers: symptom, evidence, lever, cost.}
+\label{tab:tungsten-levers}
+\end{table}
 
 \section{Summary}
 \label{sec:tungsten-summary}
 
-\texttt{UnsafeRow} replaces one-object-per-row with a packed byte buffer,
-optionally living entirely off-heap and thus entirely outside GC's view;
-sorting and hashing operate on compact prefix-plus-pointer arrays instead of
-following object references, for the sake of the CPU cache. Whole-stage
-codegen fuses a chain of operators into one generated method via
-produce/consume, visible in \texttt{EXPLAIN}'s \texttt{*(N)} markers and
-readable directly via \texttt{EXPLAIN CODEGEN}; expression codegen does the
-same one level down, bounded by the JVM's 64~KB method size limit. Columnar
-batches are the same cache- and vectorization-friendly idea applied to a
-whole batch of rows at once, and are exactly what a vectorized Parquet read
-or an Arrow-based UDF already speaks natively.
+\texttt{UnsafeRow} replaces one object per row with a packed byte buffer; the
+Tungsten sort works on prefix-plus-pointer arrays, and radix sort made a timestamp
+sort 1.7$\times$ faster. Whole-stage codegen fuses a chain of operators into one
+generated method whose loop runs over a columnar batch; the lab's listing shows
+scan, filter, projection and partial aggregate in a single method and the fusion
+worth 1.4--1.5$\times$ on CPU-bound stages and nothing on a shuffle-bound one.
+Fusion has a hard edge at 100 fields, and the stage right below that edge was the
+slowest in the experiment. A row-at-a-time Python UDF cost 32$\times$ a built-in
+expression, an Arrow-based one 8.6$\times$. Off-heap memory did not reduce GC time
+on a stage where GC was already about 1\% of task time.
 
 \exercisehead
 \begin{exercises}
-\item Run \texttt{EXPLAIN CODEGEN} on a filter-and-project query. Identify which
-      operators were fused into one generated method and which were not.
-\item Force a sort-merge join and inspect the plan's codegen markers.
-      Identify the exact node where the \texttt{*(N)} numbering resets and
-      explain why that operator cannot fuse.
-\item Build a query with an unusually wide \texttt{SELECT} list (hundreds of
-      derived columns) and observe whether codegen falls back or splits its
-      generated method.
+\item Run \texttt{EXPLAIN CODEGEN} on a filter-and-project query of your own.
+      Identify the loop over the batch, each operator's inlined code, and the line
+      where the next operator's \texttt{consume()} appears.
+\item Build a \texttt{SELECT} with 99, 100 and 101 derived columns and compare
+      wall-clock times and the \texttt{*(n)} markers. Does the 99--100 column
+      slowdown reproduce on your cluster?
+\item Replace a Python UDF in one of your queries with a built-in expression and
+      with a pandas UDF. Record the plan node and the time of each.
 \end{exercises}

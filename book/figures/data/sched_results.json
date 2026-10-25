@@ -1,0 +1,174 @@
+{
+ "writers": [
+  {
+   "partitions": 50,
+   "query": "repartition(n)",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 50,
+   "query": "GROUP BY",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 50,
+   "query": "sort-merge join",
+   "writers": [
+    "BypassMergeSort",
+    "BypassMergeSort",
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 50,
+   "query": "ORDER BY",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 50,
+   "query": "window",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 200,
+   "query": "repartition(n)",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 200,
+   "query": "GROUP BY",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 200,
+   "query": "sort-merge join",
+   "writers": [
+    "BypassMergeSort",
+    "BypassMergeSort",
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 200,
+   "query": "ORDER BY",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 200,
+   "query": "window",
+   "writers": [
+    "BypassMergeSort"
+   ]
+  },
+  {
+   "partitions": 201,
+   "query": "repartition(n)",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 201,
+   "query": "GROUP BY",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 201,
+   "query": "sort-merge join",
+   "writers": [
+    "BypassMergeSort",
+    "Serialized",
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 201,
+   "query": "ORDER BY",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 201,
+   "query": "window",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 1000,
+   "query": "repartition(n)",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 1000,
+   "query": "GROUP BY",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 1000,
+   "query": "sort-merge join",
+   "writers": [
+    "BypassMergeSort",
+    "Serialized",
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 1000,
+   "query": "ORDER BY",
+   "writers": [
+    "Serialized"
+   ]
+  },
+  {
+   "partitions": 1000,
+   "query": "window",
+   "writers": [
+    "Serialized"
+   ]
+  }
+ ],
+ "task_scheduling": [
+  {
+   "tasks": 1000,
+   "seconds": 0.09,
+   "ms_per_task": 0.086
+  },
+  {
+   "tasks": 5000,
+   "seconds": 0.18,
+   "ms_per_task": 0.036
+  },
+  {
+   "tasks": 20000,
+   "seconds": 0.74,
+   "ms_per_task": 0.037
+  },
+  {
+   "tasks": 80000,
+   "seconds": 18.03,
+   "ms_per_task": 0.225
+  }
+ ]
+}

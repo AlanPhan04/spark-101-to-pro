@@ -1,0 +1,42 @@
+{
+ "maxFields": "100",
+ "wide": [
+  {
+   "columns": 10,
+   "wholestage_in_project": true,
+   "seconds": 3.5
+  },
+  {
+   "columns": 50,
+   "wholestage_in_project": true,
+   "seconds": 1.5
+  },
+  {
+   "columns": 99,
+   "wholestage_in_project": true,
+   "seconds": 43.7
+  },
+  {
+   "columns": 100,
+   "wholestage_in_project": true,
+   "seconds": 42.4
+  },
+  {
+   "columns": 101,
+   "wholestage_in_project": false,
+   "seconds": 4.0
+  },
+  {
+   "columns": 200,
+   "wholestage_in_project": false,
+   "seconds": 6.8
+  },
+  {
+   "columns": 400,
+   "wholestage_in_project": false,
+   "seconds": 12.6
+  }
+ ],
+ "pandas_udf_s": 2.5,
+ "pandas_plan_node": "ArrowEvalPython"
+}

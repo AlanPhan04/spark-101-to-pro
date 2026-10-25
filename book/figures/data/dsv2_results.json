@@ -1,0 +1,160 @@
+{
+ "pushdown": [
+  {
+   "predicate": "range on partition source",
+   "sql": "order_ts >= TIMESTAMP '2026-03-05 00:00:00' AND order_ts < TIMESTAMP '2026-03-06 00:00:00'",
+   "scan_line": "+- BatchScan lab.db.orders[order_ts#1, order_total#6] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, order_ts >= 1772668800000000, order_ts < 1772755200000000, groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": false,
+   "rows_out_of_scan": 967939,
+   "files_read": 1
+  },
+  {
+   "predicate": "equality on data column",
+   "sql": "product_id = 'p0000042'",
+   "scan_line": "+- BatchScan lab.db.orders[product_id#22, order_total#26] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, product_id = 'p0000042', groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  },
+  {
+   "predicate": "IN list on data column",
+   "sql": "customer_id IN ('c00000007','c00000008','c00000009')",
+   "scan_line": "+- BatchScan lab.db.orders[customer_id#43, order_total#46] lab.db.orders (branch=null) [filters=customer_id IN ('c00000007', 'c00000008', 'c00000009'), groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  },
+  {
+   "predicate": "range on data column",
+   "sql": "order_total > 900",
+   "scan_line": "+- BatchScan lab.db.orders[order_total#66] lab.db.orders (branch=null) [filters=order_total IS NOT NULL, order_total > 900.0, groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 0,
+   "files_read": 0
+  },
+  {
+   "predicate": "CAST ts AS STRING",
+   "sql": "CAST(order_ts AS STRING) >= '2026-03-05' AND CAST(order_ts AS STRING) < '2026-03-06'",
+   "scan_line": "+- BatchScan lab.db.orders[order_ts#80, order_total#85] lab.db.orders (branch=null) [filters=order_ts IS NOT NULL, groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  },
+  {
+   "predicate": "function on data column",
+   "sql": "lower(product_id) = 'p0000042'",
+   "scan_line": "+- BatchScan lab.db.orders[product_id#101, order_total#105] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  },
+  {
+   "predicate": "arithmetic on data column",
+   "sql": "order_total * 2 > 1800",
+   "scan_line": "+- BatchScan lab.db.orders[order_total#125] lab.db.orders (branch=null) [filters=order_total IS NOT NULL, groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  },
+  {
+   "predicate": "LIKE prefix",
+   "sql": "product_id LIKE 'p00000%'",
+   "scan_line": "+- BatchScan lab.db.orders[product_id#140, order_total#144] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, product_id LIKE 'p00000%', groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  },
+  {
+   "predicate": "two columns compared",
+   "sql": "promised_days < delivery_days",
+   "scan_line": "+- BatchScan lab.db.orders[promised_days#162, delivery_days#163, order_total#164] lab.db.orders (branch=null) [filters=promised_days IS NOT NULL, delivery_days IS NOT NULL, groupedBy=] RuntimeFilters: []",
+   "filter_above_scan": true,
+   "rows_out_of_scan": 30000000,
+   "files_read": 31
+  }
+ ],
+ "aggregates": [
+  {
+   "query": "count(*) no filter",
+   "seconds": 0.17,
+   "root_leaf": "LocalTableScan",
+   "result": "Row(count(1)=30000000)",
+   "plan_head": "*(2) HashAggregate(keys=[], functions=[sum(agg_func_0#189L)], output=[count(1)#187L]) | +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=380] | +- *(1) HashAggregate(keys=[], functions=[partial_sum(agg_func_0#189L)], output=[sum#192L]) | +- *(1) Project [count(*)#190L AS agg_func_0#189L]"
+  },
+  {
+   "query": "min/max order_ts",
+   "seconds": 0.13,
+   "root_leaf": "LocalTableScan",
+   "result": "Row(min(order_ts)=datetime.datetime(2026, 3, 1, 0, 0), max(order_ts)=datetime.datetime(2026, 3, 31, 23, 59, 59))",
+   "plan_head": "*(2) HashAggregate(keys=[], functions=[min(agg_func_0#212), max(agg_func_1#213)], output=[min(order_ts)#203, max(order_ts)#204]) | +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=406] | +- *(1) HashAggregate(keys=[], functions=[partial_min(agg_func_0#212), partial_max(agg_func_1#213)], ou"
+  },
+  {
+   "query": "count(*) partition filter",
+   "seconds": 0.09,
+   "root_leaf": "LocalTableScan",
+   "result": "Row(count(1)=967939)",
+   "plan_head": "*(2) HashAggregate(keys=[], functions=[sum(agg_func_0#237L)], output=[count(1)#230L]) | +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=432] | +- *(1) HashAggregate(keys=[], functions=[partial_sum(agg_func_0#237L)], output=[sum#240L]) | +- *(1) Project [count(*)#238L AS agg_func_0#237L]"
+  },
+  {
+   "query": "count(*) data filter",
+   "seconds": 0.96,
+   "root_leaf": "BatchScan",
+   "result": "Row(count(1)=9000673)",
+   "plan_head": "*(2) HashAggregate(keys=[], functions=[count(1)], output=[count(1)#250L]) | +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=471] | +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#259L]) | +- *(1) Project"
+  },
+  {
+   "query": "sum(order_total)",
+   "seconds": 0.62,
+   "root_leaf": "BatchScan",
+   "result": "Row(sum(order_total)=4649563694.669974)",
+   "plan_head": "*(2) HashAggregate(keys=[], functions=[sum(order_total#266)], output=[sum(order_total)#268]) | +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=504] | +- *(1) HashAggregate(keys=[], functions=[partial_sum(order_total#266)], output=[sum#277]) | +- *(1) ColumnarToRow"
+  },
+  {
+   "query": "max(order_total)",
+   "seconds": 0.12,
+   "root_leaf": "LocalTableScan",
+   "result": "Row(max(order_total)=305.0)",
+   "plan_head": "*(2) HashAggregate(keys=[], functions=[max(agg_func_0#294)], output=[max(order_total)#287]) | +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=529] | +- *(1) HashAggregate(keys=[], functions=[partial_max(agg_func_0#294)], output=[max#297]) | +- *(1) Project [max(order_total)#295 AS agg_fun"
+  }
+ ],
+ "stats": [
+  {
+   "scan": "orders",
+   "sizeInBytes": 2520000000,
+   "rowCount": "Some(30000000)"
+  },
+  {
+   "scan": "orders, one day",
+   "sizeInBytes": 81306876,
+   "rowCount": "Some(967939)"
+  },
+  {
+   "scan": "orders, product = hot",
+   "sizeInBytes": 2520000000,
+   "rowCount": "None"
+  },
+  {
+   "scan": "dim_product",
+   "sizeInBytes": 216000000,
+   "rowCount": "Some(2000000)"
+  },
+  {
+   "scan": "dim_date",
+   "sizeInBytes": 11680,
+   "rowCount": "Some(365)"
+  }
+ ],
+ "failed_write": {
+  "before": {
+   "snapshots": 1,
+   "parquet_on_disk": 2,
+   "rows": 1936316
+  },
+  "after": {
+   "snapshots": 1,
+   "parquet_on_disk": 2,
+   "rows": 1936316
+  },
+  "error": "An error occurred while calling o37.sql."
+ }
+}

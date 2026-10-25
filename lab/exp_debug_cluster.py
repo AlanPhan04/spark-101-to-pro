@@ -26,18 +26,19 @@ if scn == "straggler":
     print("RESULT seconds", round(time.time() - t0, 1))
 else:
     spark.conf.set("spark.sql.shuffle.partitions", "8")
-    df = spark.sql("SELECT customer_id, count(*) c FROM orders GROUP BY customer_id")
+    df = spark.sql("SELECT sum(c) FROM (SELECT customer_id, count(*) c FROM orders GROUP BY customer_id)")
     sc.setJobGroup("dbgc_fetch1", "first")
-    df.agg({"c": "sum"}).collect()
+    df.collect()
     victims = sorted(glob.glob("/tmp/spark-*/executor-*/blockmgr-*/**/shuffle_*", recursive=True))
     byexec = {}
     for f in victims:
         byexec.setdefault(f.split("/")[3], []).append(f)
-    gone = list(byexec)[0]
+    print("shuffle files per executor:", {k[-8:]: len(v) for k, v in byexec.items()})
+    gone = max(byexec, key=lambda k: len(byexec[k]))
     for f in byexec[gone]:
         os.remove(f)
     print("deleted", len(byexec[gone]), "shuffle files of", gone, "of", len(byexec), "executors")
     sc.setJobGroup("dbgc_fetch2", "second")
     t1 = time.time()
-    df.agg({"c": "max"}).collect()
+    df.collect()
     print("RESULT second run seconds", round(time.time() - t1, 1))
