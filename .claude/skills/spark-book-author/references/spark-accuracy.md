@@ -61,6 +61,16 @@ fire when the advisory size (64 MB) was barely below the hot partition (72 MB) e
 Iceberg `date(ts)=` and `CAST(ts AS DATE)=` on a `day(ts)` partition ARE rewritten to a range and prune.
 Under defaults the specimen's small `dim_product` is broadcast at planning time (Iceberg reports table size).
 
+
+**Iceberg 1.6.1 facts measured on the lab (Oct 2026):** default row-level mode is copy-on-write (a one-row DELETE rewrote the whole 34.8 MB
+file; with `write.delete.mode=merge-on-read` it wrote a 1.5 KB position delete file). Position deletes apply to data files with sequence
+number <= the delete's; equality deletes strictly <. `ALTER TABLE SET TBLPROPERTIES` writes a new metadata.json and no snapshot.
+Spark SQL cannot write equality deletes. `rewrite_data_files` skips well-sized files unless `rewrite-all=true`. `read.split.target-size`
+is a ceiling that `read.split.adaptive-size.enabled` (default true) lowers for small scans. `remove_orphan_files` refuses an
+`older_than` under 24 h. 12 concurrent writers: 34 of 48 commits retried once, 1 gave up after 4 retries, no rows lost. The scan counters
+(skippedDataManifests, resultDataFiles, ...) are SQL metrics on the BatchScan node, not in EXPLAIN. Metadata tables need the full
+catalog path (`lab.db.orders.files`). DataFrame caches are columnar batches: serialized level saved 27%, not 2-3x.
+
 **`parallelismFirst` nuance:** with the default `true`, Spark *ignores*
 `advisoryPartitionSizeInBytes` when coalescing and only respects
 `minPartitionSize`, targeting the cluster's default parallelism. Any worked

@@ -1,0 +1,238 @@
+{
+ "M1_updates": {
+  "t_cow": [
+   {
+    "s": 9.01,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837738",
+    "df": "1"
+   },
+   {
+    "s": 8.04,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837736",
+    "df": "1"
+   },
+   {
+    "s": 8.0,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837732",
+    "df": "1"
+   },
+   {
+    "s": 7.84,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837728",
+    "df": "1"
+   },
+   {
+    "s": 7.67,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837718",
+    "df": "1"
+   },
+   {
+    "s": 7.71,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837724",
+    "df": "1"
+   },
+   {
+    "s": 7.54,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837730",
+    "df": "1"
+   },
+   {
+    "s": 7.76,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837734",
+    "df": "1"
+   },
+   {
+    "s": 7.56,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837730",
+    "df": "1"
+   },
+   {
+    "s": 7.61,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": null,
+    "bytes": "34837734",
+    "df": "1"
+   }
+  ],
+  "t_mor": [
+   {
+    "s": 3.1,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4005",
+    "df": null
+   },
+   {
+    "s": 2.82,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4064",
+    "df": null
+   },
+   {
+    "s": 2.71,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4079",
+    "df": null
+   },
+   {
+    "s": 2.78,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4037",
+    "df": null
+   },
+   {
+    "s": 2.71,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4058",
+    "df": null
+   },
+   {
+    "s": 2.7,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4030",
+    "df": null
+   },
+   {
+    "s": 3.12,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4040",
+    "df": null
+   },
+   {
+    "s": 2.8,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4076",
+    "df": null
+   },
+   {
+    "s": 2.92,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4031",
+    "df": null
+   },
+   {
+    "s": 2.86,
+    "operation": "overwrite",
+    "af": "1",
+    "ad": "1",
+    "bytes": "4108",
+    "df": null
+   }
+  ]
+ },
+ "M1_read_s": {
+  "cow": 0.28,
+  "mor_before_compaction": 0.35,
+  "mor_after_compaction": 0.31
+ },
+ "M2_no_partition_predicate": {
+  "s": 9.76,
+  "operation": "overwrite",
+  "af": "1",
+  "ad": null,
+  "bytes": "34780565",
+  "df": "1"
+ },
+ "M2_with_partition_predicate": {
+  "s": 8.18,
+  "operation": "overwrite",
+  "af": "1",
+  "ad": null,
+  "bytes": "34780622",
+  "df": "1"
+ },
+ "M3_meta_delete": {
+  "s": 0.54,
+  "operation": "delete",
+  "af": null,
+  "ad": null,
+  "bytes": null,
+  "df": "1"
+ },
+ "M4_before": {
+  "files": 60,
+  "avg_kb": 24.9,
+  "manifests": 60,
+  "snapshots": 61,
+  "scan_s": 0.45
+ },
+ "M4_after_compaction": {
+  "files": 1,
+  "avg_kb": 1432.3,
+  "manifests": 61,
+  "snapshots": 62,
+  "scan_s": 0.12
+ },
+ "M4_after_manifests": {
+  "files": 1,
+  "avg_kb": 1432.3,
+  "manifests": 1,
+  "snapshots": 63,
+  "scan_s": 0.13
+ },
+ "M5_dir_mb_before": 386.1,
+ "M5_snapshots_before": 12,
+ "M5_files_before": 20,
+ "M5_expire_row": [
+  "11",
+  "0",
+  "0",
+  "11",
+  "11",
+  "0"
+ ],
+ "M5_snapshots_after": 1,
+ "M5_dir_mb_after_expire": 350.8,
+ "M5_dir_mb_with_orphan": 355.8,
+ "M5_short_interval_error": "Cannot remove orphan files with an interval less than 24 hours. Executing this procedure with a short interval may corrupt the table if other operations are hap",
+ "M5_orphans_found": [
+  "stray-orphan.parquet"
+ ],
+ "M5_dir_mb_after_orphans": 350.8,
+ "M5_rows_ok": 9678114
+}

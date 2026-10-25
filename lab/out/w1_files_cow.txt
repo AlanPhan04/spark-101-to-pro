@@ -1,0 +1,9 @@
+-- w1_files_cow
+-- SELECT content, count(*) AS files, round(sum(file_size_in_bytes)/1e6,1) AS mb FROM lab.db.t_cow.files GROUP BY content ORDER BY content
+
++-------+-----+-----+
+|content|files|   mb|
++-------+-----+-----+
+|      0|   10|347.8|
++-------+-----+-----+
+

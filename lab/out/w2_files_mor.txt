@@ -1,0 +1,10 @@
+-- w2_files_mor
+-- SELECT content, count(*) AS files, round(sum(file_size_in_bytes)/1e6,1) AS mb FROM lab.db.t_mor.files GROUP BY content ORDER BY content
+
++-------+-----+-----+
+|content|files|   mb|
++-------+-----+-----+
+|      0|   20|347.8|
+|      1|   10|  0.0|
++-------+-----+-----+
+

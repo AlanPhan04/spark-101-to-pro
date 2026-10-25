@@ -80,3 +80,8 @@ figure is authored when its chapter is drafted (pass 1 figures first).
 | `sort-vs-zorder` | 11 | plot | files read for customer/product/both lookups on unsorted, sorted, Z-ordered (measured) | done |
 | `distribution-modes` | 11 | plot | files written under none/hash/range (measured) | done |
 | `bucket-hot-key` | 11 | plot | MB per bucket of bucket(16, product_id) with the viral product (measured) | done |
+| `update-cost-cow-mor` | 13 | plot | seconds and bytes per small UPDATE, CoW vs MoR (measured) | done |
+| `merge-scan-bytes` | 13 | plot | MERGE scan bytes with vs without a partition predicate (measured) | done |
+| `stream-small-files` | 13 | plot | 60 tiny commits: files, manifests, scan time through compaction and manifest rewrite (measured) | done |
+| `expire-orphans` | 13 | plot | directory size through expire_snapshots and remove_orphan_files (measured) | done |
+| `maintenance-order` | 13 | flow | the four maintenance procedures and what each frees | done |

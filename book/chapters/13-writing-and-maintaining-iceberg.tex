@@ -8,7 +8,10 @@ compaction catches up. The choice is a function of your update rate and your rea
 latency budget, and it commits you to a maintenance schedule --- compaction,
 snapshot expiration, orphan-file cleanup --- in a specific order. This chapter
 covers the write modes, optimizing \texttt{MERGE}, and running maintenance
-without deleting data a reader still needs.
+without deleting data a reader still needs. On the lab, a one-row update cost
+7.9~s and 34.8~MB under copy-on-write and 2.9~s and 4~KB under merge-on-read,
+sixty tiny commits became one file and a scan four times faster, and expiring
+snapshots reclaimed 35~MB, all measured on the lab of \Cref{sec:refenv-lab}.
 \end{chapterintro}
 
 \section{Copy-on-write versus merge-on-read}
@@ -52,6 +55,47 @@ Needs & --- & Regular compaction to bound read cost \\
 \end{tabular}
 \end{table}
 
+The lab measured the trade on ten days of \texttt{orders}, partitioned by day,
+with ten small \texttt{UPDATE}s of five rows each (\Cref{fig:update-cost-cow-mor}
+and \Cref{tab:ice-lab-update-modes}). On Iceberg 1.6.1 the default for
+\texttt{UPDATE}, \texttt{DELETE}, and \texttt{MERGE} was copy-on-write.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.5cm}rrrr@{}}
+\toprule
+\textbf{Mode} & \textbf{Per update} & \textbf{Bytes written} & \textbf{Files after ten} & \textbf{Full scan} \\
+\midrule
+copy-on-write & 7.9~s & 34.8~MB & 10 data & 0.28~s \\
+merge-on-read & 2.9~s & 4~KB & 20 data, 10 delete & 0.35~s \\
+merge-on-read, compacted & --- & --- & 10 data, 10 delete & 0.31~s \\
+\bottomrule
+\end{tabular}
+\caption{Ten five-row updates, measured. Copy-on-write rewrote a 34.8~MB data
+file each time; merge-on-read wrote one tiny data file and one tiny delete file.
+The price shows up in the read: 25\% slower with ten delete files outstanding,
+and only partly recovered by compaction.}
+\label{tab:ice-lab-update-modes}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{update-cost-cow-mor.pdf}
+  \caption{One small \texttt{UPDATE}, two paths. Merge-on-read is nearly three
+  times faster and writes about nine thousand times fewer bytes.}
+  \label{fig:update-cost-cow-mor}
+\end{figure}
+
+Two details are easy to miss. A merge-on-read \texttt{UPDATE} is recorded as an
+\texttt{overwrite} snapshot with one added data file (the new row versions) and
+one added delete file (the old ones), not as a \texttt{delete}. And after
+\texttt{rewrite\_data\_files} rewrote the affected data file, the \texttt{files}
+table still listed the ten delete files: they no longer point at live rows but
+were not removed. (Claim --- the \texttt{remove-dangling-deletes} option of the
+procedure exists in Iceberg 1.6; it was not tested here.) That is why read cost
+recovered only from 0.35 to 0.31~s.
+
 \Cref{fig:cow-vs-mor} follows the same \texttt{UPDATE} down both paths to
 make the trade concrete: same three matched rows, opposite placement of
 the cost.
@@ -82,23 +126,44 @@ exactly the files that contained a match --- every other file in the table
 is untouched either way, provided the predicate lets partition pruning rule
 them out first.
 
-\begin{lstlisting}[language=SQL,caption={Partition predicate in the ON clause keeps the scan narrow},captionpos=b]
+\begin{lstlisting}[language=SQL,caption={A predicate on the target's partition column keeps the scan narrow},captionpos=b,label=lst:ice-merge-on]
 MERGE INTO orders o
 USING staged_orders s
-ON o.order_date = s.order_date AND o.order_id = s.order_id
+ON o.order_id = s.order_id
+   AND o.order_ts >= TIMESTAMP '2026-03-03 00:00:00'
+   AND o.order_ts <  TIMESTAMP '2026-03-04 00:00:00'
 WHEN MATCHED THEN UPDATE SET *
 WHEN NOT MATCHED THEN INSERT *;
 \end{lstlisting}
 
-Dropping \texttt{o.order\_date = s.order\_date} from the \texttt{ON} clause
-does not change which rows match --- \texttt{order\_id} alone is still
-sufficient --- but it removes the one predicate the planner could resolve
-against partition values before scanning, so every partition in
-\texttt{orders} is opened to search for an \texttt{order\_id} match instead of
-only the partitions \texttt{staged\_orders} actually touches. This is
-\Cref{ch:pruning}'s pruning story again, specific to the write path: a
-\texttt{MERGE} without a partition predicate is not wrong, it is just a full
-scan wearing a row-level operation's syntax.
+Dropping the two \texttt{order\_ts} lines does not change which rows match ---
+\texttt{order\_id} alone is still sufficient --- but it removes the one predicate
+the planner can resolve against partition values before scanning. The lab merged
+the same 1,000 staged rows both ways (\Cref{fig:merge-scan-bytes}): without the
+predicate the scan read 200.7~MB across 10 tasks, every day of the table; with it,
+35.1~MB in one task. Both rewrote the same single 34.8~MB data file, because the
+matching rows lived in one partition either way, so the saving is entirely in the
+scan, and the merge ran 16\% faster. A \texttt{MERGE} without a partition
+predicate is not wrong; it is a full scan wearing a row-level operation's syntax.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{merge-scan-bytes.pdf}
+  \caption{The same \texttt{MERGE}, with and without a static range on the
+  partition column in the \texttt{ON} clause. The predicate cut the bytes the
+  scan read by 5.7 times.}
+  \label{fig:merge-scan-bytes}
+\end{figure}
+
+The predicate has to be a filter on the target's own column. A join key alone,
+such as equality on the staged table's timestamp, is not a static range and
+should not be assumed to prune; check the scan's bytes, as above.
+
+A predicate that matches whole partitions takes the other path entirely. The lab
+deleted one day of a ten-day table with a range on \texttt{order\_ts}: the
+snapshot was an operation of type \texttt{delete} with one deleted data file and
+no added files, the statement took 0.54~s, and no data file was read. That is a
+metadata-only delete, the cheapest row-level operation there is.
 
 \section{Write distribution and skew on write}
 \label{sec:ice-write-skew}
@@ -112,21 +177,19 @@ does (\Cref{sec:aqe-skew}), except AQE's skew-split machinery is a read-side
 mechanism and does not rebalance a write.
 
 The specimen's own viral, heavily-discounted product (\Cref{sec:refenv-orders})
-makes this concrete. Say a \texttt{MERGE} runs against one week of
-\texttt{orders} to correct a pricing error, matching on \texttt{product\_id}.
-Under \texttt{hash} distribution, matched rows shuffle by
-\texttt{product\_id} before the rewrite, so every row for the viral product
---- 40 million of the week's 200 million rows, all sharing one key --- lands
-in a single shuffle partition, while each of the week's few thousand other
-products spreads its handful of rows thinly across the rest. The task that
-draws the viral product's partition rewrites roughly 40 million rows; every
-other task in the same stage rewrites a few hundred thousand at most. That
-one task runs as long as it takes to process 40 million rows while the rest
-of the stage finishes early and sits idle --- the exact straggler shape
-\Cref{sec:aqe-skew}'s figure showed for a skewed join, except here it is a
-CoW rewrite task, and AQE's join-side skew-split machinery does not apply to
-it: nothing currently detects or splits an oversized write task the way AQE
-does for a read.
+makes this concrete. Say a \texttt{MERGE} runs against a month of \texttt{orders}
+to correct a pricing error, matching on \texttt{product\_id}. Under
+\texttt{hash} distribution, matched rows shuffle by \texttt{product\_id} before
+the rewrite, so every row for the viral product lands in a single shuffle
+partition. The lab's join shuffle on the same key showed the shape: one
+partition of 72.8~MB against a median of 1.6~MB (\Cref{fig:skew-partition-sizes}),
+and the write-side bucket of \Cref{fig:bucket-hot-key} was 7.1 times its
+neighbours. The task that draws the viral product's partition does the work of
+many while the rest of the stage finishes early and sits idle: the straggler
+shape of \Cref{sec:aqe-skew}, except that here it is a rewrite task, and AQE's
+join-side skew split does not apply to it. Nothing currently detects or splits an
+oversized write task the way AQE does for a read. (Claim --- the write-side
+straggler itself was not separately timed on the lab.)
 
 \section{Compacting data files}
 \label{sec:ice-write-compaction}
@@ -144,8 +207,23 @@ different columns unpredictably. All three also apply outstanding delete
 files to the data they rewrite, which is why running compaction is the
 concrete answer to a MoR table whose reads have been getting slower.
 
+The lab measured the small-files case with sixty one-minute appends to a table,
+the shape a streaming job leaves behind (\Cref{fig:stream-small-files}). The
+table held 60 data files averaging 25~KB; one \texttt{binpack} call rewrote all
+60 into a single 1.43~MB file, and a full scan fell from 0.45 to 0.12~s, nearly
+four times faster, with identical results.
+
 \section{Rewriting manifests}
 \label{sec:ice-write-manifests}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{stream-small-files.pdf}
+  \caption{Sixty tiny commits, then compaction, then a manifest rewrite. Compaction
+  fixed the files and the scan time but \emph{added} a manifest; the manifest
+  rewrite then merged all 61 into one, with no further change to this small scan.}
+  \label{fig:stream-small-files}
+\end{figure}
 
 Manifests accumulate their own version of the small-files problem: many
 small commits each add a small manifest, and a scan's manifest-list pruning
@@ -154,7 +232,11 @@ manifests it has to consult individually. \texttt{rewrite\_manifests}
 consolidates them into fewer, larger manifests with the same entries,
 improving planning time without touching a single data or delete file --- a
 metadata-only compaction, distinct from and cheaper than
-\texttt{rewrite\_data\_files}.
+\texttt{rewrite\_data\_files}. On the lab it merged 61 manifests into one, but the
+scan time did not move (0.12 against 0.13~s): with sixty small manifests on a
+local disk, planning was never the bottleneck. The benefit appears when
+thousands of manifests make planning itself slow
+(\Cref{sec:ice-read-manifest-pruning}), which this lab does not reach.
 
 \section{Snapshot expiration and orphan files}
 \label{sec:ice-write-expiration}
@@ -177,6 +259,28 @@ reasoning from snapshots, it needs a generous \texttt{older\_than} window
 (the default is three days) to avoid racing an in-flight write that has
 written files but not yet committed the metadata referencing them.
 
+The lab ran both on the merge-on-read table left by the update experiment, which
+had 12 snapshots and 20 data files in a 386.1~MB directory
+(\Cref{fig:expire-orphans}). \texttt{expire\_snapshots} with only the latest
+snapshot retained dropped 11 snapshots, deleted 11 data files, 11 manifests, and
+11 manifest lists, and left a 350.8~MB directory: 35.3~MB reclaimed, the one
+large data file each superseded snapshot had kept alive. A 5~MB stray file, the
+kind a failed write leaves, then added 5~MB that no manifest named.
+\texttt{remove\_orphan\_files} first \emph{refused} to run with a one-hour
+cutoff (``Cannot remove orphan files with an interval less than 24 hours''); with
+the stray file aged three days and a 48-hour cutoff, a dry run listed exactly that
+file and the real run removed it, restoring 350.8~MB. The table still counted
+9,678,114 rows.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{expire-orphans.pdf}
+  \caption{Table directory size through the two cleanup procedures. Expiring
+  snapshots frees what superseded history held; a stray file from a failed write
+  adds 5~MB until \texttt{remove\_orphan\_files} deletes it.}
+  \label{fig:expire-orphans}
+\end{figure}
+
 \begin{warning}
 Guides disagree on a strict global order for these two procedures, and the
 official documentation does not mandate one. The mechanism explains why:
@@ -188,8 +292,18 @@ sets of files by construction, as long as \texttt{remove\_orphan\_files}'s
 retention window is wide enough to never touch a write still in flight.
 Treat the "run compaction, then expire, then remove orphans" sequencing
 some operational guides recommend as a safe default cadence, not a
-correctness requirement.
+correctness requirement. \Cref{fig:maintenance-order} shows it, and which step
+pays for which.
 \end{warning}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{maintenance-order.pdf}
+  \caption{The four maintenance procedures in the usual order. The first two make
+  reads cheaper and leave old files behind; the third frees the disk of expired
+  history; the fourth removes files no snapshot named, which is a disjoint set.}
+  \label{fig:maintenance-order}
+\end{figure}
 
 \section{Metadata management for streaming tables}
 \label{sec:ice-write-streaming}
@@ -228,6 +342,27 @@ data-level cleanups that keep reads fast; snapshot expiration and orphan-file
 removal are what actually reclaim disk space, operating on disjoint sets of
 files with no single mandated order between them. A streaming table needs
 all of this running continuously rather than occasionally.
+
+\Cref{tab:ice-write-levers} turns each symptom into the evidence and the lever.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
+\midrule
+frequent small updates are slow and heavy & snapshot summary: tens of MB added per update & \texttt{write.*.mode} = merge-on-read & slower reads; compaction \\
+reads slower on a merge-on-read table & delete files in \texttt{files} (content 1) & \texttt{rewrite\_data\_files} with a delete threshold & a rewrite job \\
+a \texttt{MERGE} scans the whole table & scan bytes of every partition & a range on the partition column in \texttt{ON} & none \\
+many small files after streaming & tiny average size in \texttt{files} & \texttt{rewrite\_data\_files} (\texttt{binpack}) & a rewrite job \\
+disk keeps growing after compaction & large directory, many snapshots & \texttt{expire\_snapshots} & loses time travel past the retention \\
+files in storage no snapshot names & dry-run \texttt{remove\_orphan\_files} lists them & \texttt{remove\_orphan\_files} with a wide cutoff & a listing of the location \\
+\bottomrule
+\end{tabular}
+\caption{The write and maintenance levers: symptom, evidence, lever, and cost.}
+\label{tab:ice-write-levers}
+\end{table}
 
 \exercisehead
 \begin{exercises}

@@ -1,0 +1,23 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="maintenance-order" id="maintorder">
+    <mxGraphModel dx="800" dy="400" grid="1" gridSize="20" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="330" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="a" value="&lt;b&gt;1. rewrite_data_files&lt;/b&gt;&lt;br&gt;merge small files,&lt;br&gt;apply deletes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="10" y="30" width="140" height="84" as="geometry" /></mxCell>
+        <mxCell id="b" value="&lt;b&gt;2. rewrite_manifests&lt;/b&gt;&lt;br&gt;fewer, larger&lt;br&gt;manifests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="170" y="30" width="140" height="84" as="geometry" /></mxCell>
+        <mxCell id="c" value="&lt;b&gt;3. expire_snapshots&lt;/b&gt;&lt;br&gt;drop old snapshots,&lt;br&gt;delete their files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="330" y="30" width="140" height="84" as="geometry" /></mxCell>
+        <mxCell id="d" value="&lt;b&gt;4. remove_orphan_files&lt;/b&gt;&lt;br&gt;delete files no&lt;br&gt;snapshot named" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7d2;strokeColor=#c77f3b;fontColor=#7a4a17;fontSize=13;" vertex="1" parent="1"><mxGeometry x="490" y="30" width="140" height="84" as="geometry" /></mxCell>
+
+        <mxCell id="ea" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="a" target="b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="eb" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="b" target="c"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="ec" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="c" target="d"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="n1" value="cheaper reads; old files stay" style="rounded=1;whiteSpace=wrap;html=1;container=0;fillColor=#ffffff;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="10" y="160" width="300" height="50" as="geometry" /></mxCell>
+        <mxCell id="n2" value="frees the disk of expired history" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="330" y="160" width="300" height="50" as="geometry" /></mxCell>
+        <mxCell id="n3" value="steps 3 and 4 touch disjoint sets of files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fbeecf;strokeColor=#c9a227;fontColor=#7a5c0a;fontSize=13;" vertex="1" parent="1"><mxGeometry x="10" y="240" width="620" height="50" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
