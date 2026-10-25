@@ -7,7 +7,10 @@ current metadata --- and the point at which a commit becomes atomic. Writing new
 metadata is not a commit until the catalog's pointer is swapped to it. When two
 writers race, one wins the swap and the other retries. This chapter covers what
 the Hive Metastore and REST catalogs do, how the atomic swap works, and how to
-tune retries so a busy table does not fail commits under contention.
+tune retries so a busy table does not fail commits under contention. The
+lab raced twelve writers for one table: 34 of 48 commits lost a swap and won on
+the second attempt, one gave up after four, and not a single row was lost or
+duplicated.
 \end{chapterintro}
 
 \section{What a catalog does}
@@ -23,6 +26,25 @@ about the manifest tree, delete files, or partitioning from
 \Cref{ch:iceberg-spec} lives in the catalog at all --- it is small and simple
 by design, because it is the one piece of the whole system every reader and
 writer has to agree on synchronously.
+
+Catalogs differ only in \emph{where} that one pointer lives and \emph{how} the
+conditional swap is enforced (\Cref{fig:catalog-pointer-types}). The lab uses
+the simplest: a file-based catalog whose pointer is a \texttt{version-hint.text}
+file naming the latest \texttt{vN.metadata.json}, and whose swap is the creation
+of the next numbered file, which fails if that file already exists. That
+works on a filesystem with atomic create or rename; Iceberg's documentation
+advises against a file-based catalog on object stores such as GCS for exactly
+that reason, which is why this stack uses the Hive Metastore.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{catalog-pointer-types.pdf}
+  \caption{Three catalogs, one job. Each keeps a single pointer per table and
+  swaps it conditionally; a writer that loses sees a rejection from whichever
+  mechanism guards the pointer. Only the file-based catalog was run on the lab;
+  the other two are described from the Iceberg documentation.}
+  \label{fig:catalog-pointer-types}
+\end{figure}
 
 \section{The Hive Metastore catalog}
 \label{sec:cat-hms}
@@ -108,42 +130,76 @@ the number of files touched by \emph{this} commit, entirely decoupled from
 how large the table as a whole has grown. \Cref{tab:cat-retry-props}
 controls how persistent that retry is.
 
-\paragraph{Watching it happen.} Say a nightly compaction job
-(\texttt{rewrite\_data\_files} on \texttt{orders}, \Cref{ch:iceberg-write})
-and an ad-hoc \texttt{INSERT} from a Kyuubi user session both reach step~4
-within the same second. Whichever request the catalog processes first ---
-say the compaction job --- succeeds: \texttt{metadata\_location} moves from
-\texttt{v42.metadata.json} to \texttt{v43.metadata.json}. The
-\texttt{INSERT}'s swap arrives a moment later still expecting \texttt{v42}
-as the base, HMS rejects it (the expected-old-value check fails), and
-Iceberg's client re-reads \texttt{v43} as the new base, rebuilds a manifest
-referencing its two new files on top of it, and retries --- succeeding as
-\texttt{v44}. Querying the table's snapshot history right after both
-commits shows exactly this, with no failure visible to either job:
+\paragraph{Watching it happen.} The lab raced twelve writer threads, each
+appending four small batches of 20,000 rows to one table: 48 commits that all
+reach step~4 within milliseconds of each other. Most of them lose at least one
+swap, and the Iceberg client reports each commit's \emph{attempts} counter.
+Two messages show up in the log when a swap loses:
 
-\begin{lstlisting}[language=SQL,caption={Confirming a retried commit in the snapshot log},captionpos=b]
-SELECT snapshot_id, parent_id, committed_at, operation
-FROM lakehouse.analytics.orders.snapshots
-ORDER BY committed_at DESC LIMIT 2;
-
--- snapshot_id | parent_id | committed_at            | operation
--- 5821...044  | 5821...043| 2026-03-08 02:00:01.812  | append
--- 5821...043  | 5821...042| 2026-03-08 02:00:01.406  | replace
+\begin{lstlisting}[language=text,numbers=none,style=plan,caption={Why a commit retried (from the lab's log, trimmed)},captionpos=b,label=lst:cat-conflicts]
+CommitFailedException: Version 14 already exists: .../t_race_r4/metadata/v14.metadata.json
+CommitFailedException: Cannot commit changes based on stale table metadata
 \end{lstlisting}
 
-Two snapshots land within half a second of each other, each with a
-different \texttt{parent\_id} --- \texttt{v43} (the \texttt{replace} from
-compaction) and \texttt{v44} (the \texttt{append} from the retried
-\texttt{INSERT}, now parented on \texttt{v43} rather than the \texttt{v42}
-it originally read). Neither job's caller ever saw an error; the retry
-happened entirely inside the client library, as \Cref{fig:catalog-commit-race}
-lays out step by step.
+The first is the file-based catalog's compare-and-swap: two writers both built
+\texttt{v14.metadata.json} from the same base, one created it first, and the
+second found it already there. The second message is the client noticing
+before it tries. Either way the writer re-reads the current metadata and goes
+again, without surfacing an error to the job (\Cref{fig:catalog-commit-race}
+shows the sequence). \Cref{tab:cat-lab-attempts} and \Cref{fig:commit-attempts}
+tally the outcome.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{2.9cm}rrrrrr@{}}
+\toprule
+\textbf{\texttt{commit.retry.num-retries}} & \textbf{Commits} & \textbf{First try} & \textbf{Two attempts} & \textbf{Four attempts} & \textbf{Failed} & \textbf{Rows vs.\ expected} \\
+\midrule
+4 (default) & 48 & 12 & 34 & 1 & 1 & 940,000 = 940,000 \\
+0 & 48 & 41 & 0 & 0 & 7 & 820,000 = 820,000 \\
+\bottomrule
+\end{tabular}
+\caption{Twelve writers, one table, 48 commits, measured. With the default, 34
+commits needed a second attempt and one needed four; with no retries, 7 failed
+outright. In both runs the row count equals 20,000 times the commits that
+succeeded: a lost swap loses no data, only the attempt.}
+\label{tab:cat-lab-attempts}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{commit-attempts.pdf}
+  \caption{How many attempts each of the 48 commits needed. The default retries
+  absorbed almost every lost race; with retries off, a lost race is a failed
+  job.}
+  \label{fig:commit-attempts}
+\end{figure}
+
+A retry is cheap, as the next section explains, and the lab measured it: a
+commit that won on the first try took 0.60~s on average and one that needed a
+second attempt 0.92~s, about 0.3~s more. The tail is the cost to watch: the one
+commit that needed four attempts took 11.8~s, because each failed attempt backs
+off before it goes again. Retries also do not raise the table's ceiling. The 47
+successful commits landed over 18~s, about 2.6 per second, and they form one line
+in the snapshot log: every snapshot's parent is the previous snapshot, however many
+writers there are (\Cref{fig:commit-throughput}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{commit-throughput.pdf}
+  \caption{Snapshots committed over time for the two runs. Twelve writers still
+  produce a single chain of commits: the catalog pointer admits one writer at a
+  time, so the table's write rate is bounded by commit latency, not by writer
+  count.}
+  \label{fig:commit-throughput}
+\end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{catalog-commit-race.pdf}
-  \caption{Two writers racing for the same base version. The compaction
-  job's swap lands first and succeeds; the INSERT session's swap against
+  \caption{Schematic: two writers racing for the same base version. The
+  first writer's swap lands first and succeeds; the INSERT session's swap against
   the same stale base is rejected, so it re-reads the new current version,
   rebuilds its manifest on top of it, and retries --- succeeding one
   version later, with no error surfaced to either caller.}
@@ -168,7 +224,7 @@ lays out step by step.
 
 A table with many concurrent writers hitting the same partitions --- several
 streaming jobs upserting into one table, say --- can exhaust the default 4
-retries under sustained contention; raising \texttt{commit.retry.num-retries}
+retries under sustained contention, as one commit of 48 did on the lab; raising \texttt{commit.retry.num-retries}
 (a table property, set via \texttt{ALTER TABLE ... SET TBLPROPERTIES}) trades
 a slower worst-case commit for a much lower failure rate. It does not help a
 table where every writer touches the \emph{same} partition on every commit ---
@@ -188,7 +244,7 @@ resubmitting it would silently lose every commit that happened in between.
 
 A catalog is registered per Spark session under a name of your choosing:
 
-\begin{lstlisting}[language=bash,caption={Registering an Iceberg catalog against the Hive Metastore},captionpos=b]
+\begin{lstlisting}[language=bash,caption={Registering an Iceberg catalog against the Hive Metastore},captionpos=b,label=lst:cat-register]
 spark.sql.catalog.lakehouse=org.apache.iceberg.spark.SparkCatalog
 spark.sql.catalog.lakehouse.type=hive
 spark.sql.catalog.lakehouse.uri=thrift://hive-metastore:9083
@@ -229,8 +285,9 @@ genuine concurrent-writer contention.
 
 \exercisehead
 \begin{exercises}
-\item Run two writers into the same table concurrently. Observe the retry,
-      then find the winning and losing commit attempts in the snapshot log.
+\item Run twelve writers into the same table concurrently, four commits each.
+      Count the commits that needed a second attempt and check that the row count
+      equals the rows of the commits that succeeded.
 \item Register the same physical warehouse location under two differently
       named catalogs in one Spark session. Confirm both resolve the same
       table to the same current snapshot.

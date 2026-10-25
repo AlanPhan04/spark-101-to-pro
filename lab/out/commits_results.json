@@ -1,0 +1,20 @@
+{
+ "retries_4": {
+  "attempted": 48,
+  "succeeded": 47,
+  "failed": 1,
+  "snapshots": 47,
+  "rows": 940000,
+  "expected_rows": 940000,
+  "wall_s": 23.6
+ },
+ "retries_0": {
+  "attempted": 48,
+  "succeeded": 41,
+  "failed": 7,
+  "snapshots": 41,
+  "rows": 820000,
+  "expected_rows": 820000,
+  "wall_s": 15.7
+ }
+}

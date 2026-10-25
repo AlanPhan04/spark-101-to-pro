@@ -72,3 +72,6 @@ figure is authored when its chapter is drafted (pass 1 figures first).
 | `manifest-reuse` | 9 | reuse | three snapshots; each commit writes one manifest and reuses the rest | done |
 | `sequence-number-rule` | 9 | rule | position delete at seq 5 applies to files at 1, 2, 4; not the later append at 6 | done |
 | `delete-bytes-written` | 9 | plot | 34.8 MB (copy-on-write) vs 1.5 KB (merge-on-read) to delete one row | done |
+| `commit-attempts` | 10 | plot | attempts per commit, 12 writers x 4 commits, retries 4 vs 0 (measured) | done |
+| `commit-throughput` | 10 | plot | cumulative snapshots over time: one chain regardless of writer count (measured) | done |
+| `catalog-pointer-types` | 10 | comparison | file-based vs HMS vs REST: where the pointer lives and how a loser is rejected | done |
