@@ -1,0 +1,30 @@
+<mxfile host="app.diagrams.net" agent="claude">
+  <diagram name="aqe-broadcast-promotion" id="aqepromo">
+    <mxGraphModel dx="800" dy="400" grid="1" gridSize="20" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="640" pageHeight="350" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="lp" value="&lt;b&gt;Initial plan: sort-merge&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;verticalAlign=top;spacingTop=8;fillColor=#fdeef0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=15;" vertex="1" parent="1"><mxGeometry x="10" y="10" width="300" height="330" as="geometry" /></mxCell>
+        <mxCell id="rp" value="&lt;b&gt;Final plan: broadcast&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;container=1;verticalAlign=top;spacingTop=8;fillColor=#e4f1dc;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=15;" vertex="1" parent="1"><mxGeometry x="330" y="10" width="300" height="330" as="geometry" /></mxCell>
+
+        <mxCell id="lo" value="orders&lt;br&gt;shuffled: 155.1 MiB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;strokeWidth=2;fontSize=13;" vertex="1" parent="1"><mxGeometry x="25" y="60" width="130" height="60" as="geometry" /></mxCell>
+        <mxCell id="ld" value="dim_product, filtered&lt;br&gt;shuffled: 3.8 MiB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="165" y="60" width="130" height="60" as="geometry" /></mxCell>
+        <mxCell id="ls" value="sort both sides" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f7dde0;strokeColor=#b5545e;fontColor=#7d2f38;fontSize=13;" vertex="1" parent="1"><mxGeometry x="45" y="160" width="230" height="44" as="geometry" /></mxCell>
+        <mxCell id="lj" value="SortMergeJoin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="45" y="245" width="230" height="50" as="geometry" /></mxCell>
+        <mxCell id="le1" style="endArrow=block;html=1;strokeColor=#b5545e;strokeWidth=2;" edge="1" parent="1" source="lo" target="ls"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="le2" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="ld" target="ls"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="le3" style="endArrow=block;html=1;strokeColor=#3b6ea5;strokeWidth=2;" edge="1" parent="1" source="ls" target="lj"><mxGeometry relative="1" as="geometry" /></mxCell>
+
+        <mxCell id="ro" value="orders&lt;br&gt;read locally (no fetch)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="345" y="60" width="130" height="60" as="geometry" /></mxCell>
+        <mxCell id="rd" value="dim_product&lt;br&gt;3.8 MiB measured" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d8ebcf;strokeColor=#4f8a3d;fontColor=#2f5320;fontSize=13;" vertex="1" parent="1"><mxGeometry x="485" y="60" width="130" height="60" as="geometry" /></mxCell>
+        <mxCell id="rb" value="broadcast relation&lt;br&gt;20.0 MiB in memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ece6f4;strokeColor=#6a5a8a;fontColor=#3f335c;fontSize=13;" vertex="1" parent="1"><mxGeometry x="485" y="160" width="130" height="60" as="geometry" /></mxCell>
+        <mxCell id="rj" value="BroadcastHashJoin" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe0f4;strokeColor=#3b6ea5;fontColor=#1f3d5c;strokeWidth=2;fontSize=13;" vertex="1" parent="1"><mxGeometry x="365" y="245" width="230" height="50" as="geometry" /></mxCell>
+        <mxCell id="re1" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.2;entryY=0;" edge="1" parent="1" source="ro" target="rj"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="re2" style="endArrow=block;html=1;strokeColor=#4f8a3d;strokeWidth=2;" edge="1" parent="1" source="rd" target="rb"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="re3" style="endArrow=block;html=1;strokeColor=#6a5a8a;strokeWidth=2;exitX=0.5;exitY=1;entryX=0.8;entryY=0;" edge="1" parent="1" source="rb" target="rj"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="rn" value="shuffle write already paid;&lt;br&gt;fetch and sort saved" style="text;html=1;fillColor=none;strokeColor=none;align=center;fontColor=#57503f;fontSize=13;whiteSpace=wrap;" vertex="1" parent="1"><mxGeometry x="345" y="298" width="270" height="36" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

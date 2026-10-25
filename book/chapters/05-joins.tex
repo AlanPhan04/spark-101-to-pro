@@ -12,7 +12,8 @@ covers the four strategies, how the planner chooses between them, and how to
 override it when you know better than the statistics do.
 \end{chapterintro}
 
-\Cref{fig:join-strategies} shows the shape each strategy leaves in a plan. The
+\Cref{fig:join-strategies} shows the shape each strategy leaves in a plan, and \Cref{fig:broadcast-vs-smj} contrasts the
+two ends of the cost range. The
 rest of this chapter explains why each shape exists and what it costs; the
 identifiers to spot them by are catalogued in \Cref{sec:c-joins}.
 
@@ -24,6 +25,13 @@ identifiers to spot them by are catalogued in \Cref{sec:c-joins}.
   neither; sort-merge join shuffles and sorts both; broadcast nested loop join
   broadcasts one side to evaluate a condition that is not an equality.}
   \label{fig:join-strategies}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{broadcast-vs-smj.pdf}
+  \caption{The two cheapest-to-compare strategies side by side. A sort-merge join shuffles and sorts both sides before merging; a broadcast hash join leaves the big side in place and ships the small side to every executor.}
+  \label{fig:broadcast-vs-smj}
 \end{figure}
 
 \section{Broadcast hash join}
@@ -126,7 +134,7 @@ falls back to sort-merge regardless of size.
 \label{sec:joins-selection}
 
 For an equi-join, the planner tries strategies in a fixed order, stopping at
-the first one that applies:
+the first one that applies (\Cref{fig:join-selection-flow}):
 
 \begin{enumerate}
   \item an explicit join hint, if the query has one (\Cref{sec:joins-forcing});
@@ -140,6 +148,13 @@ the first one that applies:
   \item \textbf{sort-merge join}, as the fallback for any remaining equi-join
         with sortable keys.
 \end{enumerate}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{join-selection-flow.pdf}
+  \caption{The planner stops at the first rule that applies. A hint wins outright; otherwise the estimated size decides, and sort-merge is the default for two large sides.}
+  \label{fig:join-selection-flow}
+\end{figure}
 
 Every one of these decisions, except the explicit hint, is made from
 \emph{estimated} sizes --- from the catalog if statistics exist, or from

@@ -142,7 +142,8 @@ predicate. \Cref{fig:file-stat-ranges} measures it with a lookup of one
   \label{fig:file-stat-ranges}
 \end{figure}
 
-\Cref{tab:ice-lab-lookup} shows what that does to the scan.
+\Cref{tab:ice-lab-lookup} and \Cref{fig:lookup-bytes-by-layout} show what that does to the
+scan.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -164,6 +165,13 @@ Storing only counts removes the min/max the manifest needs, so all 200 files are
 opened, and Parquet's own row-group statistics rescue most of the bytes.}
 \label{tab:ice-lab-lookup}
 \end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{lookup-bytes-by-layout.pdf}
+  \caption{Bytes read for one \texttt{customer\_id} lookup, by table layout. Sorting wins by two orders of magnitude; the bloom filter halves the read; storing only counts throws the sorted layout\'s advantage away at the manifest and leaves Parquet footers to recover most of it.}
+  \label{fig:lookup-bytes-by-layout}
+\end{figure}
 
 Sorting is the strongest lever by a wide margin: 0.2~MB read against 60.5~MB. It
 has a price the table also shows. The sorted copy is 200 files of 1.7~MB each

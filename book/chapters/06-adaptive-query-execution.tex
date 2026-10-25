@@ -239,7 +239,14 @@ The advisory size changes nothing until it falls below the parallelism term
 \label{tab:aqe-lab-coalesce}
 \end{table}
 
-All seven rows agree to within a few tasks (AQE merges greedily, so the observed
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{coalesce-tasks.pdf}
+  \caption{The formula against the lab. For seven settings the bars pair the task count the formula predicts (blue) with the one the reduce stage ran (green); the log scale shows how far apart the settings are and how close each pair is.}
+  \label{fig:coalesce-tasks}
+\end{figure}
+
+\Cref{fig:coalesce-tasks} plots the same comparison. All seven rows agree to within a few tasks (AQE merges greedily, so the observed
 count runs slightly above the quotient), which is what makes the ceiling reading
 of the advisory size more than a guess: a 16~MB advisory and a 64~MB advisory
 produce the same 41 tasks, because $512.1 / 40$ is below both. The cost of
@@ -332,7 +339,8 @@ network fetch of the big side, and sorting both sides. To avoid the fetch, AQE
 reads shuffle output with a \emph{local shuffle reader}
 (\conf{spark.sql.adaptive.localShuffleReader.enabled}, default \texttt{true}):
 each reduce task reads shuffle files from its own executor instead of pulling a
-slice from every executor. The plan marks it with the argument \texttt{local}.
+slice from every executor. The plan marks it with the argument \texttt{local}. \Cref{fig:aqe-broadcast-promotion} shows the join
+before and after.
 
 \begin{lstlisting}[language=text,numbers=none,style=plan,caption={A runtime broadcast promotion in a final plan (\texttt{EXPLAIN FORMATTED}, trimmed)},captionpos=b,label=lst:aqe-broadcast-plan]
 +- * BroadcastHashJoin Inner BuildRight
@@ -345,6 +353,13 @@ slice from every executor. The plan marks it with the argument \texttt{local}.
             +- ShuffleQueryStage        -- 3.8 MiB, 1.00E+5 rows
                +- Exchange              -- small side, now a broadcast
 \end{lstlisting}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{aqe-broadcast-promotion.pdf}
+  \caption{The same join before and after the runtime rewrite. Both inputs were already shuffled when AQE measured the filtered dimension at 3.8~MiB, so the big side is read locally instead of fetched and neither side is sorted. The relation built for the broadcast is 20.0~MiB in memory.}
+  \label{fig:aqe-broadcast-promotion}
+\end{figure}
 
 Compare this to a join Catalyst broadcast at planning time. There, the big side
 is never shuffled at all, and Spark saves the map-side write too. A runtime
@@ -565,7 +580,15 @@ not enough. The split target is the 64~MB advisory size, and a 73~MB partition
 sits barely above it, so splitting it would leave a remainder too small to keep
 as its own piece. The plan showed no skew handling in either case. (The split
 heuristic is the explanation consistent with the observation; confirm it against
-\texttt{OptimizeSkewedJoin} in the 3.5 source.)
+\texttt{OptimizeSkewedJoin} in the 3.5 source.) \Cref{fig:skew-partition-sizes} plots all 200
+partitions against these thresholds.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{skew-partition-sizes.pdf}
+  \caption{The 200 reduce partitions of the skewed join as measured on the lab, one bar per task. The viral product is 47 times the median, far above the relative test and the lab floor, yet the default 256~MB floor is off the scale above it and the 64~MB split target sits barely under it.}
+  \label{fig:skew-partition-sizes}
+\end{figure}
 
 It split once the target dropped below the partition, with the advisory size at
 8~MB and the floor at 32~MB. \Cref{tab:aqe-lab-skew} shows the stage.

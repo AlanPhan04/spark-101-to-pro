@@ -99,7 +99,8 @@ resolves against a partition value only when Spark can reduce it to a comparison
 of the bare column with a literal. The first draft of this chapter listed
 \texttt{date(order\_ts)} and \texttt{CAST(order\_ts AS DATE)} among the filters
 that break this. The lab says otherwise. \Cref{tab:pruning-killers} gives five
-ways to ask for one day, and what each scan did.
+ways to ask for one day, and what each scan did; \Cref{fig:scan-bytes-by-filter}
+plots the bytes.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -121,6 +122,13 @@ A string cast or arithmetic on the column leaves nothing to push, and the scan
 reads the whole month.}
 \label{tab:pruning-killers}
 \end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{scan-bytes-by-filter.pdf}
+  \caption{The same one day of \texttt{orders}, five filters, measured. Three forms reach the scan as a range and read 6.7~MB in one task; the two that do not read the whole month, 31 times as many tasks and 31 times the bytes.}
+  \label{fig:scan-bytes-by-filter}
+\end{figure}
 
 The pattern is that Spark does the rewriting for comparisons it recognizes as
 equivalent to a range on the column, and gives up on anything it does not. So
@@ -392,8 +400,8 @@ guessing a count. It is controlled by
 \texttt{coalesce} has a second cost beyond skew that surprises people. Because it
 adds no shuffle, it does not start a new stage: the narrow chain before it is
 folded into the same tasks, and \emph{those} tasks are the only ones that exist.
-\Cref{tab:pruning-lab-coalesce} shows it on two weeks of \texttt{orders}, read
-and written to a no-op sink.
+\Cref{tab:pruning-lab-coalesce} and \Cref{fig:repartition-vs-coalesce} show it on two
+weeks of \texttt{orders}, read and written to a no-op sink.
 
 \begin{table}[htbp]
 \centering\footnotesize
@@ -414,6 +422,13 @@ read 1001.2~MB of shuffle data (rows are larger once deserialized), and made eac
 scan task about twice as slow because it now also writes shuffle files.}
 \label{tab:pruning-lab-coalesce}
 \end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{repartition-vs-coalesce.pdf}
+  \caption{What each choice does to the stage graph for ten output partitions of two weeks of \texttt{orders}. \texttt{coalesce} folds the merge into the scan and adds no shuffle; \texttt{repartition} keeps the scan wide and pays for a 1001~MB shuffle.}
+  \label{fig:repartition-vs-coalesce}
+\end{figure}
 
 The numbers are small because the lab is small, but the direction scales.
 \texttt{coalesce(10)} on a 560-split scan would run the scan and filter on 10

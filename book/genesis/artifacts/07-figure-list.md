@@ -51,3 +51,16 @@ Status: `spec` = described here only · `render` = ready to build · `done` = PD
 
 **Build now:** `executor-memory-model` only. Everything else is backlog; a
 figure is authored when its chapter is drafted (pass 1 figures first).
+
+## Added in the lab-backed pass (all legible, measured where quantitative)
+
+| slug | ch | type | note | status |
+|---|---|---|---|---|
+| `coalesce-tasks` | 6 | plot | formula vs measured reduce-stage task counts (7 settings) | done |
+| `aqe-broadcast-promotion` | 6 | before/after | initial SMJ vs final BHJ with measured sizes | done |
+| `skew-partition-sizes` | 6 | plot | the 200 measured partition sizes vs the skew thresholds | done |
+| `broadcast-vs-smj` | 5 | before/after | shuffle+sort both sides vs broadcast | done |
+| `join-selection-flow` | 5 | flow | planner's strategy order | done |
+| `scan-bytes-by-filter` | 7 | plot | bytes read for five spellings of one-day filter | done |
+| `repartition-vs-coalesce` | 7 | stage graph | scan/shuffle/write structure for coalesce vs repartition | done |
+| `lookup-bytes-by-layout` | 12 | plot | bytes read for one lookup across four layouts | done |
