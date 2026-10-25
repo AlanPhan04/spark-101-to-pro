@@ -64,3 +64,7 @@ figure is authored when its chapter is drafted (pass 1 figures first).
 | `scan-bytes-by-filter` | 7 | plot | bytes read for five spellings of one-day filter | done |
 | `repartition-vs-coalesce` | 7 | stage graph | scan/shuffle/write structure for coalesce vs repartition | done |
 | `lookup-bytes-by-layout` | 12 | plot | bytes read for one lookup across four layouts | done |
+| `cache-breakeven` | 8 | plot | N reads with and without cache(), measured; break-even near 10 | done |
+| `cache-eviction-measured` | 8 | stacked bar | a cached month before/after a join: memory vs disk, measured | done |
+| `cache-thrash-lru` | 8 | plot | three caches that do not fit: LRU eviction per partition, measured | done |
+| `reuse-exchange` | 8 | before/after | one exchange read twice vs the same exchange written twice | done |

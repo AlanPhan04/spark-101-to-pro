@@ -92,3 +92,17 @@ def run_scan(spark, group, sql):
         f.write("\n".join(lines) + "\n")
     print("\n".join(lines))
     return df, rows
+
+
+def storage_info(spark, label=""):
+    """Rows of (name, level, cached/total partitions, memory MB, disk MB) for every cached RDD."""
+    infos = spark.sparkContext._jsc.sc().getRDDStorageInfo()
+    rows = []
+    for i in range(len(infos)):
+        r = infos[i]
+        rows.append((str(r.name())[:44], str(r.storageLevel().description()), f"{r.numCachedPartitions()}/{r.numPartitions()}",
+                     round(r.memSize() / 1e6, 1), round(r.diskSize() / 1e6, 1)))
+    print(f"--- storage {label}")
+    for row in rows:
+        print("   ", row)
+    return rows

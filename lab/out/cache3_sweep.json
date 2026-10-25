@@ -1,0 +1,32 @@
+{
+ "sweep": [
+  {
+   "reads": 1,
+   "no_cache_s": 2.77,
+   "materialize_s": 4.94,
+   "cached_reads_s": 1.66,
+   "cache_total_s": 6.6
+  },
+  {
+   "reads": 2,
+   "no_cache_s": 3.15,
+   "materialize_s": 4.13,
+   "cached_reads_s": 2.56,
+   "cache_total_s": 6.69
+  },
+  {
+   "reads": 5,
+   "no_cache_s": 7.54,
+   "materialize_s": 4.17,
+   "cached_reads_s": 5.4,
+   "cache_total_s": 9.57
+  },
+  {
+   "reads": 10,
+   "no_cache_s": 14.37,
+   "materialize_s": 4.3,
+   "cached_reads_s": 10.4,
+   "cache_total_s": 14.7
+  }
+ ]
+}

@@ -1,0 +1,21 @@
+== Physical Plan ==
+*(6) HashAggregate(keys=[], functions=[sum((s#2692 + s#2707))])
++- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1334]
+   +- *(5) HashAggregate(keys=[], functions=[partial_sum((s#2692 + s#2707))])
+      +- *(5) Project [s#2692, s#2707]
+         +- *(5) SortMergeJoin [product_id#2695], [product_id#2720], Inner
+            :- *(2) Sort [product_id#2695 ASC NULLS FIRST], false, 0
+            :  +- *(2) HashAggregate(keys=[product_id#2695], functions=[sum(order_total#2699)])
+            :     +- Exchange hashpartitioning(product_id#2695, 200), ENSURE_REQUIREMENTS, [plan_id=1313]
+            :        +- *(1) HashAggregate(keys=[product_id#2695], functions=[partial_sum(order_total#2699)])
+            :           +- *(1) Filter isnotnull(product_id#2695)
+            :              +- *(1) ColumnarToRow
+            :                 +- BatchScan lab.db.orders[product_id#2695, order_total#2699] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+            +- *(4) Sort [product_id#2720 ASC NULLS FIRST], false, 0
+               +- *(4) HashAggregate(keys=[product_id#2720], functions=[sum(order_total#2724)])
+                  +- Exchange hashpartitioning(product_id#2720, 200), ENSURE_REQUIREMENTS, [plan_id=1324]
+                     +- *(3) HashAggregate(keys=[product_id#2720], functions=[partial_sum(order_total#2724)])
+                        +- *(3) Filter isnotnull(product_id#2720)
+                           +- *(3) ColumnarToRow
+                              +- BatchScan lab.db.orders[product_id#2720, order_total#2724] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+

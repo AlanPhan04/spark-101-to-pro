@@ -45,7 +45,8 @@ chapters:
   - {n: 6, slug: adaptive-query-execution,     status: deepened}  # 3 figs, 8 listings (plans marked % CAPTURE), 7 tables; ~3.1k words; errata fixed (64 MB advisory, parallelismFirst formula)
   - {n: 7, slug: partitioning-bucketing-pruning, status: deepened}  # 3 figs (dpp-flow redrawn, pruning-static, bucketed-join), 5 listings (plans % CAPTURE), 6 tables
   - {n: 12, slug: reading-iceberg-efficiently, status: deepened}  # 3 figs, measured scan counters, lookups on 4 table layouts, adaptive split size finding
-  # 5, 8-11, 13-19: drafted thin (see lint_chapter.py --status)
+  - {n: 8, slug: caching-and-reuse, status: deepened}  # 5 figs, break-even sweep, lazy/eager, levels, eviction, reuse, LRU thrash (all measured)
+  # 5, 9-11, 13-19: drafted thin (see lint_chapter.py --status)
 
 figures:                            # shared renderer: figures/_drawio.py
   - {slug: application-topology,   chapter: 1, status: rendered}

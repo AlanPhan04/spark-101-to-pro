@@ -1,0 +1,100 @@
+{
+ "steps": {
+  "after_ca": [
+   [
+    "In-memory table ca",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ]
+  ],
+  "after_cb": [
+   [
+    "In-memory table cb",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    468.8,
+    0.0
+   ],
+   [
+    "In-memory table ca",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ]
+  ],
+  "after_cc": [
+   [
+    "In-memory table cc",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ],
+   [
+    "In-memory table cb",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    468.8,
+    0.0
+   ],
+   [
+    "In-memory table ca",
+    "Memory Serialized 1x Replicated",
+    "4/8",
+    234.6,
+    0.0
+   ]
+  ]
+ },
+ "reread_ca_s": 8.53,
+ "after_reread": [
+  [
+   "In-memory table cc",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   469.1,
+   0.0
+  ],
+  [
+   "In-memory table cb",
+   "Memory Serialized 1x Replicated",
+   "4/8",
+   234.3,
+   0.0
+  ],
+  [
+   "In-memory table ca",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   469.1,
+   0.0
+  ]
+ ],
+ "reread_cc_s": 0.36,
+ "after_reread_cc": [
+  [
+   "In-memory table cc",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   469.1,
+   0.0
+  ],
+  [
+   "In-memory table cb",
+   "Memory Serialized 1x Replicated",
+   "4/8",
+   234.3,
+   0.0
+  ],
+  [
+   "In-memory table ca",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   469.1,
+   0.0
+  ]
+ ]
+}

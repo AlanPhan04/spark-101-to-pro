@@ -14,8 +14,8 @@ MSYS_NO_PATHCONV=1 docker run --rm --user root \
   -w /lab \
   apache/spark:3.5.2-scala2.12-java17-python3-ubuntu \
   /opt/spark/bin/spark-submit \
-    --master 'local[8]' \
-    --driver-memory 4g \
+    --master "local[${CORES:-8}]" \
+    --driver-memory "${DRIVER_MEM:-4g}" \
     --jars /lab/jars/iceberg-spark-runtime-3.5_2.12-1.6.1.jar \
     --conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions \
     --conf spark.sql.catalog.lab=org.apache.iceberg.spark.SparkCatalog \
@@ -26,4 +26,5 @@ MSYS_NO_PATHCONV=1 docker run --rm --user root \
     --conf spark.eventLog.dir=/lab/events \
     --conf spark.ui.enabled=false \
     --conf spark.local.dir=/tmp/spark-local \
+    ${EXTRA_CONF:-} \
     "/lab/$SCRIPT" "$@"

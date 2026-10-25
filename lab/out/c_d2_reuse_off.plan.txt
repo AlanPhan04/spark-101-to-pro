@@ -1,0 +1,120 @@
+-- c_d2_reuse_off
+-- WITH w AS (SELECT product_id, sum(order_total) AS s FROM orders GROUP BY product_id) SELECT sum(a.s + b.s) AS t FROM w a JOIN w b ON a.product_id = b.product_id
+
+== Physical Plan ==
+* HashAggregate (19)
++- Exchange (18)
+   +- * HashAggregate (17)
+      +- * Project (16)
+         +- * SortMergeJoin Inner (15)
+            :- * Sort (7)
+            :  +- * HashAggregate (6)
+            :     +- Exchange (5)
+            :        +- * HashAggregate (4)
+            :           +- * Filter (3)
+            :              +- * ColumnarToRow (2)
+            :                 +- BatchScan lab.db.orders (1)
+            +- * Sort (14)
+               +- * HashAggregate (13)
+                  +- Exchange (12)
+                     +- * HashAggregate (11)
+                        +- * Filter (10)
+                           +- * ColumnarToRow (9)
+                              +- BatchScan lab.db.orders (8)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [product_id#2695, order_total#2699]
+lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [product_id#2695, order_total#2699]
+
+(3) Filter [codegen id : 1]
+Input [2]: [product_id#2695, order_total#2699]
+Condition : isnotnull(product_id#2695)
+
+(4) HashAggregate [codegen id : 1]
+Input [2]: [product_id#2695, order_total#2699]
+Keys [1]: [product_id#2695]
+Functions [1]: [partial_sum(order_total#2699)]
+Aggregate Attributes [1]: [sum#2732]
+Results [2]: [product_id#2695, sum#2733]
+
+(5) Exchange
+Input [2]: [product_id#2695, sum#2733]
+Arguments: hashpartitioning(product_id#2695, 200), ENSURE_REQUIREMENTS, [plan_id=1313]
+
+(6) HashAggregate [codegen id : 2]
+Input [2]: [product_id#2695, sum#2733]
+Keys [1]: [product_id#2695]
+Functions [1]: [sum(order_total#2699)]
+Aggregate Attributes [1]: [sum(order_total#2699)#2700]
+Results [2]: [product_id#2695, sum(order_total#2699)#2700 AS s#2692]
+
+(7) Sort [codegen id : 2]
+Input [2]: [product_id#2695, s#2692]
+Arguments: [product_id#2695 ASC NULLS FIRST], false, 0
+
+(8) BatchScan lab.db.orders
+Output [2]: [product_id#2720, order_total#2724]
+lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(9) ColumnarToRow [codegen id : 3]
+Input [2]: [product_id#2720, order_total#2724]
+
+(10) Filter [codegen id : 3]
+Input [2]: [product_id#2720, order_total#2724]
+Condition : isnotnull(product_id#2720)
+
+(11) HashAggregate [codegen id : 3]
+Input [2]: [product_id#2720, order_total#2724]
+Keys [1]: [product_id#2720]
+Functions [1]: [partial_sum(order_total#2724)]
+Aggregate Attributes [1]: [sum#2734]
+Results [2]: [product_id#2720, sum#2735]
+
+(12) Exchange
+Input [2]: [product_id#2720, sum#2735]
+Arguments: hashpartitioning(product_id#2720, 200), ENSURE_REQUIREMENTS, [plan_id=1324]
+
+(13) HashAggregate [codegen id : 4]
+Input [2]: [product_id#2720, sum#2735]
+Keys [1]: [product_id#2720]
+Functions [1]: [sum(order_total#2724)]
+Aggregate Attributes [1]: [sum(order_total#2724)#2700]
+Results [2]: [product_id#2720, sum(order_total#2724)#2700 AS s#2707]
+
+(14) Sort [codegen id : 4]
+Input [2]: [product_id#2720, s#2707]
+Arguments: [product_id#2720 ASC NULLS FIRST], false, 0
+
+(15) SortMergeJoin [codegen id : 5]
+Left keys [1]: [product_id#2695]
+Right keys [1]: [product_id#2720]
+Join type: Inner
+Join condition: None
+
+(16) Project [codegen id : 5]
+Output [2]: [s#2692, s#2707]
+Input [4]: [product_id#2695, s#2692, product_id#2720, s#2707]
+
+(17) HashAggregate [codegen id : 5]
+Input [2]: [s#2692, s#2707]
+Keys: []
+Functions [1]: [partial_sum((s#2692 + s#2707))]
+Aggregate Attributes [1]: [sum#2730]
+Results [1]: [sum#2731]
+
+(18) Exchange
+Input [1]: [sum#2731]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1334]
+
+(19) HashAggregate [codegen id : 6]
+Input [1]: [sum#2731]
+Keys: []
+Functions [1]: [sum((s#2692 + s#2707))]
+Aggregate Attributes [1]: [sum((s#2692 + s#2707))#2708]
+Results [1]: [sum((s#2692 + s#2707))#2708 AS t#2691]
+
+

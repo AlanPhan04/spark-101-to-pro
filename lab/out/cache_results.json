@@ -1,0 +1,81 @@
+{
+ "A": {
+  "no_cache_two_reads_s": 9.79,
+  "cache_materialize_s": 5.83,
+  "cached_two_reads_s": 3.35
+ },
+ "A_storage": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Deserialized 1x Replicated",
+   "7/7",
+   563.3,
+   0.0
+  ]
+ ],
+ "B_after_cache_call": [],
+ "B_after_action": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Deserialized 1x Replicated",
+   "7/7",
+   563.3,
+   0.0
+  ]
+ ],
+ "B_cache_lazy_table": [],
+ "B_lazy_after_use": [
+  [
+   "In-memory table wk_lazy",
+   "Disk Memory Deserialized 1x Replicated",
+   "7/7",
+   563.3,
+   0.0
+  ]
+ ],
+ "B_cache_table_eager": [
+  [
+   "In-memory table wk_eager",
+   "Disk Memory Deserialized 1x Replicated",
+   "7/7",
+   563.3,
+   0.0
+  ]
+ ],
+ "C_MEMORY_AND_DISK": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Serialized 1x Replicated",
+   "7/7",
+   410.5,
+   0.0
+  ]
+ ],
+ "C_MEMORY_AND_DISK_SER": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Serialized 1x Replicated",
+   "7/7",
+   410.5,
+   0.0
+  ]
+ ],
+ "C_DISK_ONLY": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Serialized 1x Replicated",
+   "7/7",
+   0.0,
+   410.5
+  ]
+ ],
+ "C_rdd_objects_MEMORY_ONLY": [
+  [
+   "MapPartitionsRDD",
+   "Memory Serialized 1x Replicated",
+   "7/7",
+   618.8,
+   0.0
+  ]
+ ]
+}

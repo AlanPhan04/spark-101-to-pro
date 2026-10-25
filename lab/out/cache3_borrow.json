@@ -1,0 +1,20 @@
+{
+ "after_cache": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Deserialized 1x Replicated",
+   "31/31",
+   2252.7,
+   175.6
+  ]
+ ],
+ "after_join": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Deserialized 1x Replicated",
+   "31/31",
+   1930.6,
+   410.4
+  ]
+ ]
+}

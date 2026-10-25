@@ -1,0 +1,17 @@
+== Physical Plan ==
+*(6) HashAggregate(keys=[], functions=[sum((s#2640 + s#2655))])
++- Exchange SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1199]
+   +- *(5) HashAggregate(keys=[], functions=[partial_sum((s#2640 + s#2655))])
+      +- *(5) Project [s#2640, s#2655]
+         +- *(5) SortMergeJoin [product_id#2643], [product_id#2668], Inner
+            :- *(2) Sort [product_id#2643 ASC NULLS FIRST], false, 0
+            :  +- *(2) HashAggregate(keys=[product_id#2643], functions=[sum(order_total#2647)])
+            :     +- Exchange hashpartitioning(product_id#2643, 200), ENSURE_REQUIREMENTS, [plan_id=1146]
+            :        +- *(1) HashAggregate(keys=[product_id#2643], functions=[partial_sum(order_total#2647)])
+            :           +- *(1) Filter isnotnull(product_id#2643)
+            :              +- *(1) ColumnarToRow
+            :                 +- BatchScan lab.db.orders[product_id#2643, order_total#2647] lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=] RuntimeFilters: []
+            +- *(4) Sort [product_id#2668 ASC NULLS FIRST], false, 0
+               +- *(4) HashAggregate(keys=[product_id#2668], functions=[sum(order_total#2672)])
+                  +- ReusedExchange [product_id#2668, sum#2683], Exchange hashpartitioning(product_id#2643, 200), ENSURE_REQUIREMENTS, [plan_id=1146]
+

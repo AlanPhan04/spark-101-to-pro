@@ -1,0 +1,120 @@
+-- c_d3_reuse_broken
+-- SELECT sum(a.s + b.m) AS t FROM (SELECT product_id, sum(order_total) AS s FROM orders GROUP BY product_id) a JOIN (SELECT product_id, max(order_total) AS m FROM orders GROUP BY product_id) b ON a.product_id = b.product_id
+
+== Physical Plan ==
+* HashAggregate (19)
++- Exchange (18)
+   +- * HashAggregate (17)
+      +- * Project (16)
+         +- * SortMergeJoin Inner (15)
+            :- * Sort (7)
+            :  +- * HashAggregate (6)
+            :     +- Exchange (5)
+            :        +- * HashAggregate (4)
+            :           +- * Filter (3)
+            :              +- * ColumnarToRow (2)
+            :                 +- BatchScan lab.db.orders (1)
+            +- * Sort (14)
+               +- * HashAggregate (13)
+                  +- Exchange (12)
+                     +- * HashAggregate (11)
+                        +- * Filter (10)
+                           +- * ColumnarToRow (9)
+                              +- BatchScan lab.db.orders (8)
+
+
+(1) BatchScan lab.db.orders
+Output [2]: [product_id#2741, order_total#2745]
+lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(2) ColumnarToRow [codegen id : 1]
+Input [2]: [product_id#2741, order_total#2745]
+
+(3) Filter [codegen id : 1]
+Input [2]: [product_id#2741, order_total#2745]
+Condition : isnotnull(product_id#2741)
+
+(4) HashAggregate [codegen id : 1]
+Input [2]: [product_id#2741, order_total#2745]
+Keys [1]: [product_id#2741]
+Functions [1]: [partial_sum(order_total#2745)]
+Aggregate Attributes [1]: [sum#2773]
+Results [2]: [product_id#2741, sum#2774]
+
+(5) Exchange
+Input [2]: [product_id#2741, sum#2774]
+Arguments: hashpartitioning(product_id#2741, 200), ENSURE_REQUIREMENTS, [plan_id=1426]
+
+(6) HashAggregate [codegen id : 2]
+Input [2]: [product_id#2741, sum#2774]
+Keys [1]: [product_id#2741]
+Functions [1]: [sum(order_total#2745)]
+Aggregate Attributes [1]: [sum(order_total#2745)#2753]
+Results [2]: [product_id#2741, sum(order_total#2745)#2753 AS s#2736]
+
+(7) Sort [codegen id : 2]
+Input [2]: [product_id#2741, s#2736]
+Arguments: [product_id#2741 ASC NULLS FIRST], false, 0
+
+(8) BatchScan lab.db.orders
+Output [2]: [product_id#2748, order_total#2752]
+lab.db.orders (branch=null) [filters=product_id IS NOT NULL, groupedBy=]
+
+(9) ColumnarToRow [codegen id : 3]
+Input [2]: [product_id#2748, order_total#2752]
+
+(10) Filter [codegen id : 3]
+Input [2]: [product_id#2748, order_total#2752]
+Condition : isnotnull(product_id#2748)
+
+(11) HashAggregate [codegen id : 3]
+Input [2]: [product_id#2748, order_total#2752]
+Keys [1]: [product_id#2748]
+Functions [1]: [partial_max(order_total#2752)]
+Aggregate Attributes [1]: [max#2775]
+Results [2]: [product_id#2748, max#2776]
+
+(12) Exchange
+Input [2]: [product_id#2748, max#2776]
+Arguments: hashpartitioning(product_id#2748, 200), ENSURE_REQUIREMENTS, [plan_id=1437]
+
+(13) HashAggregate [codegen id : 4]
+Input [2]: [product_id#2748, max#2776]
+Keys [1]: [product_id#2748]
+Functions [1]: [max(order_total#2752)]
+Aggregate Attributes [1]: [max(order_total#2752)#2754]
+Results [2]: [product_id#2748, max(order_total#2752)#2754 AS m#2737]
+
+(14) Sort [codegen id : 4]
+Input [2]: [product_id#2748, m#2737]
+Arguments: [product_id#2748 ASC NULLS FIRST], false, 0
+
+(15) SortMergeJoin [codegen id : 5]
+Left keys [1]: [product_id#2741]
+Right keys [1]: [product_id#2748]
+Join type: Inner
+Join condition: None
+
+(16) Project [codegen id : 5]
+Output [2]: [s#2736, m#2737]
+Input [4]: [product_id#2741, s#2736, product_id#2748, m#2737]
+
+(17) HashAggregate [codegen id : 5]
+Input [2]: [s#2736, m#2737]
+Keys: []
+Functions [1]: [partial_sum((s#2736 + m#2737))]
+Aggregate Attributes [1]: [sum#2771]
+Results [1]: [sum#2772]
+
+(18) Exchange
+Input [1]: [sum#2772]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=1447]
+
+(19) HashAggregate [codegen id : 6]
+Input [1]: [sum#2772]
+Keys: []
+Functions [1]: [sum((s#2736 + m#2737))]
+Aggregate Attributes [1]: [sum((s#2736 + m#2737))#2765]
+Results [1]: [sum((s#2736 + m#2737))#2765 AS t#2738]
+
+

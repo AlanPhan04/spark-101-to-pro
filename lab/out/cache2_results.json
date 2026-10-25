@@ -1,0 +1,120 @@
+{
+ "sweep": [
+  {
+   "reads": 1,
+   "no_cache_s": 2.53,
+   "materialize_s": 5.08,
+   "cached_reads_s": 1.88,
+   "cache_total_s": 6.96
+  },
+  {
+   "reads": 2,
+   "no_cache_s": 3.14,
+   "materialize_s": 4.09,
+   "cached_reads_s": 2.64,
+   "cache_total_s": 6.73
+  },
+  {
+   "reads": 5,
+   "no_cache_s": 7.09,
+   "materialize_s": 4.08,
+   "cached_reads_s": 5.14,
+   "cache_total_s": 9.22
+  }
+ ],
+ "reuse_on_s": 7.53,
+ "reuse_off_s": 10.04,
+ "broken_s": 10.22,
+ "E_after_cache": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Deserialized 1x Replicated",
+   "31/31",
+   2493.7,
+   0.0
+  ]
+ ],
+ "E_after_join": [
+  [
+   "*(1) ColumnarToRow\n+- BatchScan lab.db.order",
+   "Disk Memory Deserialized 1x Replicated",
+   "31/31",
+   2493.7,
+   0.0
+  ]
+ ],
+ "F_steps": {
+  "after_ca": [
+   [
+    "In-memory table ca",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ]
+  ],
+  "after_cb": [
+   [
+    "In-memory table ca",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ],
+   [
+    "In-memory table cb",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    468.8,
+    0.0
+   ]
+  ],
+  "after_cc": [
+   [
+    "In-memory table ca",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ],
+   [
+    "In-memory table cc",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    469.1,
+    0.0
+   ],
+   [
+    "In-memory table cb",
+    "Memory Serialized 1x Replicated",
+    "8/8",
+    468.8,
+    0.0
+   ]
+  ]
+ },
+ "F_reread_ca_s": 0.2,
+ "F_after_reread": [
+  [
+   "In-memory table ca",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   469.1,
+   0.0
+  ],
+  [
+   "In-memory table cc",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   469.1,
+   0.0
+  ],
+  [
+   "In-memory table cb",
+   "Memory Serialized 1x Replicated",
+   "8/8",
+   468.8,
+   0.0
+  ]
+ ]
+}

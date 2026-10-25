@@ -4,27 +4,70 @@
 \begin{chapterintro}
 Caching keeps a result Spark would otherwise recompute --- but the wrong cache
 wastes storage memory and starves execution, and a cache used once is pure
-overhead. Spark also reuses work you did not ask it to: an identical exchange
-or subquery computed once and read twice. This chapter covers when caching
-pays, which storage level to pick against the GC budget from
-\Cref{ch:execmem}, and how to see reuse in a plan. It is also where execution
-and storage memory finally meet at runtime.
+overhead. On the lab, caching one week of \texttt{orders} for two aggregations
+was slower than not caching at all; it needed about ten reads to break even.
+Spark also reuses work you did not ask it to: an identical exchange computed once
+and read twice, which cut a join from 10.0 to 7.5 seconds. This chapter covers
+when caching pays, which storage level to pick against the GC budget from
+\Cref{ch:execmem}, how to see reuse in a plan, and what happens when execution
+and storage memory finally meet at runtime. Every number is a capture from the
+lab of \Cref{sec:refenv-lab}.
 \end{chapterintro}
 
 \section{When caching pays}
 \label{sec:caching-when}
 
-A cached DataFrame pays for itself only when two things are both true: it is
-read more than once, and it fits comfortably inside the executor's storage
-memory (\Cref{sec:mem-model}) without pushing out other useful cached data.
-Caching something read exactly once adds the cost of writing it into storage
-memory (and, if it does not fit, spilling it to disk) for a saving that never
-arrives --- the classic mistake is caching immediately before a single
-\texttt{write()}, which reads the cached data exactly once and gets nothing
-back for the cost of caching it.
+A cached DataFrame pays for itself only when two things are both true: it is read
+enough times to recover the cost of building the cache, and it fits comfortably
+inside the executor's storage memory (\Cref{sec:mem-model}) without pushing out
+other useful cached data. Caching something read exactly once adds the cost of
+writing it into storage memory (and, if it does not fit, spilling it to disk) for
+a saving that never arrives. The classic mistake is caching immediately before a
+single \texttt{write()}.
 
-\begin{lstlisting}[language=SQL,caption={Reused twice: worth caching},captionpos=b]
--- good: filtered_orders is read by two different aggregations
+How many reads is enough is a number you can measure rather than guess. The lab
+cached one week of \texttt{orders} (6.8 million rows, 563~MB cached) and ran the
+same aggregation $N$ times, with and without the cache.
+\Cref{tab:caching-lab-breakeven} and \Cref{fig:cache-breakeven} show the result.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}rrrrr@{}}
+\toprule
+\textbf{Reads} $N$ & \textbf{No cache} & \textbf{Build cache} & \textbf{$N$ cached reads} & \textbf{Cache total} \\
+\midrule
+1 & 2.77~s & 4.94~s & 1.66~s & 6.60~s \\
+2 & 3.15~s & 4.13~s & 2.56~s & 6.69~s \\
+5 & 7.54~s & 4.17~s & 5.40~s & 9.57~s \\
+10 & 14.37~s & 4.30~s & 10.40~s & 14.70~s \\
+\bottomrule
+\end{tabular}
+\caption{Wall-clock seconds for $N$ aggregations over one week of \texttt{orders},
+single runs on a warm lab JVM. The cache costs about 4.2~s to build and saves
+about 0.4~s per read, so it only catches up near the tenth read.}
+\label{tab:caching-lab-breakeven}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{cache-breakeven.pdf}
+  \caption{Total time for $N$ aggregations over the same week, with and without
+  \texttt{cache()}. The shaded gap is time the cache costs; the lines converge
+  near ten reads because each cached read still scans 563~MB of cached batches
+  against 58~MB of Parquet columns.}
+  \label{fig:cache-breakeven}
+\end{figure}
+
+The arithmetic generalizes. If building the cache costs $M$ seconds, an uncached
+read costs $R$, and a cached read costs $C$, caching pays after $M / (R - C)$
+reads: here $4.2 / (1.44 - 1.04) \approx 10$. The break-even moves with the
+source. A Parquet scan from local disk is cheap, so the cache needs many reads;
+a scan of object storage, or an expensive upstream join, makes $R$ large and the
+break-even small. Measure $R$ for your source before deciding.
+
+\begin{lstlisting}[language=SQL,caption={Reused twice: worth caching only if the reads are costly},captionpos=b,label=lst:caching-reused]
+-- filtered_orders is read by two different aggregations
 filtered_orders.cache()
 filtered_orders.count()                 -- materializes the cache
 result1 = filtered_orders.join(dim_product, "product_id")
@@ -36,61 +79,93 @@ result2 = filtered_orders.groupBy("product_id").sum("order_total")
 
 \texttt{df.cache()} does not cache anything by itself --- it only marks the
 DataFrame for caching the next time an action runs it, consistent with
-transformations being lazy everywhere else (\Cref{sec:shape-jobs}). Without a
-materializing action, the first real use of the DataFrame both computes it
-\emph{and} populates the cache as a side effect, which works but hands you no
-control over exactly when the cost is paid; calling a cheap action like
-\texttt{count()} right after \texttt{cache()} is the common way to materialize
-it deliberately, on your own terms.
+transformations being lazy everywhere else (\Cref{sec:shape-jobs}). The lab's
+Storage tab shows it: \Cref{tab:caching-lab-lazy} lists what was resident after
+each step.
 
-\begin{note}
-SQL's \texttt{CACHE TABLE} is the one place this default flips: it is
-\emph{eager}, executing immediately rather than waiting for an action. Use
-\texttt{CACHE LAZY TABLE} for the same lazy behavior \texttt{df.cache()} gives
-you.
-\end{note}
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{6.2cm}rr@{}}
+\toprule
+\textbf{Step} & \textbf{Cached partitions} & \textbf{In memory} \\
+\midrule
+\texttt{df.cache()}, no action yet & none & 0 \\
+\texttt{df.count()} & 7 of 7 & 563.3~MB \\
+\texttt{CACHE LAZY TABLE wk\_lazy AS \ldots} & none & 0 \\
+first query on \texttt{wk\_lazy} & 7 of 7 & 563.3~MB \\
+\texttt{CACHE TABLE wk\_eager AS \ldots} & 7 of 7 & 563.3~MB \\
+\bottomrule
+\end{tabular}
+\caption{What the Storage tab holds after each step. Only \texttt{CACHE TABLE}
+caches before any query reads it.}
+\label{tab:caching-lab-lazy}
+\end{table}
+
+Without a materializing action, the first real use of the DataFrame both computes
+it \emph{and} populates the cache as a side effect, which works but hands you no
+control over when the cost is paid; a cheap action such as \texttt{count()} right
+after \texttt{cache()} pays it on your own terms. SQL's \texttt{CACHE TABLE} is
+the one place this default flips: it is \emph{eager}, executing immediately.
+Use \texttt{CACHE LAZY TABLE} for the lazy behavior \texttt{df.cache()} gives you.
 
 \section{Storage levels and the GC trade-off}
 \label{sec:caching-storage-levels}
 
-The default storage level, \texttt{MEMORY\_AND\_DISK}, keeps cached blocks as
-deserialized JVM objects in storage memory and spills to disk only when it
-does not fit. Those objects carry the same per-object overhead
-\Cref{sec:mem-heap} described for any row, and a large, long-lived cache is
-exactly the workload that pushes a garbage collector toward its expensive,
-full-heap path (\Cref{sec:mem-gc}). Two other levels exist specifically to
-trade that away:
+The default storage level for a DataFrame, \texttt{MEMORY\_AND\_DISK}, keeps
+cached blocks in storage memory and spills to disk only when they do not fit.
+What the blocks \emph{are} matters for the arithmetic. Spark SQL caches a
+DataFrame as compressed columnar batches (\conf{spark.sql.inMemoryColumnarStorage.compressed},
+default \texttt{true}), not as millions of \texttt{Row} objects, so the
+per-object overhead of \Cref{sec:mem-heap} applies to the RDD API, not here. The
+lab measured the same 6.8 million rows at three levels (\Cref{tab:caching-lab-levels}).
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{6.0cm}rr@{}}
+\toprule
+\textbf{How it was cached} & \textbf{In memory} & \textbf{On disk} \\
+\midrule
+\texttt{df.cache()} (Scala default, deserialized) & 563.3~MB & 0 \\
+\texttt{MEMORY\_AND\_DISK\_SER} (serialized) & 410.5~MB & 0 \\
+\texttt{DISK\_ONLY} & 0 & 410.5~MB \\
+\bottomrule
+\end{tabular}
+\caption{One week of \texttt{orders} at three storage levels. Serializing saved
+27\%, not the 2--3$\times$ that holds for caches of JVM objects.}
+\label{tab:caching-lab-levels}
+\end{table}
+
+So the deserialized default costs about a quarter more memory than serialized,
+and the serialized form must be decoded again on every read. Whether that trade
+is worth it depends on GC: a large, long-lived cache is the workload that pushes
+a collector toward its expensive full-heap path (\Cref{sec:mem-gc}). Two levels
+exist to trade that away:
 
 \begin{itemize}
-  \item \texttt{MEMORY\_AND\_DISK\_SER} keeps the cache serialized ---
-        Kryo-encoded bytes (\Cref{sec:mem-serialization}) in one contiguous
-        block rather than millions of small objects. Concretely: one million
-        cached \texttt{orders} rows as deserialized JVM \texttt{Row} objects
-        carry roughly 50~bytes of per-object overhead each
-        (\Cref{sec:mem-heap}) on top of their actual field data, plus the
-        garbage collector has a million separate objects to track and trace
-        on every collection; the same million rows serialized into one
-        contiguous \texttt{\_SER} byte array pay that overhead exactly once
-        for the whole block, and the collector sees a single large byte
-        array rather than a million objects to walk. That is the 2--3$\times$
-        memory reduction and the "nearly invisible to the garbage collector"
-        claim made concrete, at the cost of deserializing rows back out of
-        that byte array on every read.
-  \item \texttt{OFF\_HEAP} (with
-        \conf{spark.memory.offHeap.enabled}) puts the cache entirely outside
-        the JVM heap, the same off-heap pool from \Cref{sec:mem-model} ---
-        zero GC overhead for that data, at the cost of the off-heap capacity
-        it consumes.
+  \item \texttt{MEMORY\_AND\_DISK\_SER} keeps the cache serialized, one contiguous
+        block per partition, at the cost of decoding rows back out on every read.
+  \item \texttt{OFF\_HEAP} (with \conf{spark.memory.offHeap.enabled}) puts the
+        cache outside the JVM heap, the pool from \Cref{sec:mem-model}: zero GC
+        overhead for that data, at the cost of the off-heap capacity it consumes.
+        (Claim --- not tested on the lab.)
 \end{itemize}
 
-\texttt{DISK\_ONLY} is rarely the right answer: reading a cache from disk is
-close enough to re-reading the source that the cache buys little.
+\texttt{DISK\_ONLY} is rarely the right answer: reading a cache from disk is close
+enough to re-reading the source that the cache buys little.
 
-\begin{tip}
+\begin{warning}
+PySpark's \texttt{StorageLevel.MEMORY\_AND\_DISK} is the \emph{serialized} level
+(its \texttt{deserialized} flag is false), while Scala's \texttt{df.cache()} uses
+the deserialized one. On the lab the two differ by 153~MB for the same rows,
+which is the 27\% of \Cref{tab:caching-lab-levels}. Check the Storage tab's
+level column rather than trusting the constant's name.
+\end{warning}
+
 Switch away from the deserialized default when GC time is 5--10\% or more of
-task time for a job that caches heavily (\Cref{sec:reading-metrics}). Below
-that, the deserialization cost of a \texttt{\_SER} level is not worth paying.
-\end{tip}
+task time for a job that caches heavily (\Cref{sec:reading-metrics}). Below that,
+the decoding cost of a serialized level is not worth paying.
 
 \section{How execution and storage memory borrow at runtime}
 \label{sec:caching-borrowing}
@@ -98,117 +173,201 @@ that, the deserialization cost of a \texttt{\_SER} level is not worth paying.
 \Cref{sec:mem-model} described unified memory's split between execution and
 storage as a soft boundary set by \conf{spark.memory.storageFraction}; here is
 what that means while a job actually runs. Either side may use the other's
-\emph{idle} space: a job with nothing cached lets execution use the whole
-unified pool for shuffles and joins, and a job running no wide operators lets
-storage use all of it for cached blocks.
+\emph{idle} space: a job with nothing cached lets execution use the whole unified
+pool for shuffles and joins, and a job running no wide operators lets storage use
+all of it for cached blocks.
 
-Here is a concrete sequence of events showing why that boundary only matters
-once both sides actually want space at the same time. Storage's own
-guaranteed half of a 4~GB unified pool is 2~GB. A pipeline caches
-\texttt{filtered\_orders}, and that cache grows to 3~GB --- 2~GB in storage's
-own half, plus 1~GB borrowed from execution's currently-idle half, because
-nothing else is running yet. Now a join starts in the same job and its
-sort buffers need 1.5~GB of execution memory. Execution is entitled to
-reclaim its own space, so Spark evicts blocks from the borrowed 1~GB (LRU
-order) to free it for the join, shrinking the cache back down toward
-storage's guaranteed 2~GB; if the join later needs more than its own
-guaranteed half too, it simply spills to disk rather than blocking, the same
-as it would with no cache present at all. Run the same scenario in reverse
---- the join starts first and grows into storage's idle space, then the
-cache tries to grow --- and storage cannot evict a word of the join's live
-hash table to make room; the cache is capped at whatever storage's
-guaranteed half still has free until the join finishes and releases its
-borrowed space back. The two directions are not symmetric:
+The boundary only matters once both sides want space at the same time. Suppose
+storage's own half of a 4~GB unified pool is 2~GB. A pipeline caches
+\texttt{filtered\_orders} and the cache grows to 3~GB: 2~GB in storage's own half
+plus 1~GB borrowed from execution's idle half. A join then starts and its sort
+buffers need 1.5~GB. Execution is entitled to reclaim its space, so Spark evicts
+blocks from the borrowed 1~GB (LRU order); if the join later needs more than its
+own half, it spills to disk rather than blocking. Run the scenario in reverse ---
+the join first, then the cache --- and storage cannot evict a word of the join's
+live hash table; it is capped at whatever its guaranteed half has free until the
+join releases the borrowed space. The two directions are not symmetric:
 
 \begin{itemize}
-  \item if execution needs memory that storage is currently borrowing,
-        Spark evicts cached blocks (LRU) to reclaim it, down to storage's own
-        guaranteed half;
-  \item if storage needs memory that execution is currently borrowing,
-        Spark cannot evict a running task's hash table or sort buffer to make
-        room --- storage simply does not get that space back until the task
+  \item if execution needs memory that storage is borrowing, Spark evicts cached
+        blocks (LRU) to reclaim it, down to storage's own guaranteed half;
+  \item if storage needs memory that execution is borrowing, Spark cannot evict a
+        running task's hash table or sort buffer; storage waits until the task
         finishes.
 \end{itemize}
 
 Execution always wins a live contest, because failing to complete a running
-operator is worse than evicting a cache entry and recomputing it later. This
-is also why a cache that is evicted mid-job is not a bug: it is unified memory
-doing exactly what it is for (\Cref{fig:memory-borrowing-eviction}).
+operator is worse than evicting a cache entry and recomputing it later
+(\Cref{fig:memory-borrowing-eviction}).
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.85\linewidth]{memory-borrowing-eviction.pdf}
-  \caption{Borrowing is symmetric; reclaiming is not. Storage can spread
-  into idle execution space, but the moment a join or sort needs that space
-  back, execution evicts the borrower's cached blocks to reclaim it ---
-  storage has no equivalent power over a running task.}
+  \caption{Borrowing is symmetric; reclaiming is not. Storage can spread into
+  idle execution space, but the moment a join or sort needs that space back,
+  execution evicts the borrower's cached blocks to reclaim it --- storage has no
+  equivalent power over a running task.}
   \label{fig:memory-borrowing-eviction}
+\end{figure}
+
+The lab reproduced the eviction. With a 4~GB heap (about 2.3~GB of unified
+memory) the whole month of \texttt{orders} was cached at
+\texttt{MEMORY\_AND\_DISK}: 2253~MB in memory and 176~MB on disk, all 31 of 31
+partitions resident. A join to \texttt{dim\_customer} then ran in the same
+application and needed execution memory. Afterwards the cache still held 31 of 31
+partitions, but 1931~MB in memory and 410~MB on disk: 322~MB of blocks had moved
+from memory to disk to make room, arriving as 235~MB because the disk copy is
+serialized (\Cref{fig:cache-eviction-measured}). Because
+the level includes disk, nothing was lost; with \texttt{MEMORY\_ONLY} those blocks
+would have been dropped and recomputed.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{cache-eviction-measured.pdf}
+  \caption{A cached month of \texttt{orders} before and after a join ran. All
+  partitions stay cached, but 235~MB more of them sit on disk once execution
+  claimed the memory it needed.}
+  \label{fig:cache-eviction-measured}
 \end{figure}
 
 \section{Exchange and subquery reuse}
 \label{sec:caching-reuse}
 
-Caching is a decision you make; Spark also reuses identical work on its own
-when the physical plan contains the same subtree twice. If two operators need
-data shuffled the same way --- same partitioning, same partition count --- the
-planner reuses one exchange for both instead of running it twice
+Caching is a decision you make; Spark also reuses identical work on its own when
+the physical plan contains the same subtree twice. If two operators need data
+shuffled the same way --- same partitioning, same partition count, same
+aggregate --- the planner reuses one exchange for both
 (\texttt{ReuseExchange}, \Cref{sec:c-exchange}); an identical scalar subquery
-appearing more than once in a query is deduplicated the same way
-(\texttt{ReuseSubquery}). Both are visible directly in the physical plan and
-require no caching from you --- and both are fragile in exactly the way
-\Cref{sec:shuffle-unnecessary} warned about: a partition count or column order
-that differs by even a little between the two occurrences is enough to defeat
-the match.
+appearing more than once is deduplicated the same way (\texttt{ReuseSubquery}).
+Both are visible in the physical plan and need no caching from you.
+\Cref{fig:reuse-exchange} and \Cref{tab:caching-lab-reuse} measure the effect on a
+self-join of a per-product aggregate.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{reuse-exchange.pdf}
+  \caption{The same self-join of an aggregate planned two ways. With reuse, the
+  scan and exchange run once and the join reads the result twice
+  (\texttt{ReusedExchange}); without it, the scan and the shuffle write run twice.}
+  \label{fig:reuse-exchange}
+\end{figure}
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{5.2cm}rrr@{}}
+\toprule
+\textbf{Plan} & \textbf{Scan stages} & \textbf{\texttt{ReusedExchange}} & \textbf{Wall clock} \\
+\midrule
+same aggregate twice, reuse on & 1 (173~MB) & 1 & 7.5~s \\
+same aggregate twice, \conf{spark.sql.exchange.reuse}=false & 2 (346~MB) & 0 & 10.0~s \\
+\texttt{sum} on one side, \texttt{max} on the other & 2 (346~MB) & 0 & 10.2~s \\
+\bottomrule
+\end{tabular}
+\caption{Reuse on the lab. Disabling it doubles the scan and costs about a third
+more time. The last row is the fragile case: two aggregates over the same table
+and key differ in their aggregate function, so the exchanges differ and nothing
+is reused.}
+\label{tab:caching-lab-reuse}
+\end{table}
+
+Reuse is fragile in exactly the way \Cref{sec:shuffle-unnecessary} warned about:
+a partition count, column set, or aggregate function that differs by even a
+little between the two occurrences defeats the match. When the optimizer can drop
+an unused aggregate it will, and two sides that look different can collapse into
+one that is reused, so read the plan rather than the query: look for a
+\texttt{ReusedExchange} node, and count the scan stages.
 
 \section{Unpersist and cache thrashing}
 \label{sec:caching-unpersist}
 
 A cached DataFrame you no longer need should be explicitly released with
 \texttt{unpersist()}. Left alone, storage memory fills with DataFrames nobody
-reads anymore, and Spark's LRU eviction starts discarding whichever cached
-\emph{block} was used least recently to make room for new ones --- eviction
-happens at the level of individual blocks (one per partition), not whole
-DataFrames, so a large cached DataFrame is evicted piecemeal as its
-least-recently-touched partitions come due, not all at once.
+reads, and Spark's LRU eviction discards whichever cached \emph{block} was used
+least recently to make room for new ones. Eviction happens per block, one per
+partition, not per DataFrame, so a large cache is evicted piecemeal.
 
-Concretely: cache A (an early pipeline step) was last read 10 minutes ago;
-cache B (a later, still-active step) was read 1 minute ago. A new cache C
-needs room storage does not have. LRU picks purely on recency of read, with
-no notion of which DataFrame you still "need" --- it evicts blocks from A
-first, since A's blocks are the least recently used, regardless of whether A
-or C is actually more important to the job. Under enough pressure this can
-reach further than intended: if C is read once and then also goes stale, its
-own blocks become the next LRU candidates, and eventually even B's blocks are
-at risk if B is not read again soon enough --- evicting the cache you
-actually still need before its next read, forcing a recompute you cached
-specifically to avoid. This \emph{cache thrashing} is a caching bug that
-looks like a memory bug: the fix is fewer, more deliberate caches (and
-prompt \texttt{unpersist()} on ones you are done with), not more memory.
+The lab shows it. With the unified pool shrunk to about 1.1~GB
+(\conf{spark.memory.fraction}\,=\,0.3 on a 4~GB heap), three 8-day slices of
+\texttt{orders}, 469~MB each at \texttt{MEMORY\_ONLY}, cannot all stay resident
+(\Cref{fig:cache-thrash-lru}). After caching \texttt{ca}, \texttt{cb}, then
+\texttt{cc}, \texttt{ca} had lost 4 of its 8 partitions, the least recently used
+blocks, while \texttt{cb} and \texttt{cc} were whole. Re-reading \texttt{ca} then
+took 8.5~s, because the missing half was recomputed from the source, and
+re-caching it evicted half of \texttt{cb} in turn. Re-reading \texttt{cc}, still
+fully cached, took 0.4~s.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{cache-thrash-lru.pdf}
+  \caption{Three caches that do not fit together. Each new cache evicts the least
+  recently used blocks of an older one, and re-reading the damaged cache evicts
+  its neighbour: LRU has no notion of which DataFrame you still need.}
+  \label{fig:cache-thrash-lru}
+\end{figure}
+
+LRU picks purely on recency of read, so it can evict the cache you still need
+before its next read, forcing a recompute you cached specifically to avoid. This
+\emph{cache thrashing} is a caching bug that looks like a memory bug: the fix is
+fewer, more deliberate caches (and prompt \texttt{unpersist()} on ones you are
+done with), not more memory.
+
+\begin{note}
+Storage memory protects a cache from being evicted, not the executor from running
+out of heap. On the lab, caching a third 586~MB slice with a 4~GB heap and eight
+concurrent scan tasks ended in \texttt{java.lang.OutOfMemoryError: Java heap
+space}; the unified pool is soft, but the JVM heap is not.
+\end{note}
 
 \section{Summary}
 \label{sec:caching-summary}
 
-Cache what is read more than once and fits the storage budget; a cache read
-once is waste. \texttt{cache()} only marks a DataFrame lazily, so materialize
-it on your own schedule with a cheap action; \texttt{CACHE TABLE} in SQL is
-eager by contrast. The deserialized default trades memory for GC pressure;
-\texttt{\_SER} and \texttt{OFF\_HEAP} trade back at the cost of CPU or
-off-heap capacity. Execution and storage share unified memory and may borrow
-each other's idle space, but only execution can evict a borrower to reclaim
-it --- storage waits. Spark reuses an identical exchange or subquery on its
-own, fragile to any difference between the two occurrences; and a cache you
-forget to release does not just waste memory, it can evict the cache you
-still need.
+Cache what is read enough times to repay the build and fits the storage budget;
+on the lab that took about ten reads of a cheap source. \texttt{cache()} only
+marks a DataFrame lazily, so materialize it on your own schedule with a cheap
+action; \texttt{CACHE TABLE} in SQL is eager by contrast. A DataFrame cache is
+columnar batches, so the serialized level saves about a quarter, not a multiple.
+Execution and storage share unified memory and may borrow each other's idle
+space, but only execution can evict a borrower to reclaim it: the lab saw 322~MB
+of a cache move to disk when a join started. Spark reuses an identical exchange
+on its own, fragile to any difference between the two occurrences; and a cache
+you forget to release does not just waste memory, it can evict the cache you
+still need. \Cref{tab:caching-levers} turns each symptom into the evidence and
+the lever.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{3.3cm}p{3.9cm}p{3.7cm}p{3.1cm}@{}}
+\toprule
+\textbf{Symptom} & \textbf{Evidence} & \textbf{Lever} & \textbf{Cost} \\
+\midrule
+a cache made the job slower & build time above the saving; few reads & remove the cache; compute the break-even & none \\
+a cached DataFrame is not resident & empty \textbf{Storage} tab after \texttt{cache()} & run a materializing action; \texttt{CACHE TABLE} is eager & the build cost, paid up front \\
+heavy GC with a large cache & GC time at 5--10\% of task time & serialized or off-heap level & decoding, off-heap capacity \\
+a re-read is slow though cached & partial \texttt{cached/total} in \textbf{Storage} & fewer caches; \texttt{unpersist()} old ones & recompute on a miss \\
+a plan scans the same table twice & two scan stages, no \texttt{ReusedExchange} & make the two sides identical & none \\
+\bottomrule
+\end{tabular}
+\caption{The caching and reuse levers: symptom, evidence, lever, and cost.}
+\label{tab:caching-levers}
+\end{table}
+
+The rule the chapter repeats: \textbf{a cache is a bet on the number of reads, so
+measure the break-even before placing it}. \Cref{ch:iceberg-spec} turns from
+keeping data in memory to the table format that organizes it on storage.
 
 \exercisehead
 \begin{exercises}
-\item Build a query that reads one CTE twice. Show the plan reusing the
-      exchange, then change the query so the reuse breaks and measure the
-      difference.
-\item Cache a DataFrame with \texttt{MEMORY\_AND\_DISK}, then with
-      \texttt{MEMORY\_AND\_DISK\_SER}. Compare GC time in the Executors tab for
-      a job that scans it repeatedly.
-\item Cache three DataFrames larger than storage memory can hold at once, read
-      each once, then re-read the first. Confirm from the Storage tab that it
-      was evicted and recomputed.
+\item \textbf{Run and observe.} Aggregate one week of \texttt{orders} 1, 2, 5,
+      and 10 times with and without \texttt{cache()}, and fill in a row of
+      \Cref{tab:caching-lab-breakeven}. Where do your lines cross, and what does
+      the crossing depend on?
+\item \textbf{Read a plan.} Self-join a per-product \texttt{sum} aggregate and find
+      the \texttt{ReusedExchange}. Change one side to \texttt{max}, and count the
+      scan stages before and after.
+\item \textbf{Predict, then check.} With a unified pool that holds two of three
+      equal caches, predict how many partitions of the first cache survive after
+      caching the third, and what a re-read of it costs. Then confirm in the
+      Storage tab.
 \end{exercises}
