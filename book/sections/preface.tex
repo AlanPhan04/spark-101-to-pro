@@ -26,7 +26,7 @@ and you can predict and change those movements once you can see them.
 
 Here is what that looks like in practice. A query reads files. When two rows must
 meet, for a join or a group, Spark ships one of them across the network. Spark can
-change its plan after it has seen how big the data really is. A table format such
+change its plan after it has seen how big the data is. A table format such
 as Iceberg lets the planner read a few kilobytes of metadata so that it does not
 have to read gigabytes of data. These sound like separate subjects, and most
 material treats them that way. They are one subject. Once you see it that way, the
