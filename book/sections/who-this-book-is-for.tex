@@ -1,25 +1,29 @@
 \chapter{Who This Book Is For}
 \label{ch:who-for}
 
-This book is written for a working data engineer or analytics engineer, two to
-six years in, who runs Spark SQL on an Iceberg lakehouse most days and has a
-nagging sense that the optimizer and the table format are black boxes. You may
-recognize some of this:
+This book is for you if you write Python and SQL, you want to work with large
+data, and nobody has yet shown you what happens between pressing \emph{run} and
+seeing the result. You do not need to have used Spark, run a cluster, or read a
+query plan. You do need to be curious about \emph{why} a query is fast or slow,
+because that is the question every chapter answers.
+
+You might recognize yourself in one of these:
 
 \begin{itemize}
-  \item You own pipelines that are fine until they are not --- a job that doubled
-  in runtime after the data grew, a join that spills to disk, a query that scans
-  the whole table when it should scan a day.
-  \item You have opened the Spark UI, but you read it like a dashboard rather than
-  a diagnostic.
-  \item You treat \texttt{spark.sql.*} settings as spells found on a forum, and you
-  could not say which mechanism a given one touches.
-  \item You know the JVM exists and that garbage collection and memory matter,
-  without a working model of either.
-  \item You think of Iceberg as ``Parquet with time travel.''
+  \item You are a data engineer, analytics engineer, or data analyst who has been
+  told to ``move this pipeline to Spark,'' and you want a mental model before you
+  start changing settings.
+  \item You have a query that runs fine on a sample and takes an hour on the real
+  table, and nobody can tell you why.
+  \item A colleague said ``check the shuffle'' or ``that table is Iceberg, so
+  it'll prune,'' and you nodded without being sure what either meant.
+  \item You have copied \texttt{spark.sql.*} settings from a forum and cannot say
+  what any of them does.
+  \item You work with Spark already, but the optimizer and the table format still
+  feel like black boxes.
 \end{itemize}
 
-If that describes you, the book is aimed at the gap between where you are and
+If one of these is you, the book is aimed at the gap between where you are and
 where \Cref{tab:who-levels} says you can be.
 
 \begin{table}[htbp]
@@ -43,23 +47,25 @@ Configuration & Copies snippets. & Knows which knob touches which mechanism, and
 
 \section*{What you should already know}
 
-The book assumes, and does not teach:
+You need three things:
 
 \begin{itemize}
-  \item \textbf{SQL}: joins, aggregation, window functions, subqueries.
-  \item \textbf{The relational model} and enough relational algebra to read a plan
-  as a tree of operators.
-  \item \textbf{Columnar versus row storage}, at the level of knowing what Parquet
-  is for. \Cref{app:refenv} adds the background Part~III needs.
-  \item \textbf{Kubernetes as an operator}: pods, resource limits, and why a pod is
-  OOM-killed.
-  \item Reading a stack trace, and basic command-line and Git use.
+  \item \textbf{Python basics}: functions, lists, dictionaries, and running a script
+  from a terminal.
+  \item \textbf{SQL basics}: \texttt{SELECT}, \texttt{WHERE}, \texttt{GROUP BY}, and
+  \texttt{JOIN}. Window functions and subqueries appear later and are explained
+  where they appear.
+  \item \textbf{A terminal}: enough to run a command and read its output. The
+  lab runs in Docker, so installing it helps; the repository's \texttt{lab/README}
+  lists the commands.
 \end{itemize}
 
-You do \emph{not} need to know Scala or Java. A few examples use Scala where SQL
-cannot express the idea, and they are short and explained line by line.
+You do \emph{not} need Hadoop, Java, Scala, or a cluster. A few examples in
+Part~V use Scala where SQL cannot express the idea; they are short and explained
+line by line. Kubernetes is the book's reference deployment, so the word appears in
+Part~I. You never have to operate it to follow along.
 
-\section*{What this book will not teach}
+\section*{What this book does not cover}
 
 To keep the focus on query performance on a lakehouse, the book leaves out:
 
@@ -73,12 +79,21 @@ To keep the focus on query performance on a lakehouse, the book leaves out:
   clarifies a design choice.
 \end{itemize}
 
-\section*{Who might want a different book}
+\section*{If you are somewhere else on the path}
 
-If you are brand new to Spark and have never run a query on it, begin with an
-introductory text and come back at \Cref{ch:shape}; the chapter is gentle, but it
-does not teach what a DataFrame is. If you administer the cluster rather than
-query it, Parts~I and~IV will serve you, and Part~III will explain what your
-users' tables are doing to your object store. And if you already read query plans
-for a living, the Iceberg chapters (Part~III) and the measured experiments are
-where this book is most likely to tell you something new.
+\textbf{If Spark is entirely new to you,} read straight through and let
+\Cref{ch:shape} give you the vocabulary. It is the gentlest chapter, but it moves
+fast. A companion that teaches the DataFrame API line by line, such as
+\emph{Learning Spark} \cite{DamjiEtAl2020}, makes a good second book to keep open
+beside this one. \Cref{ch:how-to-use} marks which sections to skim on a first read.
+
+\textbf{If you already run Spark jobs,} start with the symptom path in
+\Cref{ch:how-to-use}, and treat the rest as the mechanism behind what you see.
+
+\textbf{If you administer the cluster rather than query it,} Parts~I and~IV will
+serve you, and Part~III will explain what your users' tables are doing to your
+object store.
+
+\textbf{If you already read query plans for a living,} the Iceberg chapters
+(Part~III) and the measured experiments are where this book is most likely to tell
+you something new.

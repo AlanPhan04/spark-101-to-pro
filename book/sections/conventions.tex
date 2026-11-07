@@ -1,25 +1,60 @@
 \chapter{Conventions Used in This Book}
 \label{ch:conventions}
 
-\section*{One stack, and what ``true'' means}
+The following typographic conventions are used in this book.
 
-Every behavioral claim is written against the reference stack in \Cref{app:refenv}:
-Spark 3.5.2 and Iceberg format version 2.
-Three rules follow from that.
+\begin{description}[leftmargin=0pt, labelindent=0pt, itemsep=4pt]
+  \item[\emph{Italic}] marks a new term where it is defined, once, at its first
+  use. After that the term is used plainly.
+  \item[\texttt{Monospace}] marks code, SQL keywords, table and column names, file
+  names, and the output of commands. Configuration keys in running text look like
+  \conf{spark.memory.fraction}, and may break at the dots.
+  \item[\textbf{Bold}] marks the first words of a run-in heading and, in tables, the
+  column names.
+\end{description}
 
-\begin{itemize}
-  \item A behavior is stated as fact only if it holds on that stack.
-  \item When behavior changed across versions, a Note names the version (for
-  example, that adaptive coalescing is on by default from Spark 3.2).
-  \item Defaults are quoted as of Spark 3.5.2. A number --- a threshold, a size, a
-  speedup --- always comes with a source, or with ``measured'' and the environment
-  that measured it.
-\end{itemize}
+\section*{Callouts}
 
-\section*{Measured, derived, and claimed}
+Four boxes mark text that is not part of the main line of the argument. At most
+one appears on a typical page.
 
-The book distinguishes three kinds of statement, because they deserve different
-trust.
+\begin{note}
+Marks a version gotcha, a clarification, or a pointer to a later chapter.
+\end{note}
+
+\begin{warning}
+Marks a default or a pattern that silently costs money, correctness, or data.
+\end{warning}
+
+\begin{tip}
+Marks a diagnostic shortcut: a UI panel to check, a one-line command.
+\end{tip}
+
+\begin{analogy}
+Marks a plain-language comparison used to build intuition for a mechanism. It
+never replaces the mechanism, and it is pushed only as far as it stays accurate.
+Skip it if it does not click for you; the surrounding prose never depends on it.
+\end{analogy}
+
+\section*{Listings}
+
+Code and output appear in listings with a language tag: \texttt{sql}, \texttt{scala},
+or \texttt{text} for plans, UI excerpts, and shell output. A listing that produces
+output is followed by that output, labelled, so you can compare what you expect with
+what happened.
+
+Query plans are lightly trimmed. An ellipsis comment such as
+\texttt{-- ... 3 Filter nodes elided} marks a cut. Wide plans use smaller type and
+wrap long lines rather than running off the page.
+
+\section*{How sure the book is}
+
+Every behavioral claim is written against one reference stack
+(\Cref{app:refenv}): Spark 3.5.2 and Iceberg format version 2. A behavior is stated
+as fact only if it holds there. When behavior changed across versions, a Note names
+the version. Defaults are quoted as of Spark 3.5.2.
+
+Because statements deserve different amounts of trust, the book labels three kinds:
 
 \begin{description}[leftmargin=0pt, labelindent=0pt, itemsep=4pt]
   \item[Measured.] Produced by a lab script and shown with its output. These are
@@ -32,22 +67,12 @@ trust.
   cluster.''
 \end{description}
 
-\section*{Listings}
-
-Code and output appear in listings with a language tag: \texttt{sql}, \texttt{scala},
-or \texttt{text} for plans, UI excerpts, and shell output. Query plans are lightly
-trimmed; an ellipsis comment such as \texttt{-- ... 3 Filter nodes elided} marks a
-cut. Wide plans use a smaller type and wrap long lines rather than running off the
-page. Configuration keys in running text are typeset as
-\conf{spark.sql.adaptive.enabled}, and may break at the dots.
-
-A listing that produces output is followed by that output, labelled, so you can
-compare what you expect with what happened.
+A number such as a threshold, a size, or a speedup always comes with a source, or
+with ``measured'' and the environment that measured it.
 
 \section*{Terminology}
 
-Each term is defined once, in italics, at its first use, and used plainly after
-that. Where two names circulate for the same thing, the book picks one:
+Where two names circulate for the same thing, the book picks one:
 
 \begin{itemize}
   \item \emph{stage boundary}, not ``shuffle boundary'';
@@ -63,33 +88,10 @@ it.
 
 \section*{Figures and cross-references}
 
-Figures are vector graphics, so they stay sharp at any zoom, and share one color
-palette. Figures that show a measured result say so in the caption. Cross-references are links; a reference to a
-chapter, section, figure, or listing is always followed by its number.
-
-\section*{Callouts}
-
-Four callouts mark the text that is not part of the main line of the argument. At
-most one appears on a typical page.
-
-\begin{note}
-Marks a version gotcha, a clarification, or a pointer to a later chapter.
-\end{note}
-
-\begin{warning}
-Marks a default or a pattern that silently costs money, correctness, or data.
-\end{warning}
-
-\begin{tip}
-Marks a diagnostic shortcut --- a UI panel to check, a one-line command.
-\end{tip}
-
-\begin{analogy}
-Marks a plain-language comparison used to build intuition for a mechanism ---
-never a substitute for the mechanism itself, and always pushed only as far as it
-stays accurate. Skippable if it doesn't click for you; the surrounding prose
-never depends on it.
-\end{analogy}
+Figures are vector graphics, so they stay sharp at any zoom, and they share one
+color palette. A figure that shows a measured result says so in its caption.
+Cross-references are links, and a reference to a chapter, section, figure, or
+listing is always followed by its number.
 
 \section*{The running example}
 

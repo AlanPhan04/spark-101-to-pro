@@ -1,12 +1,29 @@
 \chapter{How to Use This Book}
 \label{ch:how-to-use}
 
-\section*{Five parts, one dependency order}
+\section*{How the book is organized}
 
-The book has five parts. Part~I is the foundation and everything else assumes it.
-Parts~II and~III are the core; they can be read in either order after Part~I.
-Part~IV applies the model operationally, and Part~V is optional depth.
-\Cref{fig:how-parts} shows the dependencies.
+The book has five parts. Each one answers a question, and each depends on the one
+before it.
+
+\begin{description}[leftmargin=0pt, labelindent=0pt, itemsep=4pt]
+  \item[Part~I, How Spark Executes a Query.] What happens between pressing
+  \emph{run} and getting a result: the driver and the executors, jobs, stages and
+  tasks, the optimizer, and how an executor uses memory. Everything else assumes it.
+  \item[Part~II, Making Queries Fast.] The shuffle, joins, adaptive query
+  execution, pruning, and caching: the places where a query gets slow, and why.
+  \item[Part~III, The Iceberg Lakehouse.] How a table is stored as files plus
+  metadata, how readers and writers share it safely, and how to lay it out so
+  queries read less.
+  \item[Part~IV, Operating Spark.] Sizing, configuration, debugging, and
+  streaming: applying the model when a real job misbehaves.
+  \item[Part~V, Internals.] How Tungsten, the shuffle framework, and DataSource V2
+  are built. This part is optional; skip it until you want to know how, not just
+  what.
+\end{description}
+
+\Cref{fig:how-parts} shows the dependencies. Part~I comes first. Parts~II and~III
+can be read in either order after it. Part~IV needs both.
 
 \begin{figure}[htbp]
 \centering
@@ -32,14 +49,13 @@ once you have the model; Part~V when you want to know how it is built.}
 \label{fig:how-parts}
 \end{figure}
 
-Within a part, chapters build on their predecessors, but each states its
-prerequisites at the start so you can jump in.
-
 \section*{Four ways to read it}
 
 \begin{description}[leftmargin=0pt, labelindent=0pt, itemsep=6pt]
-  \item[Straight through.] The intended path. Each chapter ends with a summary and
-  exercises, and the running specimen carries from one to the next.
+  \item[Straight through (recommended if Spark is new to you).] Read the parts in
+  order. On a first read, skim three things: the JIT and garbage-collection
+  sections of \Cref{ch:execmem}, the long measurements in \Cref{ch:aqe}, and all of
+  Part~V. The chapter summaries tell you what you can safely come back to.
   \item[``My query is slow right now.''] Read \Cref{ch:shape} for the vocabulary,
   then the \texttt{EXPLAIN} sections of \Cref{ch:catalyst} and \Cref{app:plans} to
   read the plan, then \Cref{ch:debugging} to localize the cost. Each chapter's
@@ -59,16 +75,16 @@ The chapters share one pattern, so you know where to look:
   \item an \textbf{opening} that states the question the chapter answers, using the
   running example;
   \item the \textbf{mechanism}, explained before any setting is mentioned;
-  \item a \textbf{measured demonstration} --- the plan, the metric, or the file
-  listing --- usually from the lab (\Cref{sec:refenv-lab});
+  \item a \textbf{measured demonstration}: the plan, the metric, or the file
+  listing, usually from the lab (\Cref{sec:refenv-lab});
   \item a \textbf{symptom $\rightarrow$ evidence $\rightarrow$ knob $\rightarrow$ cost}
   table, which is the chapter's field guide: what you will observe, where to see
   it, what to change, and what the change costs;
   \item a \textbf{summary and exercises}.
 \end{enumerate}
 
-The tables are deliberately last. If you start with them, you get the configs
-without the model, which is the failure mode this book is written against.
+The tables come last on purpose. If you start with them, you get the settings
+without the model, which is exactly what this book is written against.
 
 \section*{The running example}
 
@@ -79,21 +95,31 @@ defined in \Cref{app:refenv}. Using the same tables everywhere means a change in
 one chapter can be seen in the plans of another, and you never have to learn a new
 toy schema.
 
-\section*{Running the examples yourself}
+\section*{Code examples and the lab}
 
-The book does not require a cluster. The \texttt{lab/} directory of the
-repository contains a Docker-based environment with Spark 3.5.2, the Iceberg
-runtime, a generator for the synthetic \texttt{orders} data, and one script per
-experiment; \Cref{sec:refenv-lab} describes the setup and its limits. The lab is
-a single machine, so it reproduces the \emph{mechanisms} and the \emph{ratios}
-reliably and the absolute timings not at all. Where a chapter reports a time, it
-says which environment produced it.
+The book does not require a cluster. Everything it measures runs on one machine
+in a Docker container.
 
-If your stack differs from the reference --- another Spark version, a different
-catalog or object store --- the mechanisms in the
-book still hold, but defaults, config names, and some behaviors will not. The
-text flags the places where it knows the version matters; for everything else,
-re-run the relevant experiment on your stack before you rely on a number.
+\begin{itemize}
+  \item \textbf{Where the code is.} The \texttt{lab/} directory of the repository
+  (\nolinkurl{github.com/AlanPhan04/spark-101-to-pro}) holds a generator for the
+  synthetic \texttt{orders} data and one script per experiment. The repository
+  is licensed under Apache 2.0.
+  \item \textbf{What it runs.} Spark 3.5.2, the Iceberg runtime 1.6.1, Java 17, and
+  a file-based Iceberg catalog, all inside the container.
+  \item \textbf{What you need.} Docker, several gigabytes of free disk, and a
+  terminal. \Cref{sec:refenv-lab} describes the setup and its limits.
+\end{itemize}
+
+The lab is a single machine, so it reproduces the \emph{mechanisms} and the
+\emph{ratios} reliably and the absolute timings not at all. Where a chapter reports
+a time, it says which environment produced it.
+
+If your stack differs from the reference (another Spark version, a different
+catalog or object store), the mechanisms in the book still hold, but defaults,
+config names, and some behaviors will not. The text flags the places where it knows
+the version matters. For everything else, re-run the relevant experiment on your
+stack before you rely on a number.
 
 \section*{Exercises}
 
