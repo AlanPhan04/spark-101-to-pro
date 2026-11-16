@@ -36,25 +36,52 @@ single flat Java method for a chain of operators (\Cref{sec:wholestage-codegen},
 \Cref{ch:tungsten}) instead of walking an operator tree.
 \Cref{fig:jvm-jit-pipeline} follows a method from source code to fast code.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.95\linewidth]{jvm-jit-pipeline.pdf}
   \caption{From source to machine code. The compiler turns Scala into portable bytecode once. At run time the JVM starts by interpreting it, notices which methods are called often, and compiles only those to native code.}
   \label{fig:jvm-jit-pipeline}
 \end{figure}
 
+\paragraph{Reading the figure.} Follow the arrows from the top left.
+\begin{enumerate}[nosep]
+\item \textbf{Scala source} is the code the Spark developers wrote. The
+      \textbf{compiler} runs once, at build time, and writes \textbf{bytecode}:
+      instructions for an imaginary computer that look the same on every machine.
+      Nothing has run yet.
+\item Everything in the blue frame happens at run time, inside the JVM. The
+      \textbf{interpreter} (orange, because it is the slow path) reads the bytecode
+      and carries it out one instruction at a time. It can start at once, but it
+      runs slowly.
+\item While it interprets, the JVM counts how often each method is called. A method
+      that is called often is \emph{hot}.
+\item The \textbf{JIT compiler} translates only the hot methods into
+      \textbf{machine code} (green, the fast path), which the processor runs
+      directly. Later calls use that code.
+\end{enumerate}
+The line under the figure is the consequence: the first runs of a query are
+mostly interpreted and slow, and later runs are mostly compiled and fast.
+
+
 The lab measured the warm-up directly: the same filter-and-aggregate query run
 eight times in one fresh JVM took 6.5~s the first time and 0.8--1.6~s from the
 second run on (\Cref{fig:jit-warmup}) --- a factor of about eight, with nothing
 changed but how much of the code the JIT had already compiled.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.9\linewidth]{jit-warmup.pdf}
   \caption{One query, eight consecutive runs in a fresh JVM. The first run pays
   for class loading, interpretation and compilation; later runs run compiled code.}
   \label{fig:jit-warmup}
 \end{figure}
+
+\paragraph{Reading the figure.} Each bar is one run of the same query. The horizontal axis counts
+the runs, 1 to 8; the vertical axis is the time in seconds. The first bar (rose, the
+cost) is 6.46~s: that run loads classes, interprets, and compiles. Bars 2 to 8
+(green) are 0.83 to 1.61~s. Between run 1 and run 2 nothing changed except how much
+of the code the JIT had already compiled.
+
 
 The second is \emph{automatic memory management}: the program allocates objects
 and never frees them, and a \emph{garbage collector} reclaims what is no longer
@@ -100,12 +127,30 @@ objects, and it is why Spark's execution engine stores rows in a packed binary f
 in a few large buffers, rather than as JVM objects (\Cref{ch:tungsten}).
 \Cref{fig:object-overhead} shows where the extra bytes go.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.95\linewidth]{object-overhead.pdf}
   \caption{One million integers, two layouts. A list of boxed integers pays a reference and an object header for every value; a primitive array stores only the values. The totals are the lab's measurements with Spark's \texttt{SizeEstimator}.}
   \label{fig:object-overhead}
 \end{figure}
+
+\paragraph{Reading the figure.} The two panels hold the same three numbers. The boxes are not drawn
+to scale.
+\begin{enumerate}[nosep]
+\item \textbf{Left panel (rose, the costly layout).} The top row is the list. Each
+      gray box is a 4-byte \emph{reference}: a pointer to an object stored somewhere
+      else in memory. Each arrow leads to an \texttt{Integer} object, drawn in two
+      pieces: the \emph{header} (rose) that every Java object carries, and the
+      \texttt{int} value (blue), the only piece that is actual data. The object is
+      16 bytes, 12 of them header and 4 of them value, as the listing above shows.
+\item Adding it up: 4 bytes of reference plus a 16-byte object, about 20 bytes, to
+      store 4 bytes of data.
+\item \textbf{Right panel (green).} An \texttt{int[]} stores the 4-byte values
+      side by side in one block. There are no references and no per-value header.
+\item The bottom line of each panel is the lab's measurement for a million
+      integers: 20.6~MB against 4.0~MB.
+\end{enumerate}
+
 
 The second property is that the heap is \emph{managed}: the program never frees
 memory explicitly, and reclamation is the job of the garbage collector
@@ -139,6 +184,44 @@ lighting (\emph{overhead}) --- draws power regardless of occupancy. The whole
 lot only fits inside the property line the landlord (the cluster manager)
 enforces: exceed it, and the building is condemned, tenants and all.
 \end{analogy}
+
+\Cref{fig:executor-memory-model} is the whole map in one picture. The paragraphs after it take it apart piece by piece.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{executor-memory-model.pdf}
+  \caption{An executor's memory: the JVM heap (reserved / unified / user), the
+  optional off-heap pool, and the overhead the process needs outside both. The
+  cluster manager's container limit must cover all three. Numbers are worked for
+  an 8~GB heap with 2~GB overhead.}
+  \label{fig:executor-memory-model}
+\end{figure}
+
+\paragraph{Reading the figure.} The figure works through an example with an 8~GB heap and 2~GB of
+overhead. Read it left to right.
+\begin{enumerate}[nosep]
+\item \textbf{JVM heap} (the large frame on the left) is everything
+      \conf{spark.executor.memory} sets. From the top: \textbf{Reserved} (gray) is a
+      fixed 300~MB that no query can use. \textbf{Unified memory} (blue) is about
+      4.6~GB, $0.6 \times (\text{heap} - 300~\text{MB})$. It is the only pool Spark
+      counts byte by byte, and the only one that spills to disk when full. It holds
+      two shares of about 2.3~GB each, \textbf{Execution} (joins, sorts,
+      aggregations, shuffle buffers) and \textbf{Storage} (cached and broadcast
+      blocks), separated by a soft boundary. \textbf{User memory} (rose) is the
+      remaining 40\%, about 3.1~GB, for the objects your own code creates. Spark
+      neither counts nor spills it, so overflowing it ends in an
+      \conf{OutOfMemoryError}.
+\item \textbf{Off-heap pool} (dashed frame, middle) is a second unified pool
+      outside the heap, sized by \conf{spark.memory.offHeap.size}. It is zero unless
+      you enable it, which is why the frame is dashed.
+\item \textbf{Overhead} (right) is 2~GB here. It covers thread stacks, class
+      metadata, network and codec buffers, and PySpark worker processes. It is
+      memory the process actually uses, not a safety margin.
+\item \textbf{Container limit} (purple bar, bottom) is the sum of the three:
+      heap, off-heap, and overhead, 10~GB in this example. The cluster manager
+      enforces it from outside the JVM. If the process crosses it, the kernel kills
+      the pod and no Java error appears.
+\end{enumerate}
 
 \paragraph{The heap.} \conf{spark.executor.memory} sets the maximum size of the
 JVM heap, the region every object the executor allocates comes from. Spark carves
@@ -227,16 +310,6 @@ or off-heap memory was not counted into the limit --- the kernel kills it
 unified memory spill to disk and only throws when user memory or a single
 un-spillable allocation is the cause.
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{executor-memory-model.pdf}
-  \caption{An executor's memory: the JVM heap (reserved / unified / user), the
-  optional off-heap pool, and the overhead the process needs outside both. The
-  cluster manager's container limit must cover all three. Numbers are worked for
-  an 8~GB heap with 2~GB overhead.}
-  \label{fig:executor-memory-model}
-\end{figure}
-
 \paragraph{Per task, not per executor.} Execution memory is shared by the tasks an
 executor runs at the same moment, one per core (\conf{spark.executor.cores}). Adding
 cores to the same heap therefore shrinks each task's share: memory per task is the
@@ -248,12 +321,29 @@ many cores spills on work a narrower one finishes in memory.
 \Cref{fig:spill-heatmap} measured exactly this on twelve executor shapes
 (\Cref{sec:executor-sizing}).
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.95\linewidth]{memory-per-task.pdf}
   \caption{From heap to a task's share, for a 4~GiB heap. The unified pool is shared by every task that runs at the same moment, so doubling the cores halves each task's room. The numbers inside the green boxes are MiB per task.}
   \label{fig:memory-per-task}
 \end{figure}
+
+\paragraph{Reading the figure.} Read it from the top.
+\begin{enumerate}[nosep]
+\item \textbf{The bar on top} is the 4~GiB heap, drawn to scale. The gray
+      sliver on the left is the 300~MiB reserve. The blue part is the unified
+      pool, $(4096 - 300) \times 0.6 = 2278$~MiB. The rose part is user memory, the
+      other 40\%, which Spark does not track.
+\item \textbf{The green row marked ``4 cores''} splits the blue pool among the four
+      tasks that run at the same moment. Each box is one task's share: $2278 \div 4
+      \approx 569$~MiB.
+\item \textbf{The row marked ``8 cores''} splits the same pool eight ways:
+      $2278 \div 8 \approx 285$~MiB each.
+\item The pool did not grow between the rows. Only the number of tasks sharing it
+      did. A task that needs 400~MiB for a sort fits in the first row and spills in
+      the second; \Cref{ch:tuning} measures how much a real stage needs.
+\end{enumerate}
+
 
 \section{Garbage collection: Parallel, G1, ZGC}
 \label{sec:mem-gc}
@@ -270,12 +360,25 @@ the executor lost and re-runs its work elsewhere (\Cref{sec:failure-signatures})
 Collectors differ mainly in how they trade pause length against throughput and
 CPU cost. \Cref{fig:gc-collector-timelines} sketches the pause pattern of each.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.95\linewidth]{gc-collector-timelines.pdf}
   \caption{Pause shapes of the three collectors on the same timeline. Green is the application running; rose is a stop-the-world pause. The sketch shows the pattern, not measured values; the measurements follow in \Cref{fig:gc-collectors-measured}.}
   \label{fig:gc-collector-timelines}
 \end{figure}
+
+\paragraph{Reading the figure.} Each row is one collector over the same stretch of time. Green is
+the application running. Rose is a stop-the-world pause, when every application
+thread is frozen.
+\begin{enumerate}[nosep]
+\item \textbf{Parallel} has one long pause: it collects the whole heap at once.
+\item \textbf{G1} has many short pauses: each one collects a small slice of the heap.
+\item \textbf{ZGC} has almost no pauses: it does its work while the application
+      runs, at the price of more CPU.
+\end{enumerate}
+The widths are a sketch, not measured. The next figure gives the measured
+values for the lab's stage.
+
 
 \begin{analogy}
 Picture three ways to clean a large office building overnight. Parallel GC is
@@ -322,7 +425,7 @@ ZGC & sub-millisecond & higher constant CPU \& memory & very large heaps where G
 \label{tab:mem-collectors}
 \end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{gc-pause-stall.pdf}
   \caption{A stop-the-world pause freezes every task slot on the executor at
@@ -333,6 +436,21 @@ ZGC & sub-millisecond & higher constant CPU \& memory & very large heaps where G
   ones.}
   \label{fig:gc-pause-stall}
 \end{figure}
+
+\paragraph{Reading the figure.} Time runs from left to right. Each row is one of the four task slots
+of a single executor, and each green bar is a task running in that slot.
+\begin{enumerate}[nosep]
+\item The tall rose block in the middle is a stop-the-world pause. It covers
+      \emph{all four rows at once}, because the pause freezes the whole JVM, not one
+      task. The tasks to its left stop where they are; the green bars to its right
+      are the same slots getting back to work.
+\item The amber box at the bottom shows what happens if the pause is long. The
+      executor cannot send its heartbeat while it is frozen. If it stays silent past
+      the timeout, the driver marks the executor lost and re-runs its work elsewhere.
+\item That is why a GC problem can show up as lost executors and repeated stages,
+      not only as slow ones.
+\end{enumerate}
+
 
 The lab ran the same sort-heavy stage (4~GB heap, 8 cores) under each collector
 (\Cref{fig:gc-collectors-measured}). Wall-clock time was within 1.3 seconds for G1
@@ -347,13 +465,27 @@ charged to tasks; the lab's \texttt{-Xlog:gc} format for ZGC carries no pause
 lines, so its pause column is not available.) On this stage, at a 4~GB heap, G1's
 shorter pauses cost no throughput and ZGC cost throughput.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{gc-collectors-measured.pdf}
   \caption{One stage under three collectors. Wall clock is close for G1 and
   Parallel; the longest pause and the per-task GC metric are not.}
   \label{fig:gc-collectors-measured}
 \end{figure}
+
+\paragraph{Reading the figure.} There are three panels, one per measurement, and the same three
+collectors in each: G1 (blue), Parallel (orange), and ZGC (purple).
+\begin{enumerate}[nosep]
+\item \textbf{Wall clock (left)} is how long the stage took: 22.8, 23.1 and
+      27.2~s. G1 and Parallel are close; ZGC is slower.
+\item \textbf{GC time in task metrics (middle)} is the GC time summed over all
+      tasks: 1.8, 25.4 and 34.5~s. It is far larger than the pause time because each
+      task counts a pause that happened while it was running.
+\item \textbf{Longest pause (right)} is the single worst freeze: 47~ms for G1 and
+      835~ms for Parallel. ZGC shows ``n/a'' because the lab's log format for ZGC
+      has no pause lines.
+\end{enumerate}
+
 
 The generational hypothesis --- that most objects die young --- underlies Parallel
 GC and G1: they collect a small ``young'' area cheaply and often, and the full heap
@@ -362,12 +494,30 @@ ZGC arrives in JDK~21. A workload that holds a large amount of long-lived data i
 cache violates the hypothesis and pushes the collector toward the expensive path,
 which is one more reason to cache deliberately (\Cref{ch:caching}).
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.95\linewidth]{gc-generations.pdf}
   \caption{The generational layout used by Parallel GC and G1. New objects start in the young generation, where most die quickly and a minor collection is cheap. Objects that survive repeatedly are promoted to the old generation, which only a full collection cleans.}
   \label{fig:gc-generations}
 \end{figure}
+
+\paragraph{Reading the figure.} Follow the arrows from the left.
+\begin{enumerate}[nosep]
+\item \textbf{New objects} (gray) are allocated in \textbf{Eden}, the first
+      area of the young generation.
+\item When Eden fills, a \emph{minor collection} runs. It copies the objects that
+      are still in use into a \textbf{Survivor} area and frees everything else in one
+      step. It is cheap because most objects are already dead, so there is little to
+      copy.
+\item An object that survives several minor collections is \emph{promoted} (the
+      orange arrow) to the \textbf{old generation}. That frame is rose because
+      cleaning it is the costly operation.
+\item The old generation fills slowly. When it is full a \emph{full collection}
+      has to examine a large part of the heap: rare, but long.
+\end{enumerate}
+This matters for Spark because cached blocks and big hash tables live a long time.
+They pile up in the old generation and make full collections more likely.
+
 
 Monitoring GC time is covered in \Cref{sec:reading-metrics}; the executor JVM
 options that select and tune a collector are in \Cref{ch:tuning}.
@@ -398,14 +548,32 @@ written once. The advantage is therefore largest for many small separately
 serialized objects, which is what a shuffle of RDD records is.
 \Cref{fig:serialization-bytes} shows why.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.95\linewidth]{serialization-bytes.pdf}
   \caption{What a serializer does, and why Kryo is smaller. Java writes the class and field names with every record; Kryo writes a short class id and the values. Sizes are the lab's measurement for one five-field record.}
   \label{fig:serialization-bytes}
 \end{figure}
 
-\begin{figure}[htbp]
+\paragraph{Reading the figure.} The picture has two parts.
+\begin{enumerate}[nosep]
+\item \textbf{The top row} shows what a serializer is for. Objects in the heap
+      (gray) go through the serializer (blue) and come out as flat bytes (green).
+      Flat bytes can leave the JVM: they can be shuffled, spilled to disk, or
+      broadcast.
+\item \textbf{The lower part} shows one five-field record written two ways, with
+      widths proportional to the number of bytes. In the Java row, every record is a
+      rose block (the class name and field names) followed by a small green block
+      (the data). Two records are shown, so the rose block appears twice. In the
+      Kryo row there is only data, and three records take up less room than one
+      Java record: 42~bytes each against 299.
+\item The last line explains the exception. When the whole array of records is
+      written at once, Java writes the class description a single time, and the gap
+      shrinks to 58 against 41~bytes per record.
+\end{enumerate}
+
+
+\begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{serialization-size.pdf}
   \caption{Left: one million integers as a primitive array and as boxed objects.
@@ -413,6 +581,18 @@ serialized objects, which is what a shuffle of RDD records is.
   at a time and as one array.}
   \label{fig:serialization-size}
 \end{figure}
+
+\paragraph{Reading the figure.} The figure has two panels.
+\begin{enumerate}[nosep]
+\item \textbf{Left panel:} the heap size of one million integers. The green bar
+      is the primitive array, 4.0~MB. The rose bar is the list of boxed objects,
+      20.6~MB: 5.2 times more, for the same values.
+\item \textbf{Right panel:} the bytes needed to write one five-field record, in four
+      cases. Rose bars are the costly ones. Java writing one record at a time takes
+      299~bytes and Kryo 42. Writing the whole array in one go takes Java 58~bytes
+      per record and Kryo 41, because the class description is written once.
+\end{enumerate}
+
 
 The smaller output directly reduces shuffle volume, spill size and broadcast
 footprint (\Cref{ch:tuning}).
