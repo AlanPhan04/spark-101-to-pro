@@ -20,21 +20,38 @@ from each other while a job runs is picked up alongside caching in
 Spark is written in Scala and runs on the Java Virtual Machine, and two features
 of that platform shape how it performs.
 
-The first is \emph{just-in-time compilation}. Scala compiles to JVM
-\emph{bytecode}, a portable instruction set the JVM does not run directly.
-Instead it interprets bytecode at first and watches which methods run often; a
-\emph{hot} method is then compiled to native machine code by the JIT, with
-optimizations --- inlining, loop unrolling, dead-code elimination, escape
-analysis --- that depend on what the method actually did the first few thousand
-times it ran. Two consequences follow. A Spark process is slowest in its first
-seconds, before the JIT has warmed up, which is one reason interactive sessions keep a driver
-alive rather than starting one per query (\Cref{sec:shape-deploy}) and why a
-micro-benchmark that runs a snippet once tells you almost nothing. And the JIT
-compiles \emph{tight, predictable} code far better than code full of virtual
-calls and branches --- which is exactly why Spark's execution engine generates a
-single flat Java method for a chain of operators (\Cref{sec:wholestage-codegen},
-\Cref{ch:tungsten}) instead of walking an operator tree.
-\Cref{fig:jvm-jit-pipeline} follows a method from source code to fast code.
+The first is \emph{just-in-time compilation}. Spark's code is written in Scala,
+and a processor cannot run Scala directly. Two translation steps stand between the
+code and the processor.
+
+The first step happens once, before anything runs. The Scala compiler turns the code
+into \emph{bytecode}: a list of small, simple instructions that is the same on every
+machine. The processor cannot run bytecode either, so the JVM must translate it
+again, while the program is running.
+
+The JVM has two ways to do that. It starts with an \emph{interpreter}, which reads
+one bytecode instruction at a time and carries it out. That needs no preparation,
+but it is slow. While it works, the JVM counts how often each piece of code (a
+\emph{method}) is called. A method that is called again and again is \emph{hot}.
+For hot methods the JVM switches to the second way. The \emph{just-in-time
+compiler}, or JIT, translates the whole method once into \emph{machine code}, the
+instructions the processor understands directly. After that, every call runs the
+fast version.
+
+Think of a translator reading a speech aloud one sentence at a time. That is the
+interpreter. When the same paragraph comes up again and again, the translator writes
+out a finished translation once and reads from it. The first reading is slow and the
+later ones are quick. \Cref{fig:jvm-jit-pipeline} shows the path.
+
+Two consequences matter for Spark. First, a Spark process is slowest in its first
+seconds, before the JIT has found the hot methods. That is one reason interactive
+sessions keep a driver alive instead of starting a new one for every query
+(\Cref{sec:shape-deploy}), and why timing a snippet that runs only once tells you
+almost nothing. Second, the JIT does its best work on simple, repetitive code, such
+as a short loop that does the same thing to every row. It does less with code that
+jumps between many different methods. That is why Spark's execution engine
+generates one flat Java method for a chain of operators, instead of passing each row
+from operator to operator (\Cref{sec:wholestage-codegen}, \Cref{ch:tungsten}).
 
 \begin{figure}[H]
   \centering
