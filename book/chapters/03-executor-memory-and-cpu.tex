@@ -42,81 +42,30 @@ call to A skips the interpreter and runs A's machine code. Method B, which has n
 been called often, is still interpreted, until it becomes hot and gets its own
 machine code in turn.
 
-Here is what that looks like for real. This small class is written in Java so it
-is easy to read; the Scala compiler produces the same kind of bytecode. It mimics
-the filter in the query below:
+For example, the filter in the query below needs only four methods.
 
-\begin{lstlisting}[language=Java,numbers=none,caption={A tiny class that mimics the filter in the query below},captionpos=b,label=lst:mem-java-source]
-public class RowFilter {
-    private double sum = 0.0;
+\begin{table}[H]
+\centering\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}P{3.2cm}P{5.4cm}P{3.4cm}P{2.2cm}@{}}
+\toprule
+\textbf{Method} & \textbf{What it does} & \textbf{Called} & \textbf{Hot?} \\
+\midrule
+\texttt{isLarge} & compares one value with 100 & once per row & yes, fast \\
+\texttt{addToSum} & adds one value to the total & once per row above 100 & yes, later \\
+\texttt{processRow} & calls the two methods above & once per row & yes, fast \\
+\texttt{result} & hands back the total & once, at the end & never \\
+\bottomrule
+\end{tabular}
+\caption{Four methods and how often each is called. Each one is judged and
+compiled on its own.}
+\label{tab:mem-methods}
+\end{table}
 
-    // called once per row
-    boolean isLarge(double orderTotal) {
-        return orderTotal > 100.0;
-    }
-    // called once per row above 100
-    void addToSum(double orderTotal) {
-        sum = sum + orderTotal;
-    }
-    // called once per row
-    void processRow(double orderTotal) {
-        if (isLarge(orderTotal)) {
-            addToSum(orderTotal);
-        }
-    }
-    // called once, at the end
-    double result() {
-        return sum;
-    }
-}
-\end{lstlisting}
-
-Compiling it and listing the bytecode with \texttt{javap -c -p} (JDK~18) gives the
-following. Every unindented name is a method, and the numbered lines under it are
-that method's bytecode instructions.
-
-\begin{lstlisting}[language=text,numbers=none,caption={The bytecode of RowFilter, one block per method (constructor omitted)},captionpos=b,label=lst:mem-bytecode-methods]
-boolean isLarge(double);
-    0: dload_1
-    1: ldc2_w        #13     // double 100.0d
-    4: dcmpl
-    5: ifle          12
-    8: iconst_1
-    9: goto          13
-   12: iconst_0
-   13: ireturn
-
-void addToSum(double);
-    0: aload_0
-    1: aload_0
-    2: getfield      #7      // Field sum:D
-    5: dload_1
-    6: dadd
-    7: putfield      #7      // Field sum:D
-   10: return
-
-void processRow(double);
-    0: aload_0
-    1: dload_1
-    2: invokevirtual #15     // Method isLarge:(D)Z
-    5: ifeq          13
-    8: aload_0
-    9: dload_1
-   10: invokevirtual #19     // Method addToSum:(D)V
-   13: return
-
-double result();
-    0: aload_0
-    1: getfield      #7      // Field sum:D
-    4: dreturn
-\end{lstlisting}
-
-The class has four methods, and the \texttt{invokevirtual} lines in
-\texttt{processRow} are the calls to the other two. Run it over the rows of the query.
-\texttt{processRow} and \texttt{isLarge} run once per row, so they become hot
-within the first few thousand rows. \texttt{addToSum} runs only for rows above 100,
-so it becomes hot more slowly. \texttt{result} runs once, never becomes hot, and
-stays interpreted for the whole job. Each method is judged and compiled on its own.
+Each method is a short block of bytecode. In the JDK's \texttt{javap} listing,
+\texttt{isLarge} is eight instructions: load the value, compare it with 100.0, and
+return true or false. \texttt{result} runs once, never becomes hot, and stays
+interpreted for the whole job.
 
 Think of a translator reading a speech aloud one sentence at a time. That is the
 interpreter. When the same paragraph comes up again and again, the translator writes
