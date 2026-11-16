@@ -35,8 +35,12 @@ but it is slow. While it works, the JVM counts how often each piece of code (a
 \emph{method}) is called. A method that is called again and again is \emph{hot}.
 For hot methods the JVM switches to the second way. The \emph{just-in-time
 compiler}, or JIT, translates the whole method once into \emph{machine code}, the
-instructions the processor understands directly. After that, every call runs the
-fast version.
+instructions the processor understands directly. Bytecode is not one long
+sequence that the JVM walks through from the top. It is organized into methods, and
+the JIT works one method at a time. Once method A has been compiled, every later
+call to A skips the interpreter and runs A's machine code. Method B, which has not
+been called often, is still interpreted, until it becomes hot and gets its own
+machine code in turn.
 
 Think of a translator reading a speech aloud one sentence at a time. That is the
 interpreter. When the same paragraph comes up again and again, the translator writes
