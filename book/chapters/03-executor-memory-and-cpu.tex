@@ -147,14 +147,15 @@ cost) is 6.46~s: that run loads classes, interprets, and compiles. Bars 2 to 8
 of the code the JIT had already compiled.
 
 
-The second is \emph{automatic memory management}: the program allocates objects
-and never frees them, and a \emph{garbage collector} reclaims what is no longer
-reachable. This is a convenience with a running cost, and for a data engine
-moving billions of rows the cost is large enough that Spark works hard to keep
-its data in a few large, packed buffers instead of millions of small objects,
-which leaves the collector little to track. The rest of this
-chapter is about where an executor's memory goes, and \Cref{sec:mem-gc} about
-what the garbage collector does to it.
+The second is \emph{automatic memory management}. A Java or Scala program
+creates objects whenever it needs them and never frees them by hand. Instead, a
+background process called the \emph{garbage collector} finds the objects that
+nothing uses any more and frees their memory. That is convenient, but the collector
+has to do work, and the more objects there are, the more work it has. Spark can
+handle billions of rows, so it avoids creating a separate object for each one. It
+packs the data into a few large blocks of memory, and the collector then has only a
+few things to look after. The rest of this chapter is about where an executor's
+memory goes, and \Cref{sec:mem-gc} is about what the garbage collector does to it.
 
 \section{Heap layout and object representation}
 \label{sec:mem-heap}
