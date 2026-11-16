@@ -41,7 +41,25 @@ fast version.
 Think of a translator reading a speech aloud one sentence at a time. That is the
 interpreter. When the same paragraph comes up again and again, the translator writes
 out a finished translation once and reads from it. The first reading is slow and the
-later ones are quick. \Cref{fig:jvm-jit-pipeline} shows the path.
+later ones are quick.
+
+Here is what ``called again and again'' means in Spark. Take this query on the
+lab's \texttt{orders} table, which has 30 million rows:
+
+\begin{lstlisting}[language=sql,numbers=none,caption={A query whose inner step runs once per row},captionpos=b,label=lst:mem-hot-method]
+SELECT sum(order_total)
+FROM orders
+WHERE order_total > 100;
+\end{lstlisting}
+
+\noindent An executor works through the rows one at a time. For every row it runs
+the same small piece of code: read \texttt{order\_total}, compare it with 100, and if
+it is larger, add it to the running sum. That piece of code is a method. The rows
+change, but the method is the same, and it is called once per row, so 30 million
+times. After a few thousand calls the JVM marks it hot and compiles it, and the
+remaining millions of rows run the fast version. The same thing happens to every
+step of a bigger query, such as the join and the grouping.
+\Cref{fig:jvm-jit-pipeline} shows the path.
 
 Two consequences matter for Spark. First, a Spark process is slowest in its first
 seconds, before the JIT has found the hot methods. That is one reason interactive
