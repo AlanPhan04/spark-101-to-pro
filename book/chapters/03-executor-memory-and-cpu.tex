@@ -34,6 +34,14 @@ compiles \emph{tight, predictable} code far better than code full of virtual
 calls and branches --- which is exactly why Spark's execution engine generates a
 single flat Java method for a chain of operators (\Cref{sec:wholestage-codegen},
 \Cref{ch:tungsten}) instead of walking an operator tree.
+\Cref{fig:jvm-jit-pipeline} follows a method from source code to fast code.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{jvm-jit-pipeline.pdf}
+  \caption{From source to machine code. The compiler turns Scala into portable bytecode once. At run time the JVM starts by interpreting it, notices which methods are called often, and compiles only those to native code.}
+  \label{fig:jvm-jit-pipeline}
+\end{figure}
 
 The lab measured the warm-up directly: the same filter-and-aggregate query run
 eight times in one fresh JVM took 6.5~s the first time and 0.8--1.6~s from the
@@ -52,7 +60,8 @@ The second is \emph{automatic memory management}: the program allocates objects
 and never frees them, and a \emph{garbage collector} reclaims what is no longer
 reachable. This is a convenience with a running cost, and for a data engine
 moving billions of rows the cost is large enough that Spark works hard to keep
-most of its data \emph{out} of the managed heap entirely. The rest of this
+its data in a few large, packed buffers instead of millions of small objects,
+which leaves the collector little to track. The rest of this
 chapter is about where an executor's memory goes, and \Cref{sec:mem-gc} about
 what the garbage collector does to it.
 
@@ -71,7 +80,7 @@ first is \emph{per-object overhead}. Every object carries a header --- a mark wo
 and a pointer to its class --- before any field is stored, and the allocator pads
 every object to an eight-byte boundary.
 
-\begin{lstlisting}[numbers=none,caption={Cost of a boxed integer on a 64-bit JVM},captionpos=b]
+\begin{lstlisting}[numbers=none,caption={Cost of a boxed integer on a 64-bit JVM},captionpos=b,label=lst:mem-boxed-integer]
 java.lang.Integer
   object header   12 bytes   (mark word + class pointer)
   int value        4 bytes
@@ -87,8 +96,16 @@ costs 56 bytes for 10 bytes of text. A row represented as an array of boxed Java
 backing character array) can be several times larger in the heap than the same
 row encoded as raw bytes. This is the amplification you see when a compressed
 Parquet file expands to many times its on-disk size once decoded into Java
-objects, and it is why Spark's execution engine stores rows off the object heap
-in a packed binary format rather than as JVM objects (\Cref{ch:tungsten}).
+objects, and it is why Spark's execution engine stores rows in a packed binary format,
+in a few large buffers, rather than as JVM objects (\Cref{ch:tungsten}).
+\Cref{fig:object-overhead} shows where the extra bytes go.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{object-overhead.pdf}
+  \caption{One million integers, two layouts. A list of boxed integers pays a reference and an object header for every value; a primitive array stores only the values. The totals are the lab's measurements with Spark's \texttt{SizeEstimator}.}
+  \label{fig:object-overhead}
+\end{figure}
 
 The second property is that the heap is \emph{managed}: the program never frees
 memory explicitly, and reclamation is the job of the garbage collector
@@ -99,9 +116,10 @@ it into regions with different owners and different rules, described next.
 \label{sec:mem-model}
 
 Configuring Spark's memory means deciding how one executor process divides the
-memory it is allowed to use. That process holds three separately configured
-pools, and confusing them is the most common source of both wasted memory and
-unexplained container kills.
+memory it is allowed to use. That memory has three separately configured
+parts: the heap, an optional off-heap pool, and overhead. The heap is itself
+divided into reserved, unified, and user memory. Confusing these is the most
+common source of both wasted memory and unexplained container kills.
 
 \begin{analogy}
 Picture the heap as an apartment building with a fixed number of floors
@@ -137,10 +155,12 @@ it into three parts:
         the shuffle write buffer) and \emph{storage memory} (cached DataFrame and
         RDD blocks, and broadcast data held on the executor).
         \conf{spark.memory.storageFraction} (default 0.5) is a soft boundary
-        between the two: either side may borrow the other's idle space, but
-        execution can always evict borrowed cached blocks to reclaim its half,
-        whereas storage cannot push execution below the border. How this plays
-        out while a job runs is covered in \Cref{ch:caching}.
+        between the two: either side may borrow the other's idle space. Execution
+        can evict cached blocks only while storage holds more than its
+        \conf{spark.memory.storageFraction} share; storage can never evict
+        execution memory, so execution that has borrowed idle storage space keeps it
+        until the task finishes. How this plays out while a job runs is covered in
+        \Cref{ch:caching}.
   \item \textbf{User memory} --- the remaining 40\%. Everything Spark does not
         manage lives here: the objects your UDFs and RDD closures create, the
         structures a \texttt{mapPartitions} builds up. Spark does not track this
@@ -202,7 +222,7 @@ $(\text{heap} - 300~\text{MiB}) \times 0.6$ matches to the decimal. The reserved
 \paragraph{What the cluster manager enforces.} The pod or container is sized as
 the sum of all three pools (\Cref{fig:executor-memory-model}). If the process's
 real usage crosses that limit --- most often because overhead was underestimated
-or user memory grew unbounded --- the kernel kills it
+or off-heap memory was not counted into the limit --- the kernel kills it
 (\Cref{sec:failure-signatures}). The heap merely filling up, by contrast, makes
 unified memory spill to disk and only throws when user memory or a single
 un-spillable allocation is the cause.
@@ -217,18 +237,23 @@ un-spillable allocation is the cause.
   \label{fig:executor-memory-model}
 \end{figure}
 
-\paragraph{Per task, not per executor.} Execution memory is shared equally across
-the tasks an executor runs at once, which is \conf{spark.executor.cores}. A
-larger heap with proportionally more cores gives no single task more room: memory
-per task is the execution pool divided by the core count. A 4~GB unified pool
-on a 4-core executor gives each of its 4 concurrently-running tasks about
-1~GB to build a hash table or sort buffer in; keep the same 4~GB pool but
-raise the executor to 8 cores, and each task's share drops to about 512~MB
---- more parallelism, but less room per task, on the very same heap. The
-number of cores per executor is therefore a memory decision as much as a
-parallelism one, and an executor with too many cores spills on work a
-narrower one finishes in memory. \Cref{fig:spill-heatmap} measured exactly this
-on twelve executor shapes (\Cref{sec:executor-sizing}).
+\paragraph{Per task, not per executor.} Execution memory is shared by the tasks an
+executor runs at the same moment, one per core (\conf{spark.executor.cores}). Adding
+cores to the same heap therefore shrinks each task's share: memory per task is the
+pool divided by the core count. \Cref{fig:memory-per-task} works it through for the
+4~GiB heap of \Cref{tab:mem-pool-measured}: the 2,278~MiB pool gives each of 4 tasks
+about 569~MiB and each of 8 tasks about 285~MiB. The number of cores per executor is
+therefore a memory decision as much as a parallelism one, and an executor with too
+many cores spills on work a narrower one finishes in memory.
+\Cref{fig:spill-heatmap} measured exactly this on twelve executor shapes
+(\Cref{sec:executor-sizing}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{memory-per-task.pdf}
+  \caption{From heap to a task's share, for a 4~GiB heap. The unified pool is shared by every task that runs at the same moment, so doubling the cores halves each task's room. The numbers inside the green boxes are MiB per task.}
+  \label{fig:memory-per-task}
+\end{figure}
 
 \section{Garbage collection: Parallel, G1, ZGC}
 \label{sec:mem-gc}
@@ -238,12 +263,19 @@ longer reachable and reclaim their space. This work is the \emph{garbage
 collector} (GC), and for a data-processing workload it is never free: the
 collector competes with the application for CPU, and some of its phases are
 \emph{stop-the-world}, meaning every application thread in the JVM is frozen until
-the phase completes. On an executor a long stop-the-world pause stalls every
+the phase completes (\Cref{fig:gc-pause-stall}). On an executor a long stop-the-world pause stalls every
 running task at once, and if it exceeds the heartbeat timeout the driver declares
 the executor lost and re-runs its work elsewhere (\Cref{sec:failure-signatures}).
 
 Collectors differ mainly in how they trade pause length against throughput and
-CPU cost.
+CPU cost. \Cref{fig:gc-collector-timelines} sketches the pause pattern of each.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{gc-collector-timelines.pdf}
+  \caption{Pause shapes of the three collectors on the same timeline. Green is the application running; rose is a stop-the-world pause. The sketch shows the pattern, not measured values; the measurements follow in \Cref{fig:gc-collectors-measured}.}
+  \label{fig:gc-collector-timelines}
+\end{figure}
 
 \begin{analogy}
 Picture three ways to clean a large office building overnight. Parallel GC is
@@ -287,13 +319,15 @@ ZGC & sub-millisecond & higher constant CPU \& memory & very large heaps where G
 \bottomrule
 \end{tabular}
 \caption{The three collectors, at a glance.}
+\label{tab:mem-collectors}
 \end{table}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{gc-pause-stall.pdf}
   \caption{A stop-the-world pause freezes every task slot on the executor at
-  once, not one at a time. If the pause outlasts the heartbeat interval, the
+  once, not one at a time. If the pause outlasts the heartbeat timeout
+  (\conf{spark.network.timeout}, 120~s by default), the
   driver concludes the executor is gone and re-runs its work elsewhere --- so a
   GC problem shows up as lost executors and repeated stages, not just as slow
   ones.}
@@ -321,22 +355,30 @@ shorter pauses cost no throughput and ZGC cost throughput.
   \label{fig:gc-collectors-measured}
 \end{figure}
 
-The generational hypothesis --- that most objects die young --- underlies all
-three: they collect a small ``young'' area cheaply and often, and the full-heap
-collection rarely. A workload that holds a large amount of long-lived data in
-cache violates that assumption and pushes the collector toward the expensive
-path, which is one more reason to cache deliberately (\Cref{ch:caching}).
+The generational hypothesis --- that most objects die young --- underlies Parallel
+GC and G1: they collect a small ``young'' area cheaply and often, and the full heap
+rarely (\Cref{fig:gc-generations}). ZGC on JDK~17 is not generational; generational
+ZGC arrives in JDK~21. A workload that holds a large amount of long-lived data in
+cache violates the hypothesis and pushes the collector toward the expensive path,
+which is one more reason to cache deliberately (\Cref{ch:caching}).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{gc-generations.pdf}
+  \caption{The generational layout used by Parallel GC and G1. New objects start in the young generation, where most die quickly and a minor collection is cheap. Objects that survive repeatedly are promoted to the old generation, which only a full collection cleans.}
+  \label{fig:gc-generations}
+\end{figure}
+
 Monitoring GC time is covered in \Cref{sec:reading-metrics}; the executor JVM
 options that select and tune a collector are in \Cref{ch:tuning}.
 
 \section{Serialization and its cost}
 \label{sec:mem-serialization}
 
-The engine keeps a join's hash table or a block of cached rows as one large
-off-heap byte buffer rather than millions of small Java objects, which is why
-that data is invisible to the garbage collector and costs nothing to collect
-(\Cref{sec:mem-model}, \Cref{ch:tungsten}). Getting data into and out of that
-flat form is serialization.
+The engine keeps a join's hash table or a block of cached rows in a few large
+byte buffers rather than millions of small Java objects, so the garbage collector
+has little to track (\Cref{sec:mem-model}, \Cref{ch:tungsten}). Getting
+data into and out of that flat form is serialization.
 
 \emph{Serialization} is the conversion of an in-memory object graph into a flat
 sequence of bytes, and \emph{deserialization} is its inverse. Spark serializes
@@ -354,6 +396,14 @@ Java wrote 299 bytes per record and Kryo 42 --- seven times smaller; as one arra
 the gap shrinks to 58 against 41 bytes per record, because the class description is
 written once. The advantage is therefore largest for many small separately
 serialized objects, which is what a shuffle of RDD records is.
+\Cref{fig:serialization-bytes} shows why.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{serialization-bytes.pdf}
+  \caption{What a serializer does, and why Kryo is smaller. Java writes the class and field names with every record; Kryo writes a short class id and the values. Sizes are the lab's measurement for one five-field record.}
+  \label{fig:serialization-bytes}
+\end{figure}
 
 \begin{figure}[htbp]
   \centering
@@ -378,7 +428,7 @@ objects into a shuffle or a broadcast --- the same user-memory objects that
 \label{sec:mem-summary}
 
 An executor is one JVM process, and its memory is three separately configured
-pools: the heap (\conf{spark.executor.memory}), an optional off-heap pool, and
+parts: the heap (\conf{spark.executor.memory}), an optional off-heap pool, and
 overhead. The heap is carved into a fixed 300~MB reserve, \emph{unified memory}
 (the only pool Spark accounts for and the only one that spills), and \emph{user
 memory} (untracked, un-spillable, throws on overflow). The container limit the
